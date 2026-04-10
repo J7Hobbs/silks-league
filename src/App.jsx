@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import './index.css'
 
 const STATS = [
@@ -52,92 +52,9 @@ function PipCell({ pts }) {
   )
 }
 
-function Modal({ onClose }) {
-  const [mode, setMode] = useState('create')
-  const [form, setForm] = useState({ name: '', email: '', group: '' })
-  const [submitted, setSubmitted] = useState(false)
-
-  const handleSubmit = (e) => {
-    e.preventDefault()
-    setSubmitted(true)
-  }
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <button className="modal-close" onClick={onClose} aria-label="Close">✕</button>
-
-        {submitted ? (
-          <div className="modal-success">
-            <div className="modal-success-icon">🏇</div>
-            <h2 className="modal-title">You're in!</h2>
-            <p className="modal-sub">We'll be in touch before the next Saturday races.</p>
-            <button className="btn-gold btn-large" style={{ marginTop: '1.5rem' }} onClick={onClose}>
-              Back to home
-            </button>
-          </div>
-        ) : (
-          <>
-            <div className="modal-logo">Silks League</div>
-            <h2 className="modal-title">Join free today</h2>
-            <p className="modal-sub">Pick horses, earn points, rule your group.</p>
-
-            <div className="modal-toggle">
-              <button
-                className={`toggle-btn ${mode === 'create' ? 'active' : ''}`}
-                onClick={() => setMode('create')}
-              >
-                Create a group
-              </button>
-              <button
-                className={`toggle-btn ${mode === 'join' ? 'active' : ''}`}
-                onClick={() => setMode('join')}
-              >
-                Join a group
-              </button>
-            </div>
-
-            <form className="modal-form" onSubmit={handleSubmit}>
-              <input
-                className="modal-input"
-                placeholder="Your name"
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                required
-              />
-              <input
-                className="modal-input"
-                type="email"
-                placeholder="Email address"
-                value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-                required
-              />
-              <input
-                className="modal-input"
-                placeholder={mode === 'create' ? 'Group name (e.g. The Friday Firm)' : 'Group invite code'}
-                value={form.group}
-                onChange={(e) => setForm({ ...form, group: e.target.value })}
-                required
-              />
-              <button type="submit" className="btn-gold btn-large modal-submit">
-                {mode === 'create' ? 'Create my group →' : 'Join group →'}
-              </button>
-            </form>
-
-            <p className="modal-terms">No payment. No betting. No risk. Ever.</p>
-          </>
-        )}
-      </div>
-    </div>
-  )
-}
-
 export default function App() {
-  const [showModal, setShowModal] = useState(false)
-
-  const openModal = () => setShowModal(true)
-  const closeModal = () => setShowModal(false)
+  const navigate = useNavigate()
+  const goToAuth = () => navigate('/auth')
 
   return (
     <div className="app">
@@ -152,7 +69,7 @@ export default function App() {
             <a href="#leaderboard" className="nav-link">Leaderboard</a>
             <a href="#groups" className="nav-link">Groups</a>
           </div>
-          <button className="btn-gold nav-cta" onClick={openModal}>Join free</button>
+          <button className="btn-gold nav-cta" onClick={goToAuth}>Join free</button>
         </div>
       </nav>
 
@@ -172,7 +89,7 @@ export default function App() {
             No betting. No risk. Just pure competition.
           </p>
           <div className="hero-ctas">
-            <button className="btn-gold btn-large" onClick={openModal}>
+            <button className="btn-gold btn-large" onClick={goToAuth}>
               Create your group
             </button>
             <a href="#how-it-works" className="btn-outline btn-large">
@@ -297,7 +214,7 @@ export default function App() {
               Run multiple groups at once. A work sweepstake, a family league, a mates'
               competition — all separate, all free.
             </p>
-            <button className="btn-gold" onClick={openModal}>Start a group</button>
+            <button className="btn-gold" onClick={goToAuth}>Start a group</button>
           </div>
 
           <div className="groups-visual">
@@ -342,7 +259,7 @@ export default function App() {
           <h2 className="section-title cta-headline">
             Free to join.<br />Free to play.<br />Every Saturday.
           </h2>
-          <button className="btn-gold btn-xl" onClick={openModal}>
+          <button className="btn-gold btn-xl" onClick={goToAuth}>
             Create your group →
           </button>
           <p className="cta-sub">No card required. No betting. Just racing.</p>
@@ -363,8 +280,6 @@ export default function App() {
         </div>
       </footer>
 
-      {/* ── MODAL ── */}
-      {showModal && <Modal onClose={closeModal} />}
     </div>
   )
 }
