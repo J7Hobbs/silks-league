@@ -1,0 +1,690 @@
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { supabase } from '../lib/supabase'
+
+export default function Dashboard() {
+  const navigate = useNavigate()
+  const [user, setUser] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [menuOpen, setMenuOpen] = useState(false)
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) {
+        navigate('/auth')
+      } else {
+        setUser(user)
+        setLoading(false)
+      }
+    })
+  }, [navigate])
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut()
+    navigate('/auth')
+  }
+
+  const getGreeting = () => {
+    const hour = new Date().getHours()
+    if (hour < 12) return 'Good morning'
+    if (hour < 17) return 'Good afternoon'
+    return 'Good evening'
+  }
+
+  const getFirstName = () => {
+    const fullName = user?.user_metadata?.full_name || user?.email || ''
+    return fullName.split(' ')[0] || 'there'
+  }
+
+  const getDayStatus = () => {
+    const day = new Date().getDay()
+    if (day === 6) return { label: 'Race Day', color: '#4ade80', bg: 'rgba(74,222,128,0.12)' }
+    if (day === 0) return { label: 'Race Day', color: '#4ade80', bg: 'rgba(74,222,128,0.12)' }
+    const daysToSat = (6 - day + 7) % 7 || 7
+    return {
+      label: `${daysToSat} day${daysToSat > 1 ? 's' : ''} to race day`,
+      color: '#c9a84c',
+      bg: 'rgba(201,168,76,0.12)',
+    }
+  }
+
+  if (loading) {
+    return (
+      <div style={styles.loadingPage}>
+        <div style={styles.loadingDot} />
+      </div>
+    )
+  }
+
+  const status = getDayStatus()
+
+  const statCards = [
+    { label: 'My Points', value: '—', sub: 'this season', icon: '⭐' },
+    { label: 'League Rank', value: '—', sub: 'out of — players', icon: '🏆' },
+    { label: 'Picks Made', value: '0', sub: 'this week', icon: '🎯' },
+    { label: 'Win Rate', value: '—%', sub: 'all time', icon: '📈' },
+  ]
+
+  const todaysRaces = [
+    { time: '13:30', course: 'Cheltenham', race: 'Novice Hurdle', runners: 8 },
+    { time: '14:05', course: 'Sandown', race: 'Handicap Chase', runners: 12 },
+    { time: '15:20', course: 'Newbury', race: 'Listed Stakes', runners: 6 },
+  ]
+
+  const leaderboard = [
+    { rank: 1, name: 'Tom H.', points: 142, change: 'up' },
+    { rank: 2, name: 'Sarah M.', points: 138, change: 'same' },
+    { rank: 3, name: 'Dan W.', points: 121, change: 'up' },
+    { rank: 4, name: 'Jack H.', points: 98, change: 'down' },
+    { rank: 5, name: 'Liz R.', points: 87, change: 'same' },
+  ]
+
+  return (
+    <div style={styles.page}>
+
+      {/* ── Top Nav ── */}
+      <nav style={styles.nav}>
+        <div style={styles.navInner}>
+          <a href="/" style={styles.navLogo}>Silks League</a>
+
+          <div style={styles.navLinks}>
+            <a href="/dashboard" style={{ ...styles.navLink, ...styles.navLinkActive }}>Dashboard</a>
+            <a href="/picks" style={styles.navLink}>My Picks</a>
+            <a href="/league" style={styles.navLink}>League</a>
+            <a href="/races" style={styles.navLink}>Races</a>
+          </div>
+
+          {/* Avatar + menu */}
+          <div style={styles.navRight}>
+            <div
+              style={styles.avatar}
+              onClick={() => setMenuOpen(!menuOpen)}
+              title={user?.email}
+            >
+              {getFirstName().charAt(0).toUpperCase()}
+            </div>
+
+            {menuOpen && (
+              <div style={styles.dropdownMenu}>
+                <div style={styles.dropdownEmail}>{user?.email}</div>
+                <hr style={styles.dropdownDivider} />
+                <button style={styles.dropdownItem} onClick={() => { setMenuOpen(false) }}>
+                  Profile
+                </button>
+                <button style={styles.dropdownItem} onClick={() => { setMenuOpen(false) }}>
+                  Settings
+                </button>
+                <hr style={styles.dropdownDivider} />
+                <button
+                  style={{ ...styles.dropdownItem, ...styles.dropdownSignOut }}
+                  onClick={handleSignOut}
+                >
+                  Sign out
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </nav>
+
+      {/* ── Main content ── */}
+      <main style={styles.main}>
+
+        {/* Welcome header */}
+        <section style={styles.welcomeRow}>
+          <div>
+            <h1 style={styles.welcomeHeading}>
+              {getGreeting()}, {getFirstName()}.
+            </h1>
+            <p style={styles.welcomeSub}>Here's what's happening in the league today.</p>
+          </div>
+          <div style={{ ...styles.statusPill, background: status.bg, color: status.color }}>
+            {status.label}
+          </div>
+        </section>
+
+        {/* Stat cards */}
+        <section style={styles.statsGrid}>
+          {statCards.map((card) => (
+            <div key={card.label} style={styles.statCard}>
+              <div style={styles.statIcon}>{card.icon}</div>
+              <div style={styles.statValue}>{card.value}</div>
+              <div style={styles.statLabel}>{card.label}</div>
+              <div style={styles.statSub}>{card.sub}</div>
+            </div>
+          ))}
+        </section>
+
+        {/* Two-column layout */}
+        <section style={styles.twoCol}>
+
+          {/* Today's Races */}
+          <div style={styles.card}>
+            <div style={styles.cardHeader}>
+              <span style={styles.cardTitle}>Today's Races</span>
+              <span style={styles.cardBadge}>{todaysRaces.length} races</span>
+            </div>
+            <div style={styles.raceList}>
+              {todaysRaces.map((r, i) => (
+                <div key={i} style={styles.raceRow}>
+                  <div style={styles.raceTime}>{r.time}</div>
+                  <div style={styles.raceInfo}>
+                    <div style={styles.raceCourse}>{r.course}</div>
+                    <div style={styles.raceName}>{r.race}</div>
+                  </div>
+                  <div style={styles.raceRunners}>{r.runners} runners</div>
+                  <button style={styles.pickBtn}>Pick →</button>
+                </div>
+              ))}
+            </div>
+            <button style={styles.viewAllBtn}>View all races →</button>
+          </div>
+
+          {/* Live Leaderboard */}
+          <div style={styles.card}>
+            <div style={styles.cardHeader}>
+              <span style={styles.cardTitle}>Live Leaderboard</span>
+              <span style={styles.cardBadge}>Week 14</span>
+            </div>
+            <div style={styles.leaderList}>
+              {leaderboard.map((row) => (
+                <div
+                  key={row.rank}
+                  style={{
+                    ...styles.leaderRow,
+                    ...(row.name.includes('Jack') ? styles.leaderRowMe : {}),
+                  }}
+                >
+                  <div style={styles.leaderRank}>
+                    {row.rank === 1 ? '🥇' : row.rank === 2 ? '🥈' : row.rank === 3 ? '🥉' : `#${row.rank}`}
+                  </div>
+                  <div style={styles.leaderName}>{row.name}</div>
+                  <div style={styles.leaderPoints}>{row.points} pts</div>
+                  <div style={styles.leaderChange}>
+                    {row.change === 'up' ? '▲' : row.change === 'down' ? '▼' : '–'}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button style={styles.viewAllBtn}>Full leaderboard →</button>
+          </div>
+        </section>
+
+        {/* Bottom strip */}
+        <section style={styles.bottomStrip}>
+
+          {/* My Group card */}
+          <div style={styles.bottomCard}>
+            <div style={styles.bottomCardIcon}>👥</div>
+            <div style={styles.bottomCardBody}>
+              <div style={styles.bottomCardTitle}>My Group</div>
+              <div style={styles.bottomCardSub}>The Somerset Silks · 6 members</div>
+            </div>
+            <button style={styles.bottomCardBtn}>View group →</button>
+          </div>
+
+          {/* Next Saturday card */}
+          <div style={styles.bottomCard}>
+            <div style={styles.bottomCardIcon}>📅</div>
+            <div style={styles.bottomCardBody}>
+              <div style={styles.bottomCardTitle}>Next Race Day</div>
+              <div style={styles.bottomCardSub}>Picks close Friday at midnight</div>
+            </div>
+            <button style={styles.bottomCardBtn}>Make picks →</button>
+          </div>
+
+        </section>
+      </main>
+
+      {/* ── Mobile bottom bar ── */}
+      <nav style={styles.mobileBar}>
+        <a href="/dashboard" style={{ ...styles.mobileBarItem, ...styles.mobileBarItemActive }}>
+          <span>🏠</span>
+          <span style={styles.mobileBarLabel}>Home</span>
+        </a>
+        <a href="/picks" style={styles.mobileBarItem}>
+          <span>🎯</span>
+          <span style={styles.mobileBarLabel}>Picks</span>
+        </a>
+        <a href="/league" style={styles.mobileBarItem}>
+          <span>🏆</span>
+          <span style={styles.mobileBarLabel}>League</span>
+        </a>
+        <a href="/races" style={styles.mobileBarItem}>
+          <span>🐴</span>
+          <span style={styles.mobileBarLabel}>Races</span>
+        </a>
+        <button style={{ ...styles.mobileBarItem, background: 'none', border: 'none', cursor: 'pointer' }} onClick={handleSignOut}>
+          <span>🚪</span>
+          <span style={styles.mobileBarLabel}>Sign out</span>
+        </button>
+      </nav>
+
+    </div>
+  )
+}
+
+const styles = {
+  /* ── Page shell ── */
+  page: {
+    minHeight: '100vh',
+    background: '#0a1a08',
+    fontFamily: "'DM Sans', sans-serif",
+    color: '#e8f0e8',
+    paddingBottom: '5rem', // room for mobile bar
+  },
+  loadingPage: {
+    minHeight: '100vh',
+    background: '#0a1a08',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingDot: {
+    width: '12px',
+    height: '12px',
+    borderRadius: '50%',
+    background: '#c9a84c',
+    animation: 'pulse 1.2s ease-in-out infinite',
+  },
+
+  /* ── Nav ── */
+  nav: {
+    background: '#0d1f0d',
+    borderBottom: '1px solid rgba(201,168,76,0.15)',
+    position: 'sticky',
+    top: 0,
+    zIndex: 100,
+  },
+  navInner: {
+    maxWidth: '1100px',
+    margin: '0 auto',
+    padding: '0 1.5rem',
+    height: '60px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '2rem',
+  },
+  navLogo: {
+    fontFamily: "'Bebas Neue', sans-serif",
+    fontSize: '1.3rem',
+    color: '#c9a84c',
+    letterSpacing: '0.1em',
+    textDecoration: 'none',
+    flexShrink: 0,
+  },
+  navLinks: {
+    display: 'flex',
+    gap: '0.25rem',
+    flex: 1,
+  },
+  navLink: {
+    padding: '0.4rem 0.85rem',
+    borderRadius: '6px',
+    fontSize: '0.875rem',
+    fontWeight: '500',
+    color: '#5a8a5a',
+    textDecoration: 'none',
+    transition: 'color 0.2s',
+  },
+  navLinkActive: {
+    color: '#e8f0e8',
+    background: 'rgba(201,168,76,0.1)',
+  },
+  navRight: {
+    marginLeft: 'auto',
+    position: 'relative',
+  },
+  avatar: {
+    width: '36px',
+    height: '36px',
+    borderRadius: '50%',
+    background: '#c9a84c',
+    color: '#0a1a08',
+    fontWeight: '700',
+    fontSize: '0.9rem',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
+    userSelect: 'none',
+  },
+  dropdownMenu: {
+    position: 'absolute',
+    top: 'calc(100% + 0.5rem)',
+    right: 0,
+    background: '#0d1f0d',
+    border: '1px solid rgba(201,168,76,0.2)',
+    borderRadius: '10px',
+    padding: '0.5rem 0',
+    minWidth: '200px',
+    boxShadow: '0 16px 48px rgba(0,0,0,0.5)',
+    zIndex: 200,
+  },
+  dropdownEmail: {
+    padding: '0.5rem 1rem 0.75rem',
+    fontSize: '0.78rem',
+    color: '#5a8a5a',
+    borderBottom: 'none',
+  },
+  dropdownDivider: {
+    border: 'none',
+    borderTop: '1px solid rgba(201,168,76,0.1)',
+    margin: '0.25rem 0',
+  },
+  dropdownItem: {
+    display: 'block',
+    width: '100%',
+    padding: '0.55rem 1rem',
+    textAlign: 'left',
+    background: 'none',
+    border: 'none',
+    color: '#e8f0e8',
+    fontSize: '0.875rem',
+    cursor: 'pointer',
+    fontFamily: "'DM Sans', sans-serif",
+  },
+  dropdownSignOut: {
+    color: '#f87171',
+  },
+
+  /* ── Main ── */
+  main: {
+    maxWidth: '1100px',
+    margin: '0 auto',
+    padding: '2rem 1.5rem',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '1.75rem',
+  },
+
+  /* Welcome */
+  welcomeRow: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: '1rem',
+  },
+  welcomeHeading: {
+    fontFamily: "'Bebas Neue', sans-serif",
+    fontSize: '2.6rem',
+    color: '#e8f0e8',
+    letterSpacing: '0.03em',
+    margin: 0,
+    lineHeight: 1,
+  },
+  welcomeSub: {
+    marginTop: '0.4rem',
+    fontSize: '0.9rem',
+    color: '#5a8a5a',
+  },
+  statusPill: {
+    padding: '0.4rem 1rem',
+    borderRadius: '999px',
+    fontSize: '0.8rem',
+    fontWeight: '600',
+    letterSpacing: '0.03em',
+    flexShrink: 0,
+    alignSelf: 'flex-start',
+    marginTop: '0.25rem',
+  },
+
+  /* Stat cards */
+  statsGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(4, 1fr)',
+    gap: '1rem',
+  },
+  statCard: {
+    background: '#0d1f0d',
+    border: '1px solid rgba(201,168,76,0.15)',
+    borderRadius: '14px',
+    padding: '1.25rem',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.3rem',
+  },
+  statIcon: {
+    fontSize: '1.3rem',
+    marginBottom: '0.25rem',
+  },
+  statValue: {
+    fontFamily: "'Bebas Neue', sans-serif",
+    fontSize: '2.2rem',
+    color: '#c9a84c',
+    letterSpacing: '0.03em',
+    lineHeight: 1,
+  },
+  statLabel: {
+    fontSize: '0.8rem',
+    fontWeight: '600',
+    color: '#e8f0e8',
+    letterSpacing: '0.03em',
+    textTransform: 'uppercase',
+  },
+  statSub: {
+    fontSize: '0.75rem',
+    color: '#5a8a5a',
+  },
+
+  /* Two column */
+  twoCol: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: '1rem',
+  },
+  card: {
+    background: '#0d1f0d',
+    border: '1px solid rgba(201,168,76,0.15)',
+    borderRadius: '14px',
+    padding: '1.5rem',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '1rem',
+  },
+  cardHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  cardTitle: {
+    fontFamily: "'Bebas Neue', sans-serif",
+    fontSize: '1.2rem',
+    color: '#e8f0e8',
+    letterSpacing: '0.05em',
+  },
+  cardBadge: {
+    background: 'rgba(201,168,76,0.12)',
+    color: '#c9a84c',
+    fontSize: '0.75rem',
+    fontWeight: '600',
+    padding: '0.2rem 0.6rem',
+    borderRadius: '999px',
+  },
+
+  /* Race list */
+  raceList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.75rem',
+  },
+  raceRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.75rem',
+    padding: '0.75rem',
+    background: 'rgba(0,0,0,0.2)',
+    borderRadius: '8px',
+    border: '1px solid rgba(201,168,76,0.08)',
+  },
+  raceTime: {
+    fontFamily: "'Bebas Neue', sans-serif",
+    fontSize: '1rem',
+    color: '#c9a84c',
+    letterSpacing: '0.05em',
+    minWidth: '40px',
+  },
+  raceInfo: {
+    flex: 1,
+  },
+  raceCourse: {
+    fontSize: '0.875rem',
+    fontWeight: '600',
+    color: '#e8f0e8',
+  },
+  raceName: {
+    fontSize: '0.75rem',
+    color: '#5a8a5a',
+    marginTop: '0.1rem',
+  },
+  raceRunners: {
+    fontSize: '0.75rem',
+    color: '#5a8a5a',
+    whiteSpace: 'nowrap',
+  },
+  pickBtn: {
+    background: '#c9a84c',
+    color: '#0a1a08',
+    border: 'none',
+    borderRadius: '6px',
+    padding: '0.35rem 0.7rem',
+    fontSize: '0.78rem',
+    fontWeight: '600',
+    cursor: 'pointer',
+    fontFamily: "'DM Sans', sans-serif",
+    whiteSpace: 'nowrap',
+  },
+  viewAllBtn: {
+    background: 'none',
+    border: '1px solid rgba(201,168,76,0.2)',
+    color: '#c9a84c',
+    borderRadius: '8px',
+    padding: '0.6rem 1rem',
+    fontSize: '0.85rem',
+    fontWeight: '600',
+    cursor: 'pointer',
+    fontFamily: "'DM Sans', sans-serif",
+    width: '100%',
+    textAlign: 'center',
+  },
+
+  /* Leaderboard */
+  leaderList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.5rem',
+  },
+  leaderRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.75rem',
+    padding: '0.65rem 0.75rem',
+    borderRadius: '8px',
+    background: 'rgba(0,0,0,0.2)',
+    border: '1px solid rgba(201,168,76,0.08)',
+  },
+  leaderRowMe: {
+    background: 'rgba(201,168,76,0.08)',
+    border: '1px solid rgba(201,168,76,0.25)',
+  },
+  leaderRank: {
+    fontSize: '1rem',
+    minWidth: '28px',
+    textAlign: 'center',
+  },
+  leaderName: {
+    flex: 1,
+    fontSize: '0.875rem',
+    fontWeight: '500',
+    color: '#e8f0e8',
+  },
+  leaderPoints: {
+    fontSize: '0.875rem',
+    fontWeight: '600',
+    color: '#c9a84c',
+  },
+  leaderChange: {
+    fontSize: '0.75rem',
+    color: '#5a8a5a',
+    minWidth: '16px',
+    textAlign: 'center',
+  },
+
+  /* Bottom strip */
+  bottomStrip: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: '1rem',
+  },
+  bottomCard: {
+    background: '#0d1f0d',
+    border: '1px solid rgba(201,168,76,0.15)',
+    borderRadius: '14px',
+    padding: '1.25rem 1.5rem',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '1rem',
+  },
+  bottomCardIcon: {
+    fontSize: '1.8rem',
+    flexShrink: 0,
+  },
+  bottomCardBody: {
+    flex: 1,
+  },
+  bottomCardTitle: {
+    fontWeight: '600',
+    fontSize: '0.95rem',
+    color: '#e8f0e8',
+  },
+  bottomCardSub: {
+    fontSize: '0.78rem',
+    color: '#5a8a5a',
+    marginTop: '0.15rem',
+  },
+  bottomCardBtn: {
+    background: 'none',
+    border: '1px solid rgba(201,168,76,0.25)',
+    color: '#c9a84c',
+    borderRadius: '7px',
+    padding: '0.45rem 0.85rem',
+    fontSize: '0.8rem',
+    fontWeight: '600',
+    cursor: 'pointer',
+    fontFamily: "'DM Sans', sans-serif",
+    whiteSpace: 'nowrap',
+    flexShrink: 0,
+  },
+
+  /* Mobile bottom bar */
+  mobileBar: {
+    display: 'none',
+    position: 'fixed',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    background: '#0d1f0d',
+    borderTop: '1px solid rgba(201,168,76,0.15)',
+    padding: '0.5rem 0',
+    zIndex: 100,
+    justifyContent: 'space-around',
+  },
+  mobileBarItem: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '0.15rem',
+    color: '#5a8a5a',
+    textDecoration: 'none',
+    fontSize: '1.1rem',
+    padding: '0.25rem 0.75rem',
+  },
+  mobileBarItemActive: {
+    color: '#c9a84c',
+  },
+  mobileBarLabel: {
+    fontSize: '0.65rem',
+    fontWeight: '500',
+  },
+}
