@@ -2,9 +2,9 @@ import { useNavigate } from 'react-router-dom'
 import './index.css'
 
 const STATS = [
-  { value: '5', label: 'Races per Saturday' },
-  { value: '15', label: 'Max points available' },
-  { value: '3pts', label: 'For a winner' },
+  { value: '5', label: 'Races every Saturday' },
+  { value: '25pts', label: 'For a winner' },
+  { value: '200', label: 'Max points per week' },
   { value: '£0', label: 'Cost to play' },
 ]
 
@@ -12,13 +12,13 @@ const STEPS = [
   {
     num: '01',
     title: 'Create or join a group',
-    desc: 'Set up a private group with friends or join an existing one with a unique invite code.',
+    desc: 'Set up a private group with friends or join the public top-10 league. Invite mates with a unique group code.',
     icon: '🏇',
   },
   {
     num: '02',
     title: 'Pick your 5 horses',
-    desc: 'Each Saturday, select one horse per race before the off. No changing your mind.',
+    desc: 'Each Saturday, pick one horse per race from the listed runners. Picks open on Friday and close at 11am Saturday — change your mind as many times as you like before the cutoff.',
     icon: '✏️',
   },
   {
@@ -29,22 +29,33 @@ const STEPS = [
   },
   {
     num: '04',
-    title: 'Top the leaderboard',
-    desc: 'Points accumulate each week. The sharpest picker across the season wins.',
+    title: 'Chase the championship',
+    desc: 'Points stack up each week. Win the weekly prize, top your quarterly group, or go all out for the annual champion title.',
     icon: '🏆',
   },
 ]
 
+const ODDS_BONUS = [
+  { range: 'Shorter than 2/1', winner: '+0', placed: '+0' },
+  { range: '2/1 – 4/1', winner: '+2', placed: '+1' },
+  { range: '9/2 – 10/1', winner: '+5', placed: '+2' },
+  { range: '11/1 – 20/1', winner: '+10', placed: '+3' },
+  { range: '20/1 +', winner: '+15', placed: '+4' },
+]
+
 const LEADERBOARD = [
-  { pos: 1, name: 'Charlie H.', races: [3, 2, 0, 3, 1], total: 9 },
-  { pos: 2, name: 'Sarah M.', races: [0, 3, 2, 1, 3], total: 9 },
-  { pos: 3, name: 'James T.', races: [2, 1, 3, 0, 2], total: 8 },
-  { pos: 4, name: 'Emma R.', races: [1, 0, 2, 3, 1], total: 7 },
-  { pos: 5, name: 'Tom B.', races: [3, 1, 0, 2, 0], total: 6 },
+  { pos: 1, name: 'Charlie H.', races: [25, 15, 0, 30, 10], total: 80 },
+  { pos: 2, name: 'Sarah M.', races: [0, 30, 15, 10, 25], total: 80 },
+  { pos: 3, name: 'James T.', races: [25, 0, 25, 15, 10], total: 75 },
+  { pos: 4, name: 'Emma R.', races: [10, 15, 25, 0, 15], total: 65 },
+  { pos: 5, name: 'Tom B.', races: [25, 10, 0, 15, 0], total: 50 },
 ]
 
 function PipCell({ pts }) {
-  const cls = pts === 3 ? 'pip pip-gold' : pts === 2 ? 'pip pip-silver' : pts === 1 ? 'pip pip-bronze' : 'pip pip-empty'
+  const cls =
+    pts >= 25 ? 'pip pip-gold' :
+    pts >= 10 ? 'pip pip-silver' :
+    pts > 0   ? 'pip pip-bronze' : 'pip pip-empty'
   return (
     <span className="lb-race-cell">
       <span className={cls}>{pts > 0 ? pts : '—'}</span>
@@ -52,9 +63,25 @@ function PipCell({ pts }) {
   )
 }
 
+const ghostBtn = {
+  background: 'transparent',
+  border: '1.5px solid #c9a84c',
+  color: '#c9a84c',
+  borderRadius: '8px',
+  padding: '0.55rem 1.25rem',
+  fontFamily: "'DM Sans', sans-serif",
+  fontWeight: '600',
+  fontSize: '0.9rem',
+  cursor: 'pointer',
+  letterSpacing: '0.02em',
+  transition: 'background 0.2s',
+  whiteSpace: 'nowrap',
+}
+
 export default function App() {
   const navigate = useNavigate()
-  const goToAuth = () => navigate('/auth')
+  const goToSignup = () => navigate('/auth?mode=signup')
+  const goToLogin  = () => navigate('/auth?mode=login')
 
   return (
     <div className="app">
@@ -69,7 +96,10 @@ export default function App() {
             <a href="#leaderboard" className="nav-link">Leaderboard</a>
             <a href="#groups" className="nav-link">Groups</a>
           </div>
-          <button className="btn-gold nav-cta" onClick={goToAuth}>Join free</button>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <button style={ghostBtn} onClick={goToLogin}>Log in</button>
+            <button className="btn-gold nav-cta" onClick={goToSignup}>Join free</button>
+          </div>
         </div>
       </nav>
 
@@ -89,7 +119,7 @@ export default function App() {
             No betting. No risk. Just pure competition.
           </p>
           <div className="hero-ctas">
-            <button className="btn-gold btn-large" onClick={goToAuth}>
+            <button className="btn-gold btn-large" onClick={goToSignup}>
               Create your group
             </button>
             <a href="#how-it-works" className="btn-outline btn-large">
@@ -134,29 +164,59 @@ export default function App() {
             <div className="section-eyebrow">Points system</div>
             <h2 className="section-title">Simple.<br />Transparent.<br />Competitive.</h2>
             <p className="split-body">
-              Every race, every Saturday — points are awarded to the top three finishers.
-              With 5 races and a maximum of 15 points on offer, every single pick matters.
+              Every race, every Saturday — base points go to the top three finishers.
+              Pick the winner at a big price and an odds bonus can push your score
+              all the way up to 40 points in a single race.
             </p>
             <p className="split-body">
-              This rewards consistency, not luck. The sharpest reader of form across the
-              season earns the crown — not whoever fluked a big Saturday.
+              With 5 races and a maximum of 200 points on offer each week, every pick matters.
+              The season runs across four quarters — Q1 (Jan–Mar), Q2 (Apr–Jun),
+              Q3 (Jul–Sep) and Q4 (Oct–Dec) — 13 Saturdays each. Compete for the weekly
+              prize, your quarterly title, or go all out for the annual championship.
             </p>
           </div>
           <div className="points-stack">
             <div className="points-card points-gold">
               <span className="points-pos">1st place</span>
-              <span className="points-val">3 pts</span>
+              <span className="points-val">25 pts</span>
             </div>
             <div className="points-card points-silver">
               <span className="points-pos">2nd place</span>
-              <span className="points-val">2 pts</span>
+              <span className="points-val">15 pts</span>
             </div>
             <div className="points-card points-bronze">
               <span className="points-pos">3rd place</span>
-              <span className="points-val">1 pt</span>
+              <span className="points-val">10 pts</span>
             </div>
+
+            {/* Odds bonus table */}
+            <div style={oddsBoxStyle}>
+              <div style={oddsTitleStyle}>Odds bonus</div>
+              <div style={oddsNoteStyle}>
+                Winners get a bonus based on SP · Placed horses get ¼ of the bonus (rounded up)
+              </div>
+              <table style={oddsTableStyle}>
+                <thead>
+                  <tr>
+                    <th style={oddsTh}>Starting price</th>
+                    <th style={{ ...oddsTh, textAlign: 'center' }}>Winner</th>
+                    <th style={{ ...oddsTh, textAlign: 'center' }}>Placed</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ODDS_BONUS.map((row) => (
+                    <tr key={row.range}>
+                      <td style={oddsTd}>{row.range}</td>
+                      <td style={{ ...oddsTd, textAlign: 'center', color: '#c9a84c', fontWeight: '600' }}>{row.winner}</td>
+                      <td style={{ ...oddsTd, textAlign: 'center', color: '#8ab88a' }}>{row.placed}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
             <div className="points-max-banner">
-              Maximum <strong>15 points</strong> available per Saturday
+              Maximum <strong>40 points</strong> per race &nbsp;·&nbsp; <strong>200 points</strong> per week
             </div>
           </div>
         </div>
@@ -196,6 +256,7 @@ export default function App() {
 
           <p className="lb-note">
             Live results update automatically each Saturday after the final race.
+            Max 40 pts per race · 200 pts per week · Odds bonus applied to winners and placed horses.
           </p>
         </div>
       </section>
@@ -204,17 +265,19 @@ export default function App() {
       <section className="section section-alt" id="groups">
         <div className="section-inner split split-reverse">
           <div className="split-text">
-            <div className="section-eyebrow">Private groups</div>
+            <div className="section-eyebrow">Private groups &amp; public league</div>
             <h2 className="section-title">Your circle.<br />Your competition.</h2>
             <p className="split-body">
               Create a private group and invite your friends, family, or workmates with a
               unique code. No strangers, no noise — just the people you actually want to beat.
-            </p>
-            <p className="split-body">
-              Run multiple groups at once. A work sweepstake, a family league, a mates'
+              Run multiple groups at once: a work sweepstake, a family league, a mates'
               competition — all separate, all free.
             </p>
-            <button className="btn-gold" onClick={goToAuth}>Start a group</button>
+            <p className="split-body">
+              Prefer a wider stage? Jump into the public league and see how you rank against
+              all players — the top 10 are featured on the live public leaderboard every week.
+            </p>
+            <button className="btn-gold" onClick={goToSignup}>Start a group</button>
           </div>
 
           <div className="groups-visual">
@@ -238,12 +301,12 @@ export default function App() {
                   <span className="gs-label">Current week</span>
                 </div>
                 <div className="group-stat">
-                  <span className="gs-val">9 pts</span>
+                  <span className="gs-val">80 pts</span>
                   <span className="gs-label">Top score</span>
                 </div>
                 <div className="group-stat">
-                  <span className="gs-val">Sat 2pm</span>
-                  <span className="gs-label">Next picks due</span>
+                  <span className="gs-val">11am Sat</span>
+                  <span className="gs-label">Picks deadline</span>
                 </div>
               </div>
             </div>
@@ -259,7 +322,7 @@ export default function App() {
           <h2 className="section-title cta-headline">
             Free to join.<br />Free to play.<br />Every Saturday.
           </h2>
-          <button className="btn-gold btn-xl" onClick={goToAuth}>
+          <button className="btn-gold btn-xl" onClick={goToSignup}>
             Create your group →
           </button>
           <p className="cta-sub">No card required. No betting. Just racing.</p>
@@ -282,4 +345,45 @@ export default function App() {
 
     </div>
   )
+}
+
+/* ── Odds bonus inline styles ── */
+const oddsBoxStyle = {
+  background: 'rgba(0,0,0,0.25)',
+  border: '1px solid rgba(201,168,76,0.15)',
+  borderRadius: '10px',
+  padding: '1rem 1.1rem',
+}
+const oddsTitleStyle = {
+  fontFamily: "'Bebas Neue', sans-serif",
+  fontSize: '1rem',
+  color: '#c9a84c',
+  letterSpacing: '0.08em',
+  marginBottom: '0.35rem',
+}
+const oddsNoteStyle = {
+  fontSize: '0.72rem',
+  color: '#5a8a5a',
+  marginBottom: '0.75rem',
+  lineHeight: 1.45,
+}
+const oddsTableStyle = {
+  width: '100%',
+  borderCollapse: 'collapse',
+}
+const oddsTh = {
+  fontSize: '0.7rem',
+  fontWeight: '600',
+  color: '#5a8a5a',
+  letterSpacing: '0.06em',
+  textTransform: 'uppercase',
+  paddingBottom: '0.4rem',
+  borderBottom: '1px solid rgba(201,168,76,0.12)',
+  textAlign: 'left',
+}
+const oddsTd = {
+  fontSize: '0.8rem',
+  color: '#e8f0e8',
+  padding: '0.35rem 0',
+  borderBottom: '1px solid rgba(255,255,255,0.04)',
 }

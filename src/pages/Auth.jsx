@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
 export default function Auth() {
   const navigate = useNavigate()
-  const [mode, setMode] = useState('login') // 'login' | 'signup'
+  const [searchParams] = useSearchParams()
+  const [mode, setMode] = useState(searchParams.get('mode') === 'signup' ? 'signup' : 'login')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -45,7 +46,8 @@ export default function Auth() {
 
     try {
       if (mode === 'signup') {
-        const { error: signUpError } = await supabase.auth.signUp({
+        // Supabase v2 signUp syntax
+        const { data, error: signUpError } = await supabase.auth.signUp({
           email: form.email,
           password: form.password,
           options: {
@@ -54,20 +56,45 @@ export default function Auth() {
             },
           },
         })
+
+        // Log full response for diagnostics
+        console.log('[Auth] signUp response:', { data, error: signUpError })
+
         if (signUpError) throw signUpError
+
         setSuccess('Account created! Check your email to confirm, then log in.')
         setMode('login')
         setForm({ fullName: '', email: form.email, password: '', confirmPassword: '' })
+
       } else {
-        const { error: signInError } = await supabase.auth.signInWithPassword({
+        const { data, error: signInError } = await supabase.auth.signInWithPassword({
           email: form.email,
           password: form.password,
         })
+
+        // Log full response for diagnostics
+        console.log('[Auth] signIn response:', { data, error: signInError })
+
         if (signInError) throw signInError
+
         navigate('/dashboard')
       }
+
     } catch (err) {
-      setError(err.message || 'Something went wrong. Please try again.')
+      // Log the full error so we can see exactly what Supabase is returning
+      console.error('[Auth] Full error object:', err)
+      console.error('[Auth] Error message:', err?.message)
+      console.error('[Auth] Error status:', err?.status)
+      console.error('[Auth] Error name:', err?.name)
+
+      // Show the actual Supabase message rather than generic "Failed to fetch"
+      if (err?.message === 'Failed to fetch') {
+        setError(
+          'Cannot connect to the server. This usually means: (1) the Supabase project is paused — go to supabase.com and restore it, or (2) the environment variables are missing.'
+        )
+      } else {
+        setError(err?.message || 'Something went wrong. Please try again.')
+      }
     } finally {
       setLoading(false)
     }
