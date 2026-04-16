@@ -8,6 +8,7 @@ export default function Dashboard() {
   const [isAdmin, setIsAdmin]   = useState(false)
   const [loading, setLoading]   = useState(true)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [races, setRaces]       = useState([])
 
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data: { user } }) => {
@@ -15,14 +16,47 @@ export default function Dashboard() {
         navigate('/auth')
       } else {
         setUser(user)
-        // Check admin status
         const { data: profile } = await supabase
           .from('profiles').select('is_admin').eq('id', user.id).single()
         setIsAdmin(profile?.is_admin || false)
+        await loadRaces()
         setLoading(false)
       }
     })
   }, [navigate])
+
+  async function loadRaces() {
+    // Find active season
+    const { data: season } = await supabase
+      .from('seasons').select('id').eq('is_active', true).single()
+    if (!season) return
+
+    // Find most recent race week
+    const { data: weeks } = await supabase
+      .from('race_weeks').select('id, week_number, saturday_date')
+      .eq('season_id', season.id)
+      .order('saturday_date', { ascending: false })
+      .limit(1)
+    const week = weeks?.[0]
+    if (!week) return
+
+    // Load races with runner counts
+    const { data: raceData } = await supabase
+      .from('races')
+      .select('id, race_number, race_time, venue, race_name, runners(count)')
+      .eq('race_week_id', week.id)
+      .order('race_number')
+    if (!raceData) return
+
+    setRaces(raceData.map(r => ({
+      id:       r.id,
+      number:   r.race_number,
+      time:     r.race_time,
+      course:   r.venue,
+      race:     r.race_name,
+      runners:  parseInt(r.runners?.[0]?.count ?? 0),
+    })))
+  }
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
@@ -68,12 +102,6 @@ export default function Dashboard() {
     { label: 'League Rank', value: '—',  sub: 'out of — players', icon: '🏆' },
     { label: 'Picks Made',  value: '0',  sub: 'this week',        icon: '🎯' },
     { label: 'Win Rate',    value: '—%', sub: 'all time',          icon: '📈' },
-  ]
-
-  const todaysRaces = [
-    { time: '13:30', course: 'Cheltenham', race: 'Novice Hurdle',   runners: 8  },
-    { time: '14:05', course: 'Sandown',    race: 'Handicap Chase',  runners: 12 },
-    { time: '15:20', course: 'Newbury',    race: 'Listed Stakes',   runners: 6  },
   ]
 
   const leaderboard = [
@@ -169,26 +197,31 @@ export default function Dashboard() {
         {/* Two-column layout */}
         <section style={styles.twoCol}>
 
-          {/* Today's Races */}
+          {/* This Week's Races */}
           <div style={styles.card}>
             <div style={styles.cardHeader}>
-              <span style={styles.cardTitle}>Today's Races</span>
-              <span style={styles.cardBadge}>{todaysRaces.length} races</span>
+              <span style={styles.cardTitle}>This Week's Races</span>
+              <span style={styles.cardBadge}>{races.length} / 5 races</span>
             </div>
             <div style={styles.raceList}>
-              {todaysRaces.map((r, i) => (
-                <div key={i} style={styles.raceRow}>
-                  <div style={styles.raceTime}>{r.time}</div>
-                  <div style={styles.raceInfo}>
-                    <div style={styles.raceCourse}>{r.course}</div>
-                    <div style={styles.raceName}>{r.race}</div>
-                  </div>
-                  <div style={styles.raceRunners}>{r.runners} runners</div>
-                  <button style={styles.pickBtn} onClick={() => navigate('/picks')}>Pick →</button>
+              {races.length === 0 ? (
+                <div style={{ color: '#5a8a5a', fontSize: '0.85rem', padding: '0.5rem 0' }}>
+                  No races set up yet — check back soon.
                 </div>
-              ))}
+              ) : (
+                races.map(r => (
+                  <div key={r.id} style={styles.raceRow}>
+                    <div style={styles.raceTime}>{r.time}</div>
+                    <div style={styles.raceInfo}>
+                      <div style={styles.raceCourse}>{r.course}</div>
+                      <div style={styles.raceName}>{r.race}</div>
+                    </div>
+                    <div style={styles.raceRunners}>{r.runners} runner{r.runners !== 1 ? 's' : ''}</div>
+                    <button style={styles.pickBtn} onClick={() => navigate('/picks')}>Pick →</button>
+                  </div>
+                ))
+              )}
             </div>
-            <button style={styles.viewAllBtn}>View all races →</button>
           </div>
 
           {/* Live Leaderboard */}
