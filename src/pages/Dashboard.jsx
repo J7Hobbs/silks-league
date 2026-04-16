@@ -4,11 +4,15 @@ import { supabase } from '../lib/supabase'
 
 export default function Dashboard() {
   const navigate = useNavigate()
-  const [user, setUser]         = useState(null)
-  const [isAdmin, setIsAdmin]   = useState(false)
-  const [loading, setLoading]   = useState(true)
-  const [menuOpen, setMenuOpen] = useState(false)
-  const [races, setRaces]       = useState([])
+  const [user, setUser]                   = useState(null)
+  const [isAdmin, setIsAdmin]             = useState(false)
+  const [loading, setLoading]             = useState(true)
+  const [menuOpen, setMenuOpen]           = useState(false)
+  const [races, setRaces]                 = useState([])
+  const [seasonPoints, setSeasonPoints]   = useState(null)
+  const [weekPicksCount, setWeekPicksCount] = useState(null)
+  const [leaderboard, setLeaderboard]     = useState([])
+  const [currentWeekNum, setCurrentWeekNum] = useState(null)
 
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data: { user } }) => {
@@ -20,18 +24,18 @@ export default function Dashboard() {
           .from('profiles').select('is_admin').eq('id', user.id).single()
         setIsAdmin(profile?.is_admin || false)
         await loadRaces()
+        await loadStats(user.id)
+        await loadLeaderboard(user.id)
         setLoading(false)
       }
     })
   }, [navigate])
 
   async function loadRaces() {
-    // Find active season
     const { data: season } = await supabase
       .from('seasons').select('id').eq('is_active', true).single()
     if (!season) return
 
-    // Find most recent race week
     const { data: weeks } = await supabase
       .from('race_weeks').select('id, week_number, saturday_date')
       .eq('season_id', season.id)
@@ -39,8 +43,8 @@ export default function Dashboard() {
       .limit(1)
     const week = weeks?.[0]
     if (!week) return
+    setCurrentWeekNum(week.week_number)
 
-    // Load races with runner counts
     const { data: raceData } = await supabase
       .from('races')
       .select('id, race_number, race_time, venue, race_name, runners(count)')
@@ -49,13 +53,102 @@ export default function Dashboard() {
     if (!raceData) return
 
     setRaces(raceData.map(r => ({
-      id:       r.id,
-      number:   r.race_number,
-      time:     r.race_time,
-      course:   r.venue,
-      race:     r.race_name,
-      runners:  parseInt(r.runners?.[0]?.count ?? 0),
+      id:      r.id,
+      number:  r.race_number,
+      time:    r.race_time,
+      course:  r.venue,
+      race:    r.race_name,
+      runners: parseInt(r.runners?.[0]?.count ?? 0),
     })))
+  }
+
+  async function loadStats(userId) {
+    // Get active season
+    const { data: season } = await supabase
+      .from('seasons').select('id').eq('is_active', true).single()
+    if (!season) return
+
+    // All weeks in season → all race IDs
+    const { data: weeks } = await supabase
+      .from('race_weeks').select('id').eq('season_id', season.id)
+    if (!weeks?.length) return
+    const weekIds = weeks.map(w => w.id)
+
+    const { data: allRaces } = await supabase
+      .from('races').select('id').in('race_week_id', weekIds)
+    if (!allRaces?.length) { setSeasonPoints(0); setWeekPicksCount(0); return }
+    const allRaceIds = allRaces.map(r => r.id)
+
+    // Season total points
+    const { data: seasonScores } = await supabase
+      .from('scores').select('total_points').eq('user_id', userId).in('race_id', allRaceIds)
+    const total = seasonScores?.reduce((s, r) => s + (r.total_points || 0), 0) ?? 0
+    setSeasonPoints(total)
+
+    // Current week race IDs
+    const { data: currentWeek } = await supabase
+      .from('race_weeks').select('id')
+      .eq('season_id', season.id)
+      .order('saturday_date', { ascending: false })
+      .limit(1)
+    if (!currentWeek?.[0]) { setWeekPicksCount(0); return }
+
+    const { data: weekRaces } = await supabase
+      .from('races').select('id').eq('race_week_id', currentWeek[0].id)
+    const weekRaceIds = weekRaces?.map(r => r.id) || []
+
+    // Picks made = picks rows for this week's races
+    const { data: weekPicks } = await supabase
+      .from('picks').select('id').eq('user_id', userId).in('race_id', weekRaceIds)
+    setWeekPicksCount(weekPicks?.length ?? 0)
+  }
+
+  async function loadLeaderboard(myUserId) {
+    const { data: season } = await supabase
+      .from('seasons').select('id').eq('is_active', true).single()
+    if (!season) return
+
+    const { data: weeks } = await supabase
+      .from('race_weeks').select('id').eq('season_id', season.id)
+    if (!weeks?.length) return
+    const weekIds = weeks.map(w => w.id)
+
+    const { data: allRaces } = await supabase
+      .from('races').select('id').in('race_week_id', weekIds)
+    if (!allRaces?.length) return
+    const allRaceIds = allRaces.map(r => r.id)
+
+    // Get all scores for this season
+    const { data: scores } = await supabase
+      .from('scores').select('user_id, total_points').in('race_id', allRaceIds)
+    if (!scores?.length) return
+
+    // Aggregate by user
+    const byUser = {}
+    scores.forEach(s => {
+      if (!byUser[s.user_id]) byUser[s.user_id] = { user_id: s.user_id, total: 0, picks: 0 }
+      byUser[s.user_id].total += (s.total_points || 0)
+      byUser[s.user_id].picks += 1
+    })
+
+    // Try to get display names from profiles
+    const userIds = Object.keys(byUser)
+    const { data: profiles } = await supabase
+      .from('profiles').select('id, display_name').in('id', userIds)
+    profiles?.forEach(p => {
+      if (byUser[p.id]) byUser[p.id].name = p.display_name || null
+    })
+
+    const sorted = Object.values(byUser)
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 5)
+      .map((u, i) => ({
+        rank:   i + 1,
+        name:   u.user_id === myUserId ? 'You' : (u.name || `Player ${i + 1}`),
+        points: u.total,
+        isMe:   u.user_id === myUserId,
+      }))
+    setLeaderboard(sorted)
   }
 
   const handleSignOut = async () => {
@@ -97,19 +190,33 @@ export default function Dashboard() {
 
   const status = getDayStatus()
 
-  const statCards = [
-    { label: 'My Points',   value: '—',  sub: 'this season',     icon: '⭐' },
-    { label: 'League Rank', value: '—',  sub: 'out of — players', icon: '🏆' },
-    { label: 'Picks Made',  value: '0',  sub: 'this week',        icon: '🎯' },
-    { label: 'Win Rate',    value: '—%', sub: 'all time',          icon: '📈' },
-  ]
+  const myLeaderboardRank = leaderboard.find(r => r.isMe)?.rank ?? null
 
-  const leaderboard = [
-    { rank: 1, name: 'Tom H.',   points: 142, change: 'up'   },
-    { rank: 2, name: 'Sarah M.', points: 138, change: 'same' },
-    { rank: 3, name: 'Dan W.',   points: 121, change: 'up'   },
-    { rank: 4, name: 'Jack H.',  points: 98,  change: 'down' },
-    { rank: 5, name: 'Liz R.',   points: 87,  change: 'same' },
+  const statCards = [
+    {
+      label: 'My Points',
+      value: seasonPoints !== null ? String(seasonPoints) : '—',
+      sub:   'this season',
+      icon:  '⭐',
+    },
+    {
+      label: 'League Rank',
+      value: myLeaderboardRank ? `#${myLeaderboardRank}` : '—',
+      sub:   leaderboard.length ? `out of ${leaderboard.length} players` : 'this season',
+      icon:  '🏆',
+    },
+    {
+      label: 'Picks Made',
+      value: weekPicksCount !== null ? String(weekPicksCount) : '—',
+      sub:   'this week',
+      icon:  '🎯',
+    },
+    {
+      label: 'Win Rate',
+      value: '—%',
+      sub:   'all time',
+      icon:  '📈',
+    },
   ]
 
   return (
@@ -228,29 +335,29 @@ export default function Dashboard() {
           <div style={styles.card}>
             <div style={styles.cardHeader}>
               <span style={styles.cardTitle}>Live Leaderboard</span>
-              <span style={styles.cardBadge}>Week 14</span>
+              {currentWeekNum && <span style={styles.cardBadge}>Week {currentWeekNum}</span>}
             </div>
             <div style={styles.leaderList}>
-              {leaderboard.map((row) => (
-                <div
-                  key={row.rank}
-                  style={{
-                    ...styles.leaderRow,
-                    ...(row.name.includes('Jack') ? styles.leaderRowMe : {}),
-                  }}
-                >
-                  <div style={styles.leaderRank}>
-                    {row.rank === 1 ? '🥇' : row.rank === 2 ? '🥈' : row.rank === 3 ? '🥉' : `#${row.rank}`}
-                  </div>
-                  <div style={styles.leaderName}>{row.name}</div>
-                  <div style={styles.leaderPoints}>{row.points} pts</div>
-                  <div style={styles.leaderChange}>
-                    {row.change === 'up' ? '▲' : row.change === 'down' ? '▼' : '–'}
-                  </div>
+              {leaderboard.length === 0 ? (
+                <div style={{ color: '#5a8a5a', fontSize: '0.85rem', padding: '0.5rem 0' }}>
+                  No scores yet — results will appear here once races are submitted.
                 </div>
-              ))}
+              ) : (
+                leaderboard.map((row) => (
+                  <div
+                    key={row.rank}
+                    style={{ ...styles.leaderRow, ...(row.isMe ? styles.leaderRowMe : {}) }}
+                  >
+                    <div style={styles.leaderRank}>
+                      {row.rank === 1 ? '🥇' : row.rank === 2 ? '🥈' : row.rank === 3 ? '🥉' : `#${row.rank}`}
+                    </div>
+                    <div style={styles.leaderName}>{row.name}</div>
+                    <div style={styles.leaderPoints}>{row.points} pts</div>
+                  </div>
+                ))
+              )}
             </div>
-            <button style={styles.viewAllBtn}>Full leaderboard →</button>
+            <button style={styles.viewAllBtn} onClick={() => navigate('/league')}>Full leaderboard →</button>
           </div>
         </section>
 

@@ -466,10 +466,9 @@ export default function Admin() {
     if (!sp1 || !sp2 || !sp3) { showToast('error', 'Invalid SP — use e.g. 7/1 or Evs'); return }
     setLoading(true)
 
-    if (isEdit) {
-      await supabase.from('results').delete().eq('race_id', race.id)
-      await supabase.from('scores').delete().eq('race_id', race.id)
-    }
+    // Always delete existing results & scores before inserting fresh ones
+    await supabase.from('results').delete().eq('race_id', race.id)
+    await supabase.from('scores').delete().eq('race_id', race.id)
 
     const resultsToInsert = [
       { race_id: race.id, position: 1, horse_name: form.horse1, starting_price_decimal: sp1, starting_price_display: form.sp1.trim() },
@@ -500,7 +499,7 @@ export default function Admin() {
       await supabase.from('scores').upsert(scoresToInsert)
     }
 
-    if (isEdit) lockResults(race.id)
+    lockResults(race.id)
     await loadResults(race.id)
     setLoading(false)
     showToast('success', isEdit ? `Race ${race.race_number} results updated — scores recalculated` : `Race ${race.race_number} results saved`)
