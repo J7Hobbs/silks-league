@@ -184,7 +184,7 @@ export default function Dashboard() {
                     <div style={styles.raceName}>{r.race}</div>
                   </div>
                   <div style={styles.raceRunners}>{r.runners} runners</div>
-                  <button style={styles.pickBtn}>Pick →</button>
+                  <button style={styles.pickBtn} onClick={() => navigate('/picks')}>Pick →</button>
                 </div>
               ))}
             </div>
@@ -235,9 +235,9 @@ export default function Dashboard() {
             <div style={styles.bottomCardIcon}>📅</div>
             <div style={styles.bottomCardBody}>
               <div style={styles.bottomCardTitle}>Next Race Day</div>
-              <div style={styles.bottomCardSub}>Picks close Friday at midnight</div>
+              <div style={styles.bottomCardSub}>Picks close Saturday at 11am</div>
             </div>
-            <button style={styles.bottomCardBtn}>Make picks →</button>
+            <button style={styles.bottomCardBtn} onClick={() => navigate('/picks')}>Make picks →</button>
           </div>
         </section>
       </main>
