@@ -289,8 +289,8 @@ export default function Dashboard() {
           <div style={styles.navRight}>
             <div
               style={styles.avatar}
-              onClick={() => setMenuOpen(!menuOpen)}
-              title={user?.email}
+              onClick={() => navigate('/profile')}
+              title="View profile"
             >
               {getFirstName().charAt(0).toUpperCase()}
             </div>
@@ -299,8 +299,7 @@ export default function Dashboard() {
               <div style={styles.dropdownMenu}>
                 <div style={styles.dropdownEmail}>{user?.email}</div>
                 <hr style={styles.dropdownDivider} />
-                <button style={styles.dropdownItem} onClick={() => setMenuOpen(false)}>Profile</button>
-                <button style={styles.dropdownItem} onClick={() => setMenuOpen(false)}>Settings</button>
+                <button style={styles.dropdownItem} onClick={() => { setMenuOpen(false); navigate('/profile') }}>My Profile</button>
                 {isAdmin && (
                   <>
                     <hr style={styles.dropdownDivider} />

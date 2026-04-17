@@ -234,8 +234,8 @@ export default function Picks() {
           <div style={st.navRight}>
             <div
               style={st.avatar}
-              onClick={() => setMenuOpen(!menuOpen)}
-              title={user?.email}
+              onClick={() => navigate('/profile')}
+              title="View profile"
             >
               {getFirstName().charAt(0).toUpperCase()}
             </div>
@@ -244,8 +244,7 @@ export default function Picks() {
               <div style={st.dropdownMenu}>
                 <div style={st.dropdownEmail}>{user?.email}</div>
                 <hr style={st.dropdownDivider} />
-                <button style={st.dropdownItem} onClick={() => setMenuOpen(false)}>Profile</button>
-                <button style={st.dropdownItem} onClick={() => setMenuOpen(false)}>Settings</button>
+                <button style={st.dropdownItem} onClick={() => { setMenuOpen(false); navigate('/profile') }}>My Profile</button>
                 {isAdmin && (
                   <>
                     <hr style={st.dropdownDivider} />

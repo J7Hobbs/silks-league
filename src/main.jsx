@@ -10,6 +10,7 @@ import Picks     from './pages/Picks.jsx'
 import League    from './pages/League.jsx'
 import Races     from './pages/Races.jsx'
 import Results   from './pages/Results.jsx'
+import Profile   from './pages/Profile.jsx'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
@@ -23,6 +24,7 @@ createRoot(document.getElementById('root')).render(
         <Route path="/league"    element={<League />}    />
         <Route path="/races"     element={<Races />}     />
         <Route path="/results"   element={<Results />}   />
+        <Route path="/profile"   element={<Profile />}   />
       </Routes>
     </BrowserRouter>
   </StrictMode>,
