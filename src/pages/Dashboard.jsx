@@ -115,33 +115,41 @@ export default function Dashboard() {
 
     const { data: weeks } = await supabase
       .from('race_weeks').select('id').eq('season_id', season.id)
-    if (!weeks?.length) return
-    const weekIds = weeks.map(w => w.id)
+    const weekIds = weeks?.map(w => w.id) || []
 
-    const { data: allRaces } = await supabase
-      .from('races').select('id').in('race_week_id', weekIds)
-    if (!allRaces?.length) return
-    const allRaceIds = allRaces.map(r => r.id)
+    let allRaceIds = []
+    if (weekIds.length) {
+      const { data: allRaces } = await supabase
+        .from('races').select('id').in('race_week_id', weekIds)
+      allRaceIds = allRaces?.map(r => r.id) || []
+    }
 
-    // Get all scores for this season
-    const { data: scores } = await supabase
-      .from('scores').select('user_id, total_points').in('race_id', allRaceIds)
-    if (!scores?.length) return
+    // Try all scores first; fall back to own scores if RLS blocks the query
+    let scores = []
+    if (allRaceIds.length) {
+      const { data: allScores, error } = await supabase
+        .from('scores').select('user_id, total_points').in('race_id', allRaceIds)
+      if (!error && allScores?.length) scores = allScores
+    }
+    if (!scores.length) {
+      const ownQ = supabase.from('scores').select('user_id, total_points').eq('user_id', myUserId)
+      const { data: ownScores } = allRaceIds.length
+        ? await ownQ.in('race_id', allRaceIds)
+        : await ownQ
+      scores = ownScores || []
+    }
+    if (!scores.length) return
 
-    // Aggregate by user
     const byUser = {}
     scores.forEach(s => {
-      if (!byUser[s.user_id]) byUser[s.user_id] = { user_id: s.user_id, total: 0, picks: 0 }
+      if (!byUser[s.user_id]) byUser[s.user_id] = { user_id: s.user_id, total: 0 }
       byUser[s.user_id].total += (s.total_points || 0)
-      byUser[s.user_id].picks += 1
     })
 
-    // Try to get display names from profiles
-    const userIds = Object.keys(byUser)
     const { data: profiles } = await supabase
-      .from('profiles').select('id, display_name').in('id', userIds)
+      .from('profiles').select('id, display_name, full_name').in('id', Object.keys(byUser))
     profiles?.forEach(p => {
-      if (byUser[p.id]) byUser[p.id].name = p.display_name || null
+      if (byUser[p.id]) byUser[p.id].name = p.display_name || p.full_name || null
     })
 
     const sorted = Object.values(byUser)
