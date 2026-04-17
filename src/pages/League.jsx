@@ -62,14 +62,14 @@ export default function League() {
         allRaces.forEach(r => { raceWeekMap[r.id] = r.race_week_id })
       }
     }
-    console.log('[League] allRaceIds:', allRaceIds, '| weekRaceIds:', weekRaceIds)
+    console.log('[League] allRaceIds:', allRaceIds.length, '| weekRaceIds:', weekRaceIds.length)
 
     // ── 4a. Always fetch OWN scores first (bypasses any RLS issues) ──
-    const { data: ownScores, error: ownErr } = await supabase
-      .from('scores')
-      .select('user_id, race_id, total_points')
-      .eq('user_id', myUserId)
-    console.log('[League] own scores:', ownScores, ownErr)
+    const ownScoresQuery = allRaceIds.length
+      ? supabase.from('scores').select('user_id, race_id, total_points').eq('user_id', myUserId).in('race_id', allRaceIds)
+      : supabase.from('scores').select('user_id, race_id, total_points').eq('user_id', myUserId)
+    const { data: ownScores, error: ownErr } = await ownScoresQuery
+    console.log('[League] own scores:', ownScores?.length, ownErr)
 
     // ── 4b. Try to fetch ALL users' scores for a real leaderboard ──
     let allScores = []
@@ -78,14 +78,13 @@ export default function League() {
         .from('scores')
         .select('user_id, race_id, total_points')
         .in('race_id', allRaceIds)
-      console.log('[League] all scores (RLS test):', everyone, evErr)
+      console.log('[League] all scores (race filter):', everyone?.length, evErr)
       if (!evErr && everyone?.length) allScores = everyone
     } else {
-      // No race IDs found — try fetching all scores with no filter
+      // No race IDs — try fetching all scores without a filter
       const { data: everyone, error: evErr } = await supabase
-        .from('scores')
-        .select('user_id, race_id, total_points')
-      console.log('[League] all scores (no filter):', everyone, evErr)
+        .from('scores').select('user_id, race_id, total_points')
+      console.log('[League] all scores (no filter):', everyone?.length, evErr)
       if (!evErr && everyone?.length) allScores = everyone
     }
 
@@ -94,11 +93,9 @@ export default function League() {
     console.log('[League] final scores array length:', scores.length)
 
     // ── 5. Display names ─────────────────────────────────────────
-    const userIds = [...new Set(scores.map(sc => sc.user_id))]
-    const { data: profiles } = await supabase
-      .from('profiles').select('id, display_name, full_name').in('id', userIds)
-    const nameMap = {}
-    profiles?.forEach(p => { nameMap[p.id] = p.display_name || p.full_name || null })
+    // profiles table only has id + is_admin — names come from auth metadata.
+    // For now: logged-in user shows as "You", others as "Player N".
+    const nameMap = {} // placeholder — extend later if display_name column is added
 
     // ── 6. Season aggregation ────────────────────────────────────
     // Filter to season races where possible; otherwise show everything
