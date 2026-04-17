@@ -28,29 +28,32 @@ export default function League() {
 
   async function loadLeaderboard(myUserId) {
     // ── 1. Active season ─────────────────────────────────────────
-    const { data: s } = await supabase
+    const { data: s, error: sErr } = await supabase
       .from('seasons').select('id, season_name').eq('is_active', true).single()
+    console.log('[League] season:', s, sErr)
     if (!s) return
     setSeason(s)
 
-    // ── 2. All weeks (keep going even if empty) ──────────────────
-    const { data: weeks } = await supabase
+    // ── 2. Weeks for this season ─────────────────────────────────
+    const { data: weeks, error: wErr } = await supabase
       .from('race_weeks').select('id, week_number, saturday_date')
       .eq('season_id', s.id)
       .order('saturday_date', { ascending: false })
+    console.log('[League] weeks:', weeks, wErr)
 
     const latestWeek = weeks?.[0] || null
     setCurrentWeek(latestWeek)
 
-    // ── 3. All races for the season ──────────────────────────────
-    const weekIds    = weeks?.map(w => w.id) || []
-    let allRaceIds   = []
-    let weekRaceIds  = []
-    let raceWeekMap  = {}   // race_id → race_week_id
+    // ── 3. Races for the season ──────────────────────────────────
+    const weekIds   = weeks?.map(w => w.id) || []
+    let allRaceIds  = []
+    let weekRaceIds = []
+    let raceWeekMap = {}
 
     if (weekIds.length) {
-      const { data: allRaces } = await supabase
+      const { data: allRaces, error: rErr } = await supabase
         .from('races').select('id, race_week_id').in('race_week_id', weekIds)
+      console.log('[League] races:', allRaces, rErr)
       if (allRaces?.length) {
         allRaceIds  = allRaces.map(r => r.id)
         weekRaceIds = latestWeek
@@ -59,45 +62,36 @@ export default function League() {
         allRaces.forEach(r => { raceWeekMap[r.id] = r.race_week_id })
       }
     }
+    console.log('[League] allRaceIds:', allRaceIds, '| weekRaceIds:', weekRaceIds)
 
-    // ── 4. Fetch scores ──────────────────────────────────────────
-    // Strategy: try fetching ALL users' scores (works if RLS allows it).
-    // If that returns nothing, fall back to own scores only.
-    let scores = []
+    // ── 4a. Always fetch OWN scores first (bypasses any RLS issues) ──
+    const { data: ownScores, error: ownErr } = await supabase
+      .from('scores')
+      .select('user_id, race_id, total_points')
+      .eq('user_id', myUserId)
+    console.log('[League] own scores:', ownScores, ownErr)
 
+    // ── 4b. Try to fetch ALL users' scores for a real leaderboard ──
+    let allScores = []
     if (allRaceIds.length) {
-      const { data: allScores, error: allErr } = await supabase
+      const { data: everyone, error: evErr } = await supabase
         .from('scores')
         .select('user_id, race_id, total_points')
         .in('race_id', allRaceIds)
-
-      if (!allErr && allScores?.length) {
-        scores = allScores
-      }
-    }
-
-    // If the all-scores query returned nothing, fetch own scores without a
-    // race filter — covers the case where RLS or the race lookup failed.
-    if (!scores.length) {
-      const ownQuery = supabase
+      console.log('[League] all scores (RLS test):', everyone, evErr)
+      if (!evErr && everyone?.length) allScores = everyone
+    } else {
+      // No race IDs found — try fetching all scores with no filter
+      const { data: everyone, error: evErr } = await supabase
         .from('scores')
         .select('user_id, race_id, total_points')
-        .eq('user_id', myUserId)
-
-      // Constrain to season races if we have them, otherwise fetch everything
-      const { data: ownScores } = allRaceIds.length
-        ? await ownQuery.in('race_id', allRaceIds)
-        : await ownQuery
-
-      scores = ownScores || []
+      console.log('[League] all scores (no filter):', everyone, evErr)
+      if (!evErr && everyone?.length) allScores = everyone
     }
 
-    // Nothing at all — set empty state and return
-    if (!scores.length) {
-      setRows([])
-      setWeekRows([])
-      return
-    }
+    // Use all-users scores if we got them; otherwise fall back to own scores
+    const scores = allScores.length ? allScores : (ownScores || [])
+    console.log('[League] final scores array length:', scores.length)
 
     // ── 5. Display names ─────────────────────────────────────────
     const userIds = [...new Set(scores.map(sc => sc.user_id))]
@@ -107,10 +101,15 @@ export default function League() {
     profiles?.forEach(p => { nameMap[p.id] = p.display_name || p.full_name || null })
 
     // ── 6. Season aggregation ────────────────────────────────────
+    // Filter to season races where possible; otherwise show everything
+    const seasonScores = allRaceIds.length
+      ? scores.filter(sc => allRaceIds.includes(sc.race_id))
+      : scores
+
     const byUser = {}
     let playerCounter = 1
 
-    scores.forEach(sc => {
+    seasonScores.forEach(sc => {
       if (!byUser[sc.user_id]) {
         byUser[sc.user_id] = {
           user_id:     sc.user_id,
@@ -122,22 +121,35 @@ export default function League() {
         }
       }
       byUser[sc.user_id].seasonTotal += (sc.total_points || 0)
-
-      // Which week did this race belong to?
       const wId = raceWeekMap[sc.race_id]
       if (wId) byUser[sc.user_id].weeksPlayed.add(wId)
-
-      // Accumulate current-week points
       if (weekRaceIds.includes(sc.race_id)) {
         byUser[sc.user_id].weekPoints += (sc.total_points || 0)
       }
     })
+
+    // ── Guarantee logged-in user always appears ──────────────────
+    if (!byUser[myUserId] && ownScores?.length) {
+      const mySeasonTotal = ownScores.reduce((s, sc) => s + (sc.total_points || 0), 0)
+      const myWeekPoints  = ownScores
+        .filter(sc => weekRaceIds.includes(sc.race_id))
+        .reduce((s, sc) => s + (sc.total_points || 0), 0)
+      byUser[myUserId] = {
+        user_id: myUserId, name: 'You', isMe: true,
+        seasonTotal: mySeasonTotal, weeksPlayed: new Set(), weekPoints: myWeekPoints,
+      }
+      ownScores.forEach(sc => {
+        const wId = raceWeekMap[sc.race_id]
+        if (wId) byUser[myUserId].weeksPlayed.add(wId)
+      })
+    }
 
     const seasonSorted = Object.values(byUser)
       .sort((a, b) => b.seasonTotal - a.seasonTotal || a.name.localeCompare(b.name))
       .slice(0, 10)
       .map((u, i) => ({ ...u, rank: i + 1, weeksPlayed: u.weeksPlayed.size }))
 
+    console.log('[League] seasonSorted:', seasonSorted)
     setRows(seasonSorted)
 
     // ── 7. This-week aggregation ─────────────────────────────────
@@ -150,7 +162,7 @@ export default function League() {
         if (!weekByUser[sc.user_id]) {
           weekByUser[sc.user_id] = {
             user_id:     sc.user_id,
-            name:        sc.user_id === myUserId ? 'You' : (nameMap[sc.user_id] || byUser[sc.user_id]?.name || `Player ${wCounter++}`),
+            name:        sc.user_id === myUserId ? 'You' : (nameMap[sc.user_id] || `Player ${wCounter++}`),
             isMe:        sc.user_id === myUserId,
             weekPoints:  0,
             racesScored: 0,
@@ -160,10 +172,23 @@ export default function League() {
         weekByUser[sc.user_id].racesScored += 1
       })
 
+    // Guarantee logged-in user in week tab too
+    if (!weekByUser[myUserId] && ownScores?.length) {
+      const myWeekScores = ownScores.filter(sc => weekRaceIds.includes(sc.race_id))
+      if (myWeekScores.length) {
+        weekByUser[myUserId] = {
+          user_id:     myUserId, name: 'You', isMe: true,
+          weekPoints:  myWeekScores.reduce((s, sc) => s + (sc.total_points || 0), 0),
+          racesScored: myWeekScores.length,
+        }
+      }
+    }
+
     const weekSorted = Object.values(weekByUser)
       .sort((a, b) => b.weekPoints - a.weekPoints || a.name.localeCompare(b.name))
       .map((u, i) => ({ ...u, rank: i + 1 }))
 
+    console.log('[League] weekSorted:', weekSorted)
     setWeekRows(weekSorted)
   }
 
