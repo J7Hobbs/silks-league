@@ -29,7 +29,7 @@ export default function League() {
   async function loadLeaderboard(myUserId) {
     // ── 1. Active season ─────────────────────────────────────────
     const { data: s, error: sErr } = await supabase
-      .from('seasons').select('id, season_name').eq('is_active', true).single()
+      .from('seasons').select('id, name').eq('is_active', true).single()
     console.log('[League] season:', s, sErr)
     if (!s) return
     setSeason(s)
@@ -261,7 +261,7 @@ export default function League() {
           <div>
             <h1 style={st.heading}>League Table</h1>
             <p style={st.sub}>
-              {season?.season_name || 'Current Season'} · {rows.length} player{rows.length !== 1 ? 's' : ''}
+              {season?.name || 'Current Season'} · {rows.length} player{rows.length !== 1 ? 's' : ''}
             </p>
           </div>
         </section>
