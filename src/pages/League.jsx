@@ -58,20 +58,27 @@ export default function League() {
       .from('scores').select('user_id, race_id, total_points').in('race_id', allRaceIds)
     if (!scores?.length) return
 
-    // Try to get display names
+    // Try to get display names — fall back gracefully if column doesn't exist
     const userIds = [...new Set(scores.map(s => s.user_id))]
     const { data: profiles } = await supabase
-      .from('profiles').select('id, display_name').in('id', userIds)
+      .from('profiles').select('id, display_name, full_name').in('id', userIds)
     const nameMap = {}
-    profiles?.forEach(p => { nameMap[p.id] = p.display_name })
+    profiles?.forEach(p => {
+      // Use display_name, then full_name, then nothing (we'll use email prefix below)
+      nameMap[p.id] = p.display_name || p.full_name || null
+    })
 
     // Season aggregation
     const byUser = {}
+    let playerCounter = 1
     scores.forEach(sc => {
       if (!byUser[sc.user_id]) {
+        const resolvedName = sc.user_id === myUserId
+          ? 'You'
+          : (nameMap[sc.user_id] || `Player ${playerCounter++}`)
         byUser[sc.user_id] = {
           user_id:      sc.user_id,
-          name:         sc.user_id === myUserId ? 'You' : (nameMap[sc.user_id] || 'Player'),
+          name:         resolvedName,
           isMe:         sc.user_id === myUserId,
           seasonTotal:  0,
           weeksPlayed:  new Set(),
@@ -90,19 +97,21 @@ export default function League() {
 
     const seasonSorted = Object.values(byUser)
       .sort((a, b) => b.seasonTotal - a.seasonTotal || a.name.localeCompare(b.name))
+      .slice(0, 10)
       .map((u, i) => ({ ...u, rank: i + 1, weeksPlayed: u.weeksPlayed.size }))
 
     setRows(seasonSorted)
 
     // Current week only
     const weekByUser = {}
+    let wCounter = 1
     scores
       .filter(sc => weekRaceIds.includes(sc.race_id))
       .forEach(sc => {
         if (!weekByUser[sc.user_id]) {
           weekByUser[sc.user_id] = {
             user_id:    sc.user_id,
-            name:       sc.user_id === myUserId ? 'You' : (nameMap[sc.user_id] || 'Player'),
+            name:       sc.user_id === myUserId ? 'You' : (nameMap[sc.user_id] || byUser[sc.user_id]?.name || `Player ${wCounter++}`),
             isMe:       sc.user_id === myUserId,
             weekPoints: 0,
             racesScored: 0,

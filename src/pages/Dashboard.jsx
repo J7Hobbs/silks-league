@@ -63,44 +63,49 @@ export default function Dashboard() {
   }
 
   async function loadStats(userId) {
-    // Get active season
+    // Active season
     const { data: season } = await supabase
       .from('seasons').select('id').eq('is_active', true).single()
-    if (!season) return
+    if (!season) { setSeasonPoints(0); setWeekPicksCount(0); return }
 
-    // All weeks in season → all race IDs
+    // All weeks in season
     const { data: weeks } = await supabase
       .from('race_weeks').select('id').eq('season_id', season.id)
-    if (!weeks?.length) return
+    if (!weeks?.length) { setSeasonPoints(0); setWeekPicksCount(0); return }
+
+    // Current week (most recent)
+    const { data: currentWeekArr } = await supabase
+      .from('race_weeks').select('id')
+      .eq('season_id', season.id)
+      .order('saturday_date', { ascending: false })
+      .limit(1)
+    const currentWeekId = currentWeekArr?.[0]?.id
+
+    // All race IDs for the season
     const weekIds = weeks.map(w => w.id)
-
     const { data: allRaces } = await supabase
-      .from('races').select('id').in('race_week_id', weekIds)
+      .from('races').select('id, race_week_id').in('race_week_id', weekIds)
     if (!allRaces?.length) { setSeasonPoints(0); setWeekPicksCount(0); return }
-    const allRaceIds = allRaces.map(r => r.id)
 
-    // Season total points
+    const allRaceIds  = allRaces.map(r => r.id)
+    const weekRaceIds = currentWeekId
+      ? allRaces.filter(r => r.race_week_id === currentWeekId).map(r => r.id)
+      : []
+
+    // Season total: sum scores for this user across all season races
     const { data: seasonScores } = await supabase
       .from('scores').select('total_points').eq('user_id', userId).in('race_id', allRaceIds)
     const total = seasonScores?.reduce((s, r) => s + (r.total_points || 0), 0) ?? 0
     setSeasonPoints(total)
 
-    // Current week race IDs
-    const { data: currentWeek } = await supabase
-      .from('race_weeks').select('id')
-      .eq('season_id', season.id)
-      .order('saturday_date', { ascending: false })
-      .limit(1)
-    if (!currentWeek?.[0]) { setWeekPicksCount(0); return }
-
-    const { data: weekRaces } = await supabase
-      .from('races').select('id').eq('race_week_id', currentWeek[0].id)
-    const weekRaceIds = weekRaces?.map(r => r.id) || []
-
-    // Picks made = picks rows for this week's races
-    const { data: weekPicks } = await supabase
-      .from('picks').select('id').eq('user_id', userId).in('race_id', weekRaceIds)
-    setWeekPicksCount(weekPicks?.length ?? 0)
+    // Picks made this week = picks rows (saved before results come in)
+    if (weekRaceIds.length) {
+      const { data: weekPicks } = await supabase
+        .from('picks').select('id').eq('user_id', userId).in('race_id', weekRaceIds)
+      setWeekPicksCount(weekPicks?.length ?? 0)
+    } else {
+      setWeekPicksCount(0)
+    }
   }
 
   async function loadLeaderboard(myUserId) {
