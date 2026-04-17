@@ -579,8 +579,8 @@ const st = {
   // Week selector
   weekSelector: {
     display: 'flex', alignItems: 'center', gap: '1rem',
-    background: '#0d1f0d', border: '1px solid rgba(201,168,76,0.15)',
-    borderRadius: '12px', padding: '0.85rem 1.25rem',
+    background: '#162a1a', border: '1px solid #c9a84c', borderLeft: '4px solid #c9a84c',
+    borderRadius: '8px', padding: '0.85rem 1.25rem',
   },
   arrowBtn: {
     background: 'rgba(201,168,76,0.1)', border: '1px solid rgba(201,168,76,0.2)',
@@ -599,8 +599,8 @@ const st = {
 
   // Empty / error states
   emptyCard: {
-    background: '#0d1f0d', border: '1px solid rgba(201,168,76,0.12)',
-    borderRadius: '14px', padding: '3rem 2rem', textAlign: 'center',
+    background: '#162a1a', border: '1px solid #c9a84c', borderLeft: '4px solid #c9a84c',
+    borderRadius: '8px', padding: '3rem 2rem', textAlign: 'center',
     color: '#5a8a5a', fontSize: '0.9rem',
   },
 
@@ -609,8 +609,8 @@ const st = {
     display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem',
   },
   summaryCard: {
-    background: '#0d1f0d', border: '1px solid rgba(201,168,76,0.15)',
-    borderRadius: '12px', padding: '1.1rem 1rem',
+    background: '#162a1a', border: '1px solid #c9a84c', borderLeft: '4px solid #c9a84c',
+    borderRadius: '8px', padding: '1.1rem 1rem',
     display: 'flex', flexDirection: 'column', gap: '0.2rem',
   },
   summaryIcon:  { fontSize: '1.2rem', marginBottom: '0.2rem' },
@@ -627,8 +627,8 @@ const st = {
   // Race cards
   raceList: { display: 'flex', flexDirection: 'column', gap: '0.75rem' },
   raceCard: {
-    background: '#0d1f0d', border: '1px solid rgba(201,168,76,0.15)',
-    borderRadius: '14px', overflow: 'hidden',
+    background: '#162a1a', border: '1px solid #c9a84c', borderLeft: '4px solid #c9a84c',
+    borderRadius: '8px', overflow: 'hidden',
   },
 
   // Card header
@@ -678,8 +678,8 @@ const st = {
   pickSection: {},
   pickRow: {
     display: 'flex', alignItems: 'center', gap: '1rem',
-    background: 'rgba(0,0,0,0.2)', borderRadius: '10px',
-    padding: '0.9rem 1rem', border: '1px solid rgba(201,168,76,0.08)',
+    background: 'rgba(201,168,76,0.05)', borderRadius: '6px',
+    padding: '0.9rem 1rem', border: '1px solid rgba(201,168,76,0.25)',
   },
   silkBar: {
     width: '10px', height: '52px', borderRadius: '4px', flexShrink: 0,
@@ -718,12 +718,12 @@ const st = {
   finishersSection: {},
   finisherRow: {
     display: 'flex', alignItems: 'center', gap: '0.75rem',
-    padding: '0.65rem 0.85rem', borderRadius: '8px',
-    background: 'rgba(0,0,0,0.15)', border: '1px solid rgba(201,168,76,0.06)',
+    padding: '0.65rem 0.85rem', borderRadius: '6px',
+    background: 'rgba(201,168,76,0.04)', border: '1px solid rgba(201,168,76,0.2)',
     marginBottom: '0.4rem',
   },
   finisherRowMyPick: {
-    background: 'rgba(201,168,76,0.07)', border: '1px solid rgba(201,168,76,0.22)',
+    background: 'rgba(201,168,76,0.1)', border: '1px solid rgba(201,168,76,0.4)',
   },
   finisherPosBadge: {
     fontSize: '0.8rem', fontWeight: '700', minWidth: '48px',

@@ -462,8 +462,8 @@ const st = {
 
   // Table card
   card: {
-    background: '#0d1f0d', border: '1px solid rgba(201,168,76,0.15)',
-    borderRadius: '16px', overflow: 'hidden',
+    background: '#162a1a', border: '1px solid #c9a84c', borderLeft: '4px solid #c9a84c',
+    borderRadius: '8px', overflow: 'hidden',
   },
   empty: {
     padding: '3rem 2rem', textAlign: 'center',
@@ -472,8 +472,8 @@ const st = {
   tableHeader: {
     display: 'flex', alignItems: 'center', gap: '0.75rem',
     padding: '0.75rem 1.5rem',
-    background: 'rgba(0,0,0,0.25)',
-    borderBottom: '1px solid rgba(201,168,76,0.1)',
+    background: 'rgba(0,0,0,0.2)',
+    borderBottom: '1px solid rgba(201,168,76,0.2)',
     fontSize: '0.7rem', fontWeight: '700', letterSpacing: '0.08em',
     textTransform: 'uppercase', color: '#5a8a5a',
   },
@@ -481,13 +481,13 @@ const st = {
   row: {
     display: 'flex', alignItems: 'center', gap: '0.75rem',
     padding: '1rem 1.5rem',
-    borderBottom: '1px solid rgba(201,168,76,0.06)',
+    borderBottom: '1px solid rgba(201,168,76,0.12)',
     transition: 'background 0.15s',
   },
   rowMe: {
-    background: 'rgba(201,168,76,0.07)',
-    borderLeft: '3px solid #c9a84c',
-    paddingLeft: 'calc(1.5rem - 3px)',
+    background: 'rgba(201,168,76,0.1)',
+    borderLeft: '4px solid #c9a84c',
+    paddingLeft: 'calc(1.5rem - 4px)',
   },
   rowFirst: {},
   rankCell: { minWidth: '40px', fontSize: '1.1rem', textAlign: 'center' },

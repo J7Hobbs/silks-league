@@ -610,8 +610,8 @@ const st = {
 
   // Deadline banner
   deadlineBanner: {
-    background: '#0d1f0d', border: '1px solid rgba(201,168,76,0.2)',
-    borderRadius: '12px', padding: '1rem 1.25rem',
+    background: '#162a1a', border: '1px solid #c9a84c', borderLeft: '4px solid #c9a84c',
+    borderRadius: '8px', padding: '1rem 1.25rem',
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
     gap: '1rem', flexWrap: 'wrap',
   },
@@ -633,7 +633,8 @@ const st = {
   // Locked banner
   lockedBanner: {
     background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.25)',
-    borderRadius: '12px', padding: '1rem 1.25rem',
+    borderLeft: '4px solid #f87171',
+    borderRadius: '8px', padding: '1rem 1.25rem',
     display: 'flex', alignItems: 'center', gap: '0.85rem',
   },
   lockedTitle: { fontWeight: '700', color: '#f87171', fontSize: '0.9rem' },
@@ -641,8 +642,8 @@ const st = {
 
   // Progress card
   progressCard: {
-    background: '#0d1f0d', border: '1px solid rgba(201,168,76,0.15)',
-    borderRadius: '12px', padding: '1.25rem 1.5rem',
+    background: '#162a1a', border: '1px solid #c9a84c', borderLeft: '4px solid #c9a84c',
+    borderRadius: '8px', padding: '1.25rem 1.5rem',
     display: 'flex', flexDirection: 'column', gap: '0.85rem',
   },
   progressTop: {
@@ -681,12 +682,12 @@ const st = {
   raceList: { display: 'flex', flexDirection: 'column', gap: '0.6rem' },
 
   raceOuter: {
-    background: '#0d1f0d',
-    border: '1px solid rgba(201,168,76,0.1)',
-    borderRadius: '14px', overflow: 'hidden',
+    background: '#162a1a',
+    border: '1px solid #c9a84c', borderLeft: '4px solid #c9a84c',
+    borderRadius: '8px', overflow: 'hidden',
     transition: 'border-color 0.2s',
   },
-  raceOuterPicked: { borderColor: 'rgba(74,222,128,0.35)' },
+  raceOuterPicked: { borderColor: '#4ade80', borderLeftColor: '#4ade80' },
 
   raceSummaryRow: {
     display: 'flex', alignItems: 'center', gap: '0.85rem',

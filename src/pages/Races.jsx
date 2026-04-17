@@ -394,15 +394,15 @@ const st = {
   },
 
   emptyCard: {
-    background: '#0d1f0d', border: '1px solid rgba(201,168,76,0.15)',
-    borderRadius: '14px', padding: '3rem 2rem', textAlign: 'center',
+    background: '#162a1a', border: '1px solid #c9a84c', borderLeft: '4px solid #c9a84c',
+    borderRadius: '8px', padding: '3rem 2rem', textAlign: 'center',
     color: '#5a8a5a', fontSize: '0.9rem',
   },
 
   // Race card
   raceCard: {
-    background: '#0d1f0d', border: '1px solid rgba(201,168,76,0.15)',
-    borderRadius: '14px', overflow: 'hidden',
+    background: '#162a1a', border: '1px solid #c9a84c', borderLeft: '4px solid #c9a84c',
+    borderRadius: '8px', overflow: 'hidden',
   },
   raceHeader: {
     display: 'flex', alignItems: 'center', gap: '1rem', padding: '1.1rem 1.5rem',
@@ -450,11 +450,11 @@ const st = {
   noRunners: { color: '#5a8a5a', fontSize: '0.85rem', padding: '0.5rem 0' },
   runnerRow: {
     display: 'flex', alignItems: 'center', gap: '0.75rem',
-    padding: '0.75rem', borderRadius: '8px',
-    background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(201,168,76,0.06)',
+    padding: '0.75rem', borderRadius: '6px',
+    background: 'rgba(201,168,76,0.04)', border: '1px solid rgba(201,168,76,0.2)',
   },
   runnerRowPicked: {
-    background: 'rgba(201,168,76,0.06)', border: '1px solid rgba(201,168,76,0.2)',
+    background: 'rgba(201,168,76,0.1)', border: '1px solid rgba(201,168,76,0.45)',
   },
   silkSwatch: {
     width: '16px', height: '28px', borderRadius: '4px', flexShrink: 0,
