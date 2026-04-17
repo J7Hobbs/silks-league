@@ -13,6 +13,13 @@ export default function Dashboard() {
   const [weekPicksCount, setWeekPicksCount] = useState(null)
   const [leaderboard, setLeaderboard]     = useState([])
   const [currentWeekNum, setCurrentWeekNum] = useState(null)
+  const [now, setNow] = useState(new Date())
+
+  // Tick every second
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000)
+    return () => clearInterval(t)
+  }, [])
 
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data: { user } }) => {
@@ -181,16 +188,42 @@ export default function Dashboard() {
     return fullName.split(' ')[0] || 'there'
   }
 
-  const getDayStatus = () => {
-    const day = new Date().getDay()
-    if (day === 6) return { label: 'Race Day', color: '#4ade80', bg: 'rgba(74,222,128,0.12)' }
-    if (day === 0) return { label: 'Race Day', color: '#4ade80', bg: 'rgba(74,222,128,0.12)' }
-    const daysToSat = (6 - day + 7) % 7 || 7
-    return {
-      label: `${daysToSat} day${daysToSat > 1 ? 's' : ''} to race day`,
-      color: '#c9a84c',
-      bg: 'rgba(201,168,76,0.12)',
+  // ── Live countdown to next Saturday 11:00 picks deadline ────
+  const getCountdownStatus = () => {
+    const day  = now.getDay()   // 0 Sun … 6 Sat
+    const hour = now.getHours()
+
+    // Calculate next Saturday midnight
+    const daysUntilSat = day === 6 ? 0 : (6 - day)
+    const nextSat = new Date(now)
+    nextSat.setDate(now.getDate() + daysUntilSat)
+    nextSat.setHours(11, 0, 0, 0) // 11:00 deadline
+
+    // If it's Saturday after 11am — show LIVE
+    if (day === 6 && hour >= 11) {
+      return { mode: 'live' }
     }
+
+    const msLeft = nextSat - now
+    const totalSecs = Math.floor(msLeft / 1000)
+    const days  = Math.floor(totalSecs / 86400)
+    const hours = Math.floor((totalSecs % 86400) / 3600)
+    const mins  = Math.floor((totalSecs % 3600) / 60)
+    const secs  = totalSecs % 60
+
+    // More than 6 days away — just show the date
+    if (days >= 6) {
+      const dateStr = nextSat.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
+      return { mode: 'date', label: `Race day ${dateStr}` }
+    }
+
+    // Within 6 days — show countdown
+    let label
+    if (days > 0)       label = `${days}d ${hours}h ${mins}m`
+    else if (hours > 0) label = `${hours}h ${mins}m ${secs}s`
+    else                label = `${mins}m ${secs}s`
+
+    return { mode: 'countdown', label, sublabel: 'to picks deadline' }
   }
 
   if (loading) {
@@ -201,7 +234,7 @@ export default function Dashboard() {
     )
   }
 
-  const status = getDayStatus()
+  const countdown = getCountdownStatus()
 
   const myLeaderboardRank = leaderboard.find(r => r.isMe)?.rank ?? null
 
@@ -298,9 +331,23 @@ export default function Dashboard() {
             </h1>
             <p style={styles.welcomeSub}>Here's what's happening in the league today.</p>
           </div>
-          <div style={{ ...styles.statusPill, background: status.bg, color: status.color }}>
-            {status.label}
-          </div>
+          {countdown.mode === 'live' && (
+            <div style={styles.livePill}>
+              <span style={styles.liveDot} />
+              LIVE
+            </div>
+          )}
+          {countdown.mode === 'date' && (
+            <div style={styles.statusPill}>
+              {countdown.label}
+            </div>
+          )}
+          {countdown.mode === 'countdown' && (
+            <div style={styles.countdownPill}>
+              <span style={styles.countdownValue}>{countdown.label}</span>
+              <span style={styles.countdownSublabel}>{countdown.sublabel}</span>
+            </div>
+          )}
         </section>
 
         {/* Stat cards */}
@@ -487,6 +534,32 @@ const styles = {
     padding: '0.4rem 1rem', borderRadius: '999px', fontSize: '0.8rem',
     fontWeight: '600', letterSpacing: '0.03em', flexShrink: 0,
     alignSelf: 'flex-start', marginTop: '0.25rem',
+    background: 'rgba(201,168,76,0.12)', color: '#c9a84c',
+  },
+  countdownPill: {
+    background: 'rgba(201,168,76,0.1)', border: '1px solid rgba(201,168,76,0.25)',
+    borderRadius: '10px', padding: '0.5rem 1.1rem',
+    display: 'flex', flexDirection: 'column', alignItems: 'center',
+    flexShrink: 0, alignSelf: 'flex-start', marginTop: '0.1rem', minWidth: '110px',
+  },
+  countdownValue: {
+    fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.5rem',
+    color: '#c9a84c', letterSpacing: '0.06em', lineHeight: 1,
+  },
+  countdownSublabel: {
+    fontSize: '0.62rem', color: '#5a8a5a',
+    textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: '0.15rem',
+  },
+  livePill: {
+    display: 'flex', alignItems: 'center', gap: '0.45rem',
+    background: 'rgba(74,222,128,0.12)', border: '1px solid rgba(74,222,128,0.3)',
+    borderRadius: '999px', padding: '0.4rem 1rem',
+    color: '#4ade80', fontWeight: '700', fontSize: '0.85rem',
+    letterSpacing: '0.1em', flexShrink: 0, alignSelf: 'flex-start', marginTop: '0.25rem',
+  },
+  liveDot: {
+    width: '8px', height: '8px', borderRadius: '50%',
+    background: '#4ade80', boxShadow: '0 0 6px #4ade80', flexShrink: 0,
   },
   statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem' },
   statCard: {
