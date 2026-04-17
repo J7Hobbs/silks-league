@@ -137,6 +137,7 @@ export default function Races() {
             <a href="/picks"     style={st.navLink}>My Picks</a>
             <a href="/league"    style={st.navLink}>League</a>
             <a href="/races"     style={{ ...st.navLink, ...st.navLinkActive }}>Races</a>
+            <a href="/results"   style={st.navLink}>Results</a>
             {isAdmin && <a href="/admin" style={{ ...st.navLink, color: '#c9a84c' }}>Admin</a>}
           </div>
           <div style={st.navRight}>
@@ -314,9 +315,9 @@ export default function Races() {
         <a href="/races" style={{ ...st.mobileBarItem, ...st.mobileBarItemActive }}>
           <span>🐴</span><span style={st.mobileBarLabel}>Races</span>
         </a>
-        <button style={{ ...st.mobileBarItem, background: 'none', border: 'none', cursor: 'pointer' }} onClick={handleSignOut}>
-          <span>🚪</span><span style={st.mobileBarLabel}>Sign out</span>
-        </button>
+        <a href="/results" style={st.mobileBarItem}>
+          <span>📊</span><span style={st.mobileBarLabel}>Results</span>
+        </a>
       </nav>
     </div>
   )

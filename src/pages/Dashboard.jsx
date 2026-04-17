@@ -237,6 +237,7 @@ export default function Dashboard() {
             <a href="/picks"     style={styles.navLink}>My Picks</a>
             <a href="/league"    style={styles.navLink}>League</a>
             <a href="/races"     style={styles.navLink}>Races</a>
+            <a href="/results"   style={styles.navLink}>Results</a>
             {/* Admin link — only shown to admin users */}
             {isAdmin && (
               <a href="/admin" style={{ ...styles.navLink, color: '#c9a84c' }}>Admin</a>
@@ -401,9 +402,9 @@ export default function Dashboard() {
         <a href="/races" style={styles.mobileBarItem}>
           <span>🐴</span><span style={styles.mobileBarLabel}>Races</span>
         </a>
-        <button style={{ ...styles.mobileBarItem, background: 'none', border: 'none', cursor: 'pointer' }} onClick={handleSignOut}>
-          <span>🚪</span><span style={styles.mobileBarLabel}>Sign out</span>
-        </button>
+        <a href="/results" style={styles.mobileBarItem}>
+          <span>📊</span><span style={styles.mobileBarLabel}>Results</span>
+        </a>
       </nav>
 
     </div>
