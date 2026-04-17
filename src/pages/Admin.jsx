@@ -498,6 +498,98 @@ export default function Admin() {
     setUnlockedResults(prev => { const s = new Set(prev); s.delete(raceId); return s })
   }
 
+  // ── Shared helper: score one race from its results + picks ───
+  async function calculateScoresForRace(raceId, raceNumber) {
+    console.log(`[Scores] Starting race ${raceNumber} (${raceId})`)
+
+    // 1. Wipe existing scores for this race
+    const { error: delErr } = await supabase.from('scores').delete().eq('race_id', raceId)
+    if (delErr) {
+      console.error(`[Scores] Delete failed:`, delErr)
+      return { ok: false, msg: `Delete failed: ${delErr.message}` }
+    }
+
+    // 2. Load the top-3 results
+    const { data: raceResults, error: resReadErr } = await supabase
+      .from('results')
+      .select('position, horse_name, starting_price_decimal')
+      .eq('race_id', raceId)
+    console.log(`[Scores] Results for race ${raceNumber}:`, raceResults, resReadErr)
+
+    if (resReadErr) return { ok: false, msg: `Read results failed: ${resReadErr.message}` }
+    if (!raceResults?.length) return { ok: true, msg: 'No results yet', count: 0 }
+
+    const placed = {}
+    raceResults.forEach(r => {
+      placed[r.horse_name] = { position: r.position, sp: r.starting_price_decimal }
+    })
+
+    // 3. Load picks for this race
+    const { data: picks, error: picksErr } = await supabase
+      .from('picks').select('id, user_id, runner_id').eq('race_id', raceId)
+    console.log(`[Scores] Picks for race ${raceNumber}:`, picks, picksErr)
+
+    if (picksErr) return { ok: false, msg: `Picks fetch failed: ${picksErr.message}` }
+    if (!picks?.length) return { ok: true, msg: 'No picks for this race', count: 0 }
+
+    // 4. Resolve runner_id → horse_name
+    const runnerIds = [...new Set(picks.map(p => p.runner_id).filter(Boolean))]
+    const { data: runnerRows, error: runErr } = await supabase
+      .from('runners').select('id, horse_name').in('id', runnerIds)
+    console.log(`[Scores] Runners:`, runnerRows, runErr)
+
+    if (runErr) return { ok: false, msg: `Runners fetch failed: ${runErr.message}` }
+    const nameMap = {}
+    runnerRows?.forEach(r => { nameMap[r.id] = r.horse_name })
+
+    // 5. Build score rows
+    const scoresToInsert = picks.map(pick => {
+      const horseName = nameMap[pick.runner_id]
+      const p = horseName ? placed[horseName] : null
+      if (p) {
+        const { base, bonus, total } = calcPoints(p.position, p.sp)
+        return {
+          user_id: pick.user_id, race_id: raceId, pick_id: pick.id,
+          base_points: base, bonus_points: bonus, total_points: total,
+          position_achieved: p.position,
+        }
+      }
+      return {
+        user_id: pick.user_id, race_id: raceId, pick_id: pick.id,
+        base_points: 0, bonus_points: 0, total_points: 0, position_achieved: null,
+      }
+    })
+    console.log(`[Scores] Rows to insert for race ${raceNumber}:`, scoresToInsert)
+
+    // 6. Try full insert first
+    const { error: insErr } = await supabase.from('scores').insert(scoresToInsert)
+    if (!insErr) {
+      console.log(`[Scores] Insert OK — ${scoresToInsert.length} rows`)
+      return { ok: true, count: scoresToInsert.length }
+    }
+
+    console.error(`[Scores] Full insert failed:`, insErr)
+
+    // 7. Full insert failed — likely missing columns. Retry with minimal columns only.
+    console.warn(`[Scores] Retrying with minimal columns (user_id, race_id, total_points)`)
+    const minimal = scoresToInsert.map(s => ({
+      user_id: s.user_id,
+      race_id: s.race_id,
+      total_points: s.total_points,
+    }))
+    const { error: minErr } = await supabase.from('scores').insert(minimal)
+    if (!minErr) {
+      console.log(`[Scores] Minimal insert OK — ${minimal.length} rows`)
+      return {
+        ok: true, count: minimal.length,
+        warn: `Saved with minimal columns — run ALTER TABLE SQL to add pick_id, base_points, bonus_points, position_achieved`,
+      }
+    }
+
+    console.error(`[Scores] Minimal insert also failed:`, minErr)
+    return { ok: false, msg: `Insert failed: ${minErr.message} (original: ${insErr.message})` }
+  }
+
   async function submitResults(race, isEdit = false) {
     const form = resultForms[race.id] || {}
     if (!form.horse1 || !form.horse2 || !form.horse3) { showToast('error', 'Select all 3 finishers'); return }
@@ -505,14 +597,11 @@ export default function Admin() {
     if (!sp1 || !sp2 || !sp3) { showToast('error', 'Invalid SP — use e.g. 7/1 or Evs'); return }
     setLoading(true)
 
-    // ── Step 1: clear old data ──────────────────────────────────
+    // ── Step 1: delete old results for this race ────────────────
     const { error: delResErr } = await supabase.from('results').delete().eq('race_id', race.id)
     if (delResErr) { showToast('error', `Delete results failed: ${delResErr.message}`); setLoading(false); return }
 
-    const { error: delScoErr } = await supabase.from('scores').delete().eq('race_id', race.id)
-    if (delScoErr) { showToast('error', `Delete scores failed: ${delScoErr.message}`); setLoading(false); return }
-
-    // ── Step 2: insert results ──────────────────────────────────
+    // ── Step 2: insert the three result rows ────────────────────
     const { error: resErr } = await supabase.from('results').insert([
       { race_id: race.id, position: 1, horse_name: form.horse1, starting_price_decimal: sp1, starting_price_display: form.sp1.trim() },
       { race_id: race.id, position: 2, horse_name: form.horse2, starting_price_decimal: sp2, starting_price_display: form.sp2.trim() },
@@ -520,76 +609,31 @@ export default function Admin() {
     ])
     if (resErr) { showToast('error', `Save results failed: ${resErr.message}`); setLoading(false); return }
 
-    // ── Step 3: fetch picks (no FK join — look up runner names separately) ──
-    const { data: picks, error: picksErr } = await supabase
-      .from('picks').select('id, user_id, runner_id').eq('race_id', race.id)
-    if (picksErr) { showToast('error', `Fetch picks failed: ${picksErr.message}`); setLoading(false); return }
+    // ── Step 3: calculate scores ────────────────────────────────
+    const result = await calculateScoresForRace(race.id, race.race_number)
 
-    if (!picks?.length) {
-      lockResults(race.id)
-      await loadResults(race.id)
-      setLoading(false)
-      showToast('success', `Race ${race.race_number} results saved — no picks to score`)
-      return
-    }
-
-    // ── Step 4: look up horse names for each runner_id ──────────
-    const runnerIds = [...new Set(picks.map(p => p.runner_id).filter(Boolean))]
-    const { data: runners, error: runnersErr } = await supabase
-      .from('runners').select('id, horse_name').in('id', runnerIds)
-    if (runnersErr) { showToast('error', `Fetch runners failed: ${runnersErr.message}`); setLoading(false); return }
-
-    const runnerNameMap = {}
-    runners?.forEach(r => { runnerNameMap[r.id] = r.horse_name })
-
-    // ── Step 5: calculate and insert scores ─────────────────────
-    const placed = {
-      [form.horse1]: { position: 1, sp: sp1 },
-      [form.horse2]: { position: 2, sp: sp2 },
-      [form.horse3]: { position: 3, sp: sp3 },
-    }
-
-    const scoresToInsert = picks.map(pick => {
-      const horseName = runnerNameMap[pick.runner_id]
-      const p = horseName ? placed[horseName] : null
-      if (p) {
-        const { base, bonus, total } = calcPoints(p.position, p.sp)
-        return {
-          user_id: pick.user_id, race_id: race.id, pick_id: pick.id,
-          base_points: base, bonus_points: bonus, total_points: total,
-          position_achieved: p.position,
-        }
-      }
-      return {
-        user_id: pick.user_id, race_id: race.id, pick_id: pick.id,
-        base_points: 0, bonus_points: 0, total_points: 0,
-        position_achieved: null,
-      }
-    })
-
-    const { error: scoresErr } = await supabase.from('scores').insert(scoresToInsert)
-    if (scoresErr) {
-      // Likely a missing column or RLS issue — show the full message
-      showToast('error', `Scores insert failed: ${scoresErr.message}`)
-      setLoading(false)
-      return
-    }
-
-    const scored = scoresToInsert.filter(s => s.total_points > 0).length
     lockResults(race.id)
     await loadResults(race.id)
     setLoading(false)
-    showToast('success', `Race ${race.race_number} done — ${picks.length} scored (${scored} with points)`)
+
+    if (!result.ok) {
+      showToast('error', `Results saved but scores failed — ${result.msg}`)
+    } else if (result.warn) {
+      showToast('error', result.warn)
+    } else if (result.count === 0) {
+      showToast('success', `Race ${race.race_number} results saved — ${result.msg}`)
+    } else {
+      showToast('success', `Race ${race.race_number} done — ${result.count} score${result.count !== 1 ? 's' : ''} saved`)
+    }
   }
 
-  // ── Recalculate scores for ALL races in current week ─────────
+  // ── Recalculate ALL scores for current week ──────────────────
   async function recalculateAllScores() {
     setLoading(true)
-    showToast('success', 'Recalculating scores for all races…')
 
     const { data: season } = await supabase
       .from('seasons').select('id').eq('is_active', true).single()
-    if (!season) { showToast('error', 'No active season found'); setLoading(false); return }
+    if (!season) { showToast('error', 'No active season'); setLoading(false); return }
 
     const { data: weekArr } = await supabase
       .from('race_weeks').select('id')
@@ -600,74 +644,36 @@ export default function Admin() {
 
     const { data: weekRaces } = await supabase
       .from('races').select('id, race_number').eq('race_week_id', weekArr[0].id)
-    if (!weekRaces?.length) { showToast('error', 'No races in this week'); setLoading(false); return }
+    if (!weekRaces?.length) { showToast('error', 'No races this week'); setLoading(false); return }
+
+    console.log(`[Scores] Recalculating ${weekRaces.length} races…`)
 
     let totalInserted = 0
     const errors = []
 
     for (const race of weekRaces) {
-      // Load existing results for this race
-      const { data: raceResults } = await supabase
-        .from('results')
-        .select('position, horse_name, starting_price_decimal')
-        .eq('race_id', race.id)
+      // Skip races that have no results yet
+      const { data: hasResults } = await supabase
+        .from('results').select('id').eq('race_id', race.id).limit(1)
+      if (!hasResults?.length) { console.log(`[Scores] Race ${race.race_number} — no results, skipping`); continue }
 
-      if (!raceResults?.length) continue // No results entered yet — skip
-
-      // Build placed lookup
-      const placed = {}
-      raceResults.forEach(r => {
-        placed[r.horse_name] = { position: r.position, sp: r.starting_price_decimal }
-      })
-
-      // Delete any existing scores for this race
-      const { error: delErr } = await supabase.from('scores').delete().eq('race_id', race.id)
-      if (delErr) { errors.push(`Race ${race.race_number} — delete: ${delErr.message}`); continue }
-
-      // Get picks
-      const { data: picks, error: picksErr } = await supabase
-        .from('picks').select('id, user_id, runner_id').eq('race_id', race.id)
-      if (picksErr) { errors.push(`Race ${race.race_number} — picks: ${picksErr.message}`); continue }
-      if (!picks?.length) continue
-
-      // Resolve runner names
-      const runnerIds = [...new Set(picks.map(p => p.runner_id).filter(Boolean))]
-      const { data: runnerRows } = await supabase
-        .from('runners').select('id, horse_name').in('id', runnerIds)
-      const nameMap = {}
-      runnerRows?.forEach(r => { nameMap[r.id] = r.horse_name })
-
-      // Calculate and insert
-      const scoresToInsert = picks.map(pick => {
-        const horseName = nameMap[pick.runner_id]
-        const p = horseName ? placed[horseName] : null
-        if (p) {
-          const { base, bonus, total } = calcPoints(p.position, p.sp)
-          return {
-            user_id: pick.user_id, race_id: race.id, pick_id: pick.id,
-            base_points: base, bonus_points: bonus, total_points: total,
-            position_achieved: p.position,
-          }
-        }
-        return {
-          user_id: pick.user_id, race_id: race.id, pick_id: pick.id,
-          base_points: 0, bonus_points: 0, total_points: 0, position_achieved: null,
-        }
-      })
-
-      const { error: insErr } = await supabase.from('scores').insert(scoresToInsert)
-      if (insErr) {
-        errors.push(`Race ${race.race_number} — insert: ${insErr.message}`)
+      const result = await calculateScoresForRace(race.id, race.race_number)
+      if (!result.ok) {
+        errors.push(`Race ${race.race_number}: ${result.msg}`)
       } else {
-        totalInserted += scoresToInsert.length
+        totalInserted += (result.count || 0)
+        if (result.warn) errors.push(`Race ${race.race_number}: ${result.warn}`)
       }
     }
 
     setLoading(false)
-    if (errors.length) {
+
+    if (errors.length && totalInserted === 0) {
       showToast('error', errors[0])
+    } else if (errors.length) {
+      showToast('error', `Partial success — ${totalInserted} rows saved. First issue: ${errors[0]}`)
     } else {
-      showToast('success', `Done — ${totalInserted} score row${totalInserted !== 1 ? 's' : ''} written across ${weekRaces.length} races`)
+      showToast('success', `Done — ${totalInserted} score row${totalInserted !== 1 ? 's' : ''} written`)
     }
   }
 
