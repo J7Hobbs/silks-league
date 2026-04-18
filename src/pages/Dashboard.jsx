@@ -273,7 +273,7 @@ export default function Dashboard() {
         <div style={styles.navInner}>
           <a href="/" style={styles.navLogo}>Silks League</a>
 
-          <div style={styles.navLinks}>
+          <div style={styles.navLinks} className="app-nav-links">
             <a href="/dashboard" style={{ ...styles.navLink, ...styles.navLinkActive }}>Dashboard</a>
             <a href="/picks"     style={styles.navLink}>My Picks</a>
             <a href="/league"    style={styles.navLink}>League</a>
@@ -320,7 +320,7 @@ export default function Dashboard() {
       </nav>
 
       {/* ── Main content ── */}
-      <main style={styles.main}>
+      <main style={styles.main} className="app-main-pad">
 
         {/* Welcome header */}
         <section style={styles.welcomeRow}>
@@ -350,7 +350,7 @@ export default function Dashboard() {
         </section>
 
         {/* Stat cards */}
-        <section style={styles.statsGrid}>
+        <section style={styles.statsGrid} className="app-grid-4">
           {statCards.map((card) => (
             <div key={card.label} style={styles.statCard}>
               <div style={styles.statIcon}>{card.icon}</div>
@@ -362,7 +362,7 @@ export default function Dashboard() {
         </section>
 
         {/* Two-column layout */}
-        <section style={styles.twoCol}>
+        <section style={styles.twoCol} className="app-grid-2">
 
           {/* This Week's Races */}
           <div style={styles.card}>
@@ -422,7 +422,7 @@ export default function Dashboard() {
         </section>
 
         {/* Bottom strip */}
-        <section style={styles.bottomStrip}>
+        <section style={styles.bottomStrip} className="app-grid-2">
           <div style={styles.bottomCard}>
             <div style={styles.bottomCardIcon}>👥</div>
             <div style={styles.bottomCardBody}>
@@ -443,7 +443,7 @@ export default function Dashboard() {
       </main>
 
       {/* ── Mobile bottom bar ── */}
-      <nav style={styles.mobileBar}>
+      <nav style={styles.mobileBar} className="app-mobile-bar">
         <a href="/dashboard" style={{ ...styles.mobileBarItem, ...styles.mobileBarItemActive }}>
           <span>🏠</span><span style={styles.mobileBarLabel}>Home</span>
         </a>

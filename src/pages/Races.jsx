@@ -132,7 +132,7 @@ export default function Races() {
       <nav style={st.nav}>
         <div style={st.navInner}>
           <a href="/" style={st.navLogo}>Silks League</a>
-          <div style={st.navLinks}>
+          <div style={st.navLinks} className="app-nav-links">
             <a href="/dashboard" style={st.navLink}>Dashboard</a>
             <a href="/picks"     style={st.navLink}>My Picks</a>
             <a href="/league"    style={st.navLink}>League</a>
@@ -169,7 +169,7 @@ export default function Races() {
       </nav>
 
       {/* ── Main ── */}
-      <main style={st.main}>
+      <main style={st.main} className="app-main-pad">
 
         {/* Header */}
         <section style={st.header}>
@@ -301,7 +301,7 @@ export default function Races() {
       </main>
 
       {/* ── Mobile bar ── */}
-      <nav style={st.mobileBar}>
+      <nav style={st.mobileBar} className="app-mobile-bar">
         <a href="/dashboard" style={st.mobileBarItem}>
           <span>🏠</span><span style={st.mobileBarLabel}>Home</span>
         </a>

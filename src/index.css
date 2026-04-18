@@ -23,7 +23,12 @@
 /* ── Reset & Base ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-html { scroll-behavior: smooth; }
+html {
+  scroll-behavior: smooth;
+  overflow-x: hidden;
+  width: 100%;
+  max-width: 100%;
+}
 
 body {
   font-family: 'DM Sans', sans-serif;
@@ -31,6 +36,9 @@ body {
   color: var(--off-white);
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+  width: 100%;
+  max-width: 100%;
 }
 
 h1, h2, h3, h4 {
@@ -777,3 +785,74 @@ img { max-width: 100%; display: block; }
   padding: 1rem 0;
 }
 .modal-success-icon { font-size: 3rem; margin-bottom: 1rem; }
+
+/* ============================================================
+   Responsive Utilities — Inner App Pages
+   All use !important to override inline styles on components
+   ============================================================ */
+
+/* ── Nav links: visible desktop, hidden mobile ── */
+.app-nav-links {
+  display: flex !important;
+  gap: 0.25rem;
+  flex: 1;
+}
+@media (max-width: 768px) {
+  .app-nav-links { display: none !important; }
+}
+
+/* ── Mobile bottom tab bar: hidden desktop, visible mobile ── */
+.app-mobile-bar {
+  display: none !important;
+}
+@media (max-width: 768px) {
+  .app-mobile-bar {
+    display: flex !important;
+    padding-bottom: calc(0.5rem + env(safe-area-inset-bottom, 0px)) !important;
+  }
+}
+
+/* ── 4-column grid → 2-column on mobile ── */
+@media (max-width: 640px) {
+  .app-grid-4 {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+/* ── 2-column grid → 1-column on mobile ── */
+@media (max-width: 640px) {
+  .app-grid-2 {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ── Tighter main padding on mobile ── */
+@media (max-width: 640px) {
+  .app-main-pad {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+  }
+}
+
+/* ── League table rows: tighter on mobile ── */
+@media (max-width: 640px) {
+  .league-row {
+    padding-left: 0.75rem !important;
+    padding-right: 0.75rem !important;
+    gap: 0.5rem !important;
+  }
+  .league-col-data {
+    min-width: 44px !important;
+    font-size: 0.78rem !important;
+  }
+}
+
+/* ── Hide "This Week" column in League on mobile ── */
+@media (max-width: 640px) {
+  .league-hide-mobile { display: none !important; }
+}
+
+/* ── Landing page: hide nav links on mobile ── */
+@media (max-width: 768px) {
+  .nav-links { display: none !important; }
+}

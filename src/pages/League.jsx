@@ -216,7 +216,7 @@ export default function League() {
       <nav style={st.nav}>
         <div style={st.navInner}>
           <a href="/" style={st.navLogo}>Silks League</a>
-          <div style={st.navLinks}>
+          <div style={st.navLinks} className="app-nav-links">
             <a href="/dashboard" style={st.navLink}>Dashboard</a>
             <a href="/picks"     style={st.navLink}>My Picks</a>
             <a href="/league"    style={{ ...st.navLink, ...st.navLinkActive }}>League</a>
@@ -253,7 +253,7 @@ export default function League() {
       </nav>
 
       {/* ── Main ── */}
-      <main style={st.main}>
+      <main style={st.main} className="app-main-pad">
 
         {/* Header */}
         <section style={st.header}>
@@ -290,19 +290,19 @@ export default function League() {
           ) : (
             <>
               {/* Table header */}
-              <div style={st.tableHeader}>
+              <div style={st.tableHeader} className="league-row">
                 <span style={{ minWidth: '40px' }}>#</span>
                 <span style={{ flex: 1 }}>Player</span>
                 {activeTab === 'season' ? (
                   <>
-                    <span style={st.colRight}>Wks</span>
-                    <span style={st.colRight}>This Wk</span>
-                    <span style={st.colRight}>Total</span>
+                    <span style={st.colRight} className="league-col-data">Wks</span>
+                    <span style={st.colRight} className="league-col-data league-hide-mobile">This Wk</span>
+                    <span style={st.colRight} className="league-col-data">Total</span>
                   </>
                 ) : (
                   <>
-                    <span style={st.colRight}>Races</span>
-                    <span style={st.colRight}>Points</span>
+                    <span style={st.colRight} className="league-col-data">Races</span>
+                    <span style={st.colRight} className="league-col-data">Points</span>
                   </>
                 )}
               </div>
@@ -311,6 +311,7 @@ export default function League() {
               {displayRows.map((row, idx) => (
                 <div
                   key={row.user_id}
+                  className="league-row"
                   style={{
                     ...st.row,
                     ...(row.isMe ? st.rowMe : {}),
@@ -332,14 +333,14 @@ export default function League() {
 
                   {activeTab === 'season' ? (
                     <>
-                      <div style={st.dataCell}>{row.weeksPlayed}</div>
-                      <div style={st.dataCell}>{row.weekPoints > 0 ? `+${row.weekPoints}` : row.weekPoints}</div>
-                      <div style={{ ...st.dataCell, ...st.totalCell }}>{row.seasonTotal}</div>
+                      <div style={st.dataCell} className="league-col-data">{row.weeksPlayed}</div>
+                      <div style={st.dataCell} className="league-col-data league-hide-mobile">{row.weekPoints > 0 ? `+${row.weekPoints}` : row.weekPoints}</div>
+                      <div style={{ ...st.dataCell, ...st.totalCell }} className="league-col-data">{row.seasonTotal}</div>
                     </>
                   ) : (
                     <>
-                      <div style={st.dataCell}>{row.racesScored}</div>
-                      <div style={{ ...st.dataCell, ...st.totalCell }}>{row.weekPoints}</div>
+                      <div style={st.dataCell} className="league-col-data">{row.racesScored}</div>
+                      <div style={{ ...st.dataCell, ...st.totalCell }} className="league-col-data">{row.weekPoints}</div>
                     </>
                   )}
                 </div>
@@ -349,7 +350,7 @@ export default function League() {
         </div>
 
         {/* CTA strip */}
-        <div style={st.ctaStrip}>
+        <div style={st.ctaStrip} className="app-grid-2">
           <button style={st.ctaBtn} onClick={() => navigate('/picks')}>
             Make your picks →
           </button>
@@ -361,7 +362,7 @@ export default function League() {
       </main>
 
       {/* ── Mobile bar ── */}
-      <nav style={st.mobileBar}>
+      <nav style={st.mobileBar} className="app-mobile-bar">
         <a href="/dashboard" style={st.mobileBarItem}>
           <span>🏠</span><span style={st.mobileBarLabel}>Home</span>
         </a>

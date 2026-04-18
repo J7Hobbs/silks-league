@@ -220,7 +220,7 @@ export default function Picks() {
         <div style={st.navInner}>
           <a href="/" style={st.navLogo}>Silks League</a>
 
-          <div style={st.navLinks}>
+          <div style={st.navLinks} className="app-nav-links">
             <a href="/dashboard" style={st.navLink}>Dashboard</a>
             <a href="/picks"     style={{ ...st.navLink, ...st.navLinkActive }}>My Picks</a>
             <a href="/league"    style={st.navLink}>League</a>
@@ -271,7 +271,7 @@ export default function Picks() {
         </div>
       )}
 
-      <main style={st.main}>
+      <main style={st.main} className="app-main-pad">
 
         {/* ── No week yet ── */}
         {noWeek && (
@@ -503,6 +503,26 @@ export default function Picks() {
         )}
 
       </main>
+
+      {/* ── Mobile bottom bar ── */}
+      <nav style={st.mobileBar} className="app-mobile-bar">
+        <a href="/dashboard" style={st.mobileBarItem}>
+          <span>🏠</span><span style={st.mobileBarLabel}>Home</span>
+        </a>
+        <a href="/picks" style={{ ...st.mobileBarItem, color: '#c9a84c' }}>
+          <span>🎯</span><span style={st.mobileBarLabel}>Picks</span>
+        </a>
+        <a href="/league" style={st.mobileBarItem}>
+          <span>🏆</span><span style={st.mobileBarLabel}>League</span>
+        </a>
+        <a href="/races" style={st.mobileBarItem}>
+          <span>🐴</span><span style={st.mobileBarLabel}>Races</span>
+        </a>
+        <a href="/results" style={st.mobileBarItem}>
+          <span>📊</span><span style={st.mobileBarLabel}>Results</span>
+        </a>
+      </nav>
+
     </div>
   )
 }
@@ -835,4 +855,16 @@ const st = {
     fontSize: '0.85rem', color: '#5a8a5a',
     padding: '0.5rem 0', textAlign: 'center',
   },
+
+  // Mobile bottom bar
+  mobileBar: {
+    display: 'none', position: 'fixed', bottom: 0, left: 0, right: 0,
+    background: '#0d1f0d', borderTop: '1px solid rgba(201,168,76,0.15)',
+    padding: '0.5rem 0', zIndex: 100, justifyContent: 'space-around',
+  },
+  mobileBarItem: {
+    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.15rem',
+    color: '#5a8a5a', textDecoration: 'none', fontSize: '1.1rem', padding: '0.25rem 0.75rem',
+  },
+  mobileBarLabel: { fontSize: '0.65rem', fontWeight: '500' },
 }

@@ -366,7 +366,7 @@ export default function Profile() {
       <nav style={st.nav}>
         <div style={st.navInner}>
           <a href="/" style={st.navLogo}>Silks League</a>
-          <div style={st.navLinks}>
+          <div style={st.navLinks} className="app-nav-links">
             <a href="/dashboard" style={st.navLink}>Dashboard</a>
             <a href="/picks"     style={st.navLink}>My Picks</a>
             <a href="/league"    style={st.navLink}>League</a>
@@ -406,7 +406,7 @@ export default function Profile() {
         </div>
       </nav>
 
-      <main style={st.main}>
+      <main style={st.main} className="app-main-pad">
 
         {/* ── Profile header card ── */}
         <div style={st.card}>
@@ -465,7 +465,7 @@ export default function Profile() {
         </div>
 
         {/* ── 4 stat cards ── */}
-        <div style={st.statsGrid}>
+        <div style={st.statsGrid} className="app-grid-4">
           {[
             { label: 'Season Points', value: seasonStats.seasonPoints,                          sub: 'this season',     icon: '⭐' },
             { label: 'Current Rank',  value: seasonStats.rank ? `#${seasonStats.rank}` : '—',   sub: 'in the league',   icon: '🏆' },
@@ -524,7 +524,7 @@ export default function Profile() {
         </div>
 
         {/* ── Two-column: career stats + groups & badges ── */}
-        <div style={st.twoCol}>
+        <div style={st.twoCol} className="app-grid-2">
 
           {/* ── Career stats ── */}
           <div style={st.card}>
@@ -631,13 +631,33 @@ export default function Profile() {
         </div>
 
       </main>
+
+      {/* ── Mobile bottom bar ── */}
+      <nav style={st.mobileBar} className="app-mobile-bar">
+        <a href="/dashboard" style={st.mobileBarItem}>
+          <span>🏠</span><span style={st.mobileBarLabel}>Home</span>
+        </a>
+        <a href="/picks" style={st.mobileBarItem}>
+          <span>🎯</span><span style={st.mobileBarLabel}>Picks</span>
+        </a>
+        <a href="/league" style={st.mobileBarItem}>
+          <span>🏆</span><span style={st.mobileBarLabel}>League</span>
+        </a>
+        <a href="/races" style={st.mobileBarItem}>
+          <span>🐴</span><span style={st.mobileBarLabel}>Races</span>
+        </a>
+        <a href="/results" style={st.mobileBarItem}>
+          <span>📊</span><span style={st.mobileBarLabel}>Results</span>
+        </a>
+      </nav>
+
     </div>
   )
 }
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 const st = {
-  page:        { minHeight: '100vh', background: '#0a1a08', fontFamily: "'DM Sans', sans-serif", color: '#e8f0e8', paddingBottom: '4rem' },
+  page:        { minHeight: '100vh', background: '#0a1a08', fontFamily: "'DM Sans', sans-serif", color: '#e8f0e8', paddingBottom: '5rem' },
   loadingPage: { minHeight: '100vh', background: '#0a1a08', display: 'flex', alignItems: 'center', justifyContent: 'center' },
   loadingDot:  { width: '12px', height: '12px', borderRadius: '50%', background: '#c9a84c' },
 
@@ -734,4 +754,16 @@ const st = {
   // Buttons
   btnGold:  { background: '#c9a84c', color: '#0a1a08', fontWeight: '700', fontSize: '0.875rem', padding: '0.6rem 1.25rem', borderRadius: '7px', border: 'none', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", whiteSpace: 'nowrap' },
   btnGhost: { background: 'transparent', border: '1.5px solid rgba(201,168,76,0.3)', color: '#c9a84c', fontWeight: '600', fontSize: '0.875rem', padding: '0.6rem 1.25rem', borderRadius: '7px', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" },
+
+  // Mobile bottom bar
+  mobileBar: {
+    display: 'none', position: 'fixed', bottom: 0, left: 0, right: 0,
+    background: '#0d1f0d', borderTop: '1px solid rgba(201,168,76,0.15)',
+    padding: '0.5rem 0', zIndex: 100, justifyContent: 'space-around',
+  },
+  mobileBarItem: {
+    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.15rem',
+    color: '#5a8a5a', textDecoration: 'none', fontSize: '1.1rem', padding: '0.25rem 0.75rem',
+  },
+  mobileBarLabel: { fontSize: '0.65rem', fontWeight: '500' },
 }
