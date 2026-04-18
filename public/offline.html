@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Silks League — Offline</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      min-height: 100vh;
+      background: #0a1a08;
+      color: #e8f0e8;
+      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1.5rem;
+      padding: 2rem;
+      text-align: center;
+    }
+    .logo {
+      font-family: Georgia, 'Times New Roman', serif;
+      font-size: 3rem;
+      color: #c9a84c;
+      letter-spacing: 0.06em;
+    }
+    .card {
+      background: #162a1a;
+      border: 1px solid #c9a84c;
+      border-left: 4px solid #c9a84c;
+      border-radius: 8px;
+      padding: 2rem 2.5rem;
+      max-width: 380px;
+      width: 100%;
+    }
+    h1 {
+      font-size: 1.5rem;
+      color: #e8f0e8;
+      margin-bottom: 0.75rem;
+    }
+    p {
+      color: #7a9e85;
+      font-size: 0.95rem;
+      line-height: 1.6;
+    }
+    .icon { font-size: 2.5rem; margin-bottom: 0.5rem; display: block; }
+    button {
+      margin-top: 1.5rem;
+      width: 100%;
+      padding: 0.85rem;
+      background: #c9a84c;
+      color: #0a1a08;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-weight: 700;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    button:hover { opacity: 0.9; }
+  </style>
+</head>
+<body>
+  <div class="logo">SL</div>
+  <div class="card">
+    <span class="icon">📡</span>
+    <h1>You're offline</h1>
+    <p>It looks like you've lost your connection. Check your internet and try again — your picks and stats will be waiting.</p>
+    <button onclick="location.reload()">Try again</button>
+  </div>
+</body>
+</html>

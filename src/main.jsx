@@ -2,15 +2,16 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import './index.css'
-import App       from './App.jsx'
-import Auth      from './pages/Auth.jsx'
-import Dashboard from './pages/Dashboard.jsx'
-import Admin     from './pages/Admin.jsx'
-import Picks     from './pages/Picks.jsx'
-import League    from './pages/League.jsx'
-import Races     from './pages/Races.jsx'
-import Results   from './pages/Results.jsx'
-import Profile   from './pages/Profile.jsx'
+import App            from './App.jsx'
+import Auth           from './pages/Auth.jsx'
+import Dashboard      from './pages/Dashboard.jsx'
+import Admin          from './pages/Admin.jsx'
+import Picks          from './pages/Picks.jsx'
+import League         from './pages/League.jsx'
+import Races          from './pages/Races.jsx'
+import Results        from './pages/Results.jsx'
+import Profile        from './pages/Profile.jsx'
+import InstallPrompt  from './components/InstallPrompt.jsx'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
@@ -26,6 +27,7 @@ createRoot(document.getElementById('root')).render(
         <Route path="/results"   element={<Results />}   />
         <Route path="/profile"   element={<Profile />}   />
       </Routes>
+      <InstallPrompt />
     </BrowserRouter>
   </StrictMode>,
 )
