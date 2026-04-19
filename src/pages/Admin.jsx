@@ -741,7 +741,7 @@ export default function Admin() {
         </div>
       )}
 
-      <main style={st.main}>
+      <main style={st.main} className="app-main-pad admin-main">
 
         {/* ══════════════ SEASONS ══════════════ */}
         {activeTab === 'seasons' && (
@@ -767,7 +767,7 @@ export default function Admin() {
             {showSeasonForm && (
               <form onSubmit={createSeason} style={st.formCard}>
                 <div style={st.formTitle}>Create New Season</div>
-                <div style={st.formGrid}>
+                <div style={st.formGrid} className="app-grid-2">
                   <div style={st.formField}>
                     <label style={st.label}>Season Name</label>
                     <input style={st.input} placeholder="Q2 2026" value={seasonForm.name}
@@ -831,7 +831,7 @@ export default function Admin() {
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <span style={{ color: '#c9a84c', fontSize: '0.8rem', fontWeight: '600', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Editing: {s.name}</span>
                         </div>
-                        <div style={st.formGrid}>
+                        <div style={st.formGrid} className="app-grid-2">
                           <div style={st.formField}>
                             <label style={st.label}>Name</label>
                             <input style={st.input} value={editSeasonForm.name}
@@ -1002,7 +1002,7 @@ export default function Admin() {
                       {/* Edit race form */}
                       {race && editingRace === race.id && (
                         <div style={st.raceCardBody}>
-                          <div style={st.formGrid}>
+                          <div style={st.formGrid} className="app-grid-2">
                             <div style={st.formField}>
                               <label style={st.label}>Race Number</label>
                               <input style={st.input} type="number" min="1" max="5"
@@ -1035,7 +1035,7 @@ export default function Admin() {
                       {/* New race form */}
                       {!race && showRaceForm[raceNum] && (
                         <div style={st.raceCardBody}>
-                          <div style={st.formGrid}>
+                          <div style={st.formGrid} className="app-grid-2">
                             <div style={st.formField}>
                               <label style={st.label}>Race Time</label>
                               <input style={st.input} placeholder="13:30"
@@ -1072,7 +1072,7 @@ export default function Admin() {
                                 /* ── Inline edit form ── */
                                 <div style={{ padding: '0.85rem 1rem' }}>
                                   <div style={{ fontSize: '0.7rem', fontWeight: '700', color: '#c9a84c', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '0.75rem' }}>Editing Runner</div>
-                                  <div style={st.runnerFormGrid}>
+                                  <div style={st.runnerFormGrid} className="admin-runner-grid">
                                     <div style={st.formField}>
                                       <label style={st.label}>No.</label>
                                       <input style={{ ...st.input, width: '70px' }} type="number" min="1" placeholder="1"
@@ -1147,7 +1147,7 @@ export default function Admin() {
                           {/* Add runner form */}
                           <div style={st.addRunnerCard}>
                             <div style={{ fontSize: '0.7rem', fontWeight: '700', color: '#5a8a5a', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '0.75rem' }}>Add Runner</div>
-                            <div style={st.runnerFormGrid}>
+                            <div style={st.runnerFormGrid} className="admin-runner-grid">
                               <div style={st.formField}>
                                 <label style={st.label}>No.</label>
                                 <input style={{ ...st.input, width: '70px' }} type="number" min="1" placeholder="1"
@@ -1362,8 +1362,8 @@ const st = {
   navLogo:     { fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.2rem', color: '#c9a84c', letterSpacing: '0.1em' },
   adminBadge:  { fontSize: '0.7rem', fontWeight: '700', color: '#5a8a5a', letterSpacing: '0.1em', textTransform: 'uppercase', background: 'rgba(201,168,76,0.08)', padding: '0.2rem 0.65rem', borderRadius: '4px', border: '1px solid rgba(201,168,76,0.15)' },
   navBack:     { marginLeft: 'auto', fontSize: '0.85rem', color: '#5a8a5a', textDecoration: 'none' },
-  tabBarWrap:  { background: '#0d1f0d', borderBottom: '1px solid rgba(201,168,76,0.1)' },
-  tabBar:      { maxWidth: '1100px', margin: '0 auto', padding: '0 1.5rem', display: 'flex' },
+  tabBarWrap:  { background: '#0d1f0d', borderBottom: '1px solid rgba(201,168,76,0.1)', overflowX: 'auto', WebkitOverflowScrolling: 'touch' },
+  tabBar:      { maxWidth: '1100px', margin: '0 auto', padding: '0 1.5rem', display: 'flex', minWidth: 'max-content' },
   tabBtn:      { background: 'none', border: 'none', borderBottom: '3px solid transparent', padding: '0.85rem 1.1rem', fontSize: '0.85rem', fontWeight: '500', color: '#5a8a5a', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", transition: 'all 0.2s', whiteSpace: 'nowrap' },
   tabBtnActive:{ color: '#c9a84c', borderBottomColor: '#c9a84c' },
   toast:       { position: 'fixed', top: '1.25rem', right: '1.25rem', padding: '0.75rem 1.25rem', borderRadius: '9px', fontSize: '0.875rem', fontWeight: '500', zIndex: 9999, fontFamily: "'DM Sans', sans-serif", boxShadow: '0 8px 32px rgba(0,0,0,0.4)' },
@@ -1374,7 +1374,7 @@ const st = {
   confirmTitle:{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.4rem', color: '#e8f0e8', letterSpacing: '0.05em', marginBottom: '0.75rem' },
   confirmBody: { fontSize: '0.875rem', color: '#5a8a5a', lineHeight: 1.6, marginBottom: '1.5rem' },
   confirmActions:{ display: 'flex', gap: '0.75rem' },
-  main:        { maxWidth: '1100px', margin: '0 auto', padding: '2rem 1.5rem' },
+  main:        { maxWidth: '1100px', margin: '0 auto', padding: '2rem 1.5rem', boxSizing: 'border-box', width: '100%' },
   section:     { display: 'flex', flexDirection: 'column', gap: '1.25rem' },
   sectionHeader:{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' },
   sectionTitle:{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.9rem', color: '#e8f0e8', letterSpacing: '0.05em', margin: 0 },
@@ -1386,7 +1386,7 @@ const st = {
   warningCard: { background: 'rgba(201,168,76,0.08)', border: '1px solid #c9a84c', borderLeft: '4px solid #c9a84c', borderRadius: '8px', padding: '1rem 1.25rem', color: '#c9a84c', fontSize: '0.875rem' },
   formCard:    { background: '#162a1a', border: '1px solid #c9a84c', borderLeft: '4px solid #c9a84c', borderRadius: '8px', padding: '1.5rem' },
   formTitle:   { fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.05rem', color: '#c9a84c', letterSpacing: '0.09em', marginBottom: '1.1rem' },
-  formGrid:    { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' },
+  formGrid:    { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', width: '100%' },
   formField:   { display: 'flex', flexDirection: 'column', gap: '0.35rem' },
   formActions: { display: 'flex', gap: '0.75rem', marginTop: '1rem' },
   label:       { fontSize: '0.7rem', fontWeight: '700', letterSpacing: '0.08em', textTransform: 'uppercase', color: '#5a8a5a' },
@@ -1416,7 +1416,7 @@ const st = {
   runnerCardLeft:  { display: 'flex', alignItems: 'center', gap: '0.6rem', flex: 1, minWidth: 0 },
   runnerNum:       { fontFamily: "'Bebas Neue', sans-serif", fontSize: '1rem', color: '#c9a84c', minWidth: '22px', textAlign: 'center' },
   runnerMeta:      { fontSize: '0.75rem', color: '#5a8a5a' },
-  runnerFormGrid:  { display: 'grid', gridTemplateColumns: 'auto 1fr 1fr 1fr 1fr 1fr', gap: '0.6rem', alignItems: 'end' },
+  runnerFormGrid:  { display: 'grid', gridTemplateColumns: 'auto 1fr 1fr 1fr 1fr 1fr', gap: '0.6rem', alignItems: 'end', width: '100%' },
   addRunnerCard:   { background: 'rgba(201,168,76,0.03)', border: '1px dashed rgba(201,168,76,0.18)', borderRadius: '8px', padding: '0.85rem 1rem', marginTop: '0.25rem' },
   addRunnerRow:    { display: 'flex', gap: '0.5rem' },
   resultRow:   { display: 'flex', alignItems: 'center', gap: '0.85rem', padding: '0.3rem 0' },

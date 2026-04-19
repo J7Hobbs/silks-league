@@ -856,3 +856,28 @@ img { max-width: 100%; display: block; }
 @media (max-width: 768px) {
   .nav-links { display: none !important; }
 }
+
+/* ── Admin panel mobile fixes ── */
+/* Runner form grid (6-col): collapse to 2-col on mobile */
+@media (max-width: 640px) {
+  .admin-runner-grid {
+    grid-template-columns: 1fr 1fr !important;
+  }
+}
+
+/* Admin main: reduce padding on mobile */
+@media (max-width: 640px) {
+  .admin-main {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+    padding-top: 1.25rem !important;
+  }
+}
+
+/* Prevent table rows from overflowing horizontally */
+@media (max-width: 640px) {
+  .admin-main .tableRow,
+  .admin-main [style*="display: flex"] {
+    flex-wrap: wrap;
+  }
+}

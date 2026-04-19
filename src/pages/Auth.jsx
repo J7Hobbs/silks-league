@@ -77,7 +77,24 @@ export default function Auth() {
 
         if (signInError) throw signInError
 
-        navigate('/dashboard')
+        // On first-ever login: if user has no group and hasn't been onboarded,
+        // redirect to the Groups page with the welcome prompt.
+        const uid = data.user?.id
+        const onboardedKey = `silks_group_onboarded_${uid}`
+        if (uid && !localStorage.getItem(onboardedKey)) {
+          const { count } = await supabase
+            .from('group_members')
+            .select('id', { count: 'exact', head: true })
+            .eq('user_id', uid)
+          if (!count) {
+            navigate('/groups?welcome=1')
+          } else {
+            localStorage.setItem(onboardedKey, '1')
+            navigate('/dashboard')
+          }
+        } else {
+          navigate('/dashboard')
+        }
       }
 
     } catch (err) {

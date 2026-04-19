@@ -70,9 +70,10 @@ export default function Profile() {
   })
 
   // ── Groups ────────────────────────────────────────────────────────────────
-  const [groupData,      setGroupData]      = useState(null)
+  const [myGroups,       setMyGroups]       = useState([])
+  const [groupData,      setGroupData]      = useState(null)   // kept for badges / public standing
   const [publicStanding, setPublicStanding] = useState(null)
-  const [copySuccess,    setCopySuccess]    = useState(false)
+  const [copySuccess,    setCopySuccess]    = useState(null)   // groupId string
 
   // ── Init ──────────────────────────────────────────────────────────────────
   useEffect(() => { init() }, [])
@@ -221,22 +222,35 @@ export default function Profile() {
   // ── Group data ────────────────────────────────────────────────────────────
   async function loadGroupData(userId) {
     try {
-      const { data: membership, error } = await supabase
+      // Load ALL group memberships for this user
+      const { data: memberships } = await supabase
         .from('group_members')
         .select('is_founder, groups(id, name, invite_code)')
         .eq('user_id', userId)
-        .single()
 
-      if (error || !membership?.groups) { setGroupData(null); return }
+      if (!memberships?.length) { setMyGroups([]); setGroupData(null); return }
 
-      const group = membership.groups
+      // Enrich each group with member count
+      const enriched = await Promise.all(
+        memberships.map(async m => {
+          const g = m.groups
+          const { count } = await supabase
+            .from('group_members')
+            .select('id', { count: 'exact', head: true })
+            .eq('group_id', g.id)
+          return { ...g, memberCount: count || 0, isFounder: m.is_founder }
+        })
+      )
+      setMyGroups(enriched)
+
+      // ── Keep single-group data for badges / public standing (use first group) ──
+      const firstMembership = memberships[0]
+      const group     = firstMembership.groups
       const { data: members } = await supabase
         .from('group_members').select('user_id').eq('group_id', group.id)
 
-      // Group season points
       const { data: season } = await supabase.from('seasons').select('id').eq('is_active', true).single()
       const memberIds = (members || []).map(m => m.user_id)
-
       let myGroupRank = null
       let myWeekPts   = 0
 
@@ -256,7 +270,6 @@ export default function Profile() {
             const ranked = Object.entries(totals).sort((a, b) => b[1] - a[1])
             myGroupRank = (ranked.findIndex(([uid]) => uid === userId) + 1) || 1
 
-            // This week's points
             const { data: latestWeek } = await supabase
               .from('race_weeks').select('id').eq('season_id', season.id)
               .order('saturday_date', { ascending: false }).limit(1)
@@ -274,8 +287,9 @@ export default function Profile() {
         }
       }
 
-      setGroupData({ group, members: members || [], myRank: myGroupRank, isFounder: membership.is_founder, myWeekPts })
+      setGroupData({ group, members: members || [], myRank: myGroupRank, isFounder: firstMembership.is_founder, myWeekPts })
     } catch {
+      setMyGroups([])
       setGroupData(null)
     }
   }
@@ -302,22 +316,23 @@ export default function Profile() {
     setSavingName(false)
   }
 
-  async function handleCopyInvite() {
-    if (!groupData?.group?.invite_code) return
-    const url = `${window.location.origin}/join/${groupData.group.invite_code}`
+  async function handleCopyInvite(group) {
+    if (!group?.invite_code) return
+    const url = `${window.location.origin}/groups?join=${group.invite_code}`
     try {
       await navigator.clipboard.writeText(url)
-      setCopySuccess(true)
-      setTimeout(() => setCopySuccess(false), 2500)
+      setCopySuccess(group.id)
+      setTimeout(() => setCopySuccess(null), 2500)
     } catch { /* ignore */ }
   }
 
-  async function handleLeaveGroup() {
-    if (!groupData?.group?.id || !user) return
+  async function handleLeaveGroup(groupId) {
+    if (!groupId || !user) return
     if (!window.confirm('Are you sure you want to leave this group?')) return
     await supabase.from('group_members')
-      .delete().eq('user_id', user.id).eq('group_id', groupData.group.id)
-    setGroupData(null)
+      .delete().eq('user_id', user.id).eq('group_id', groupId)
+    setMyGroups(prev => prev.filter(g => g.id !== groupId))
+    if (groupData?.group?.id === groupId) setGroupData(null)
   }
 
   const handleSignOut = async () => { await supabase.auth.signOut(); navigate('/auth') }
@@ -372,6 +387,7 @@ export default function Profile() {
             <a href="/league"    style={st.navLink}>League</a>
             <a href="/races"     style={st.navLink}>Races</a>
             <a href="/results"   style={st.navLink}>Results</a>
+            <a href="/groups"    style={st.navLink}>Groups</a>
             {isAdmin && <a href="/admin" style={{ ...st.navLink, color: '#c9a84c' }}>Admin</a>}
           </div>
           <div style={st.navRight}>
@@ -556,31 +572,49 @@ export default function Profile() {
             <div style={st.card}>
               <div style={st.cardHeader}>
                 <span style={st.cardTitle}>My Groups</span>
+                <button
+                  style={st.groupsPageBtn}
+                  onClick={() => navigate('/groups')}
+                >
+                  Manage groups →
+                </button>
               </div>
 
-              {groupData ? (
-                <>
-                  <div style={st.groupBox}>
-                    <div style={st.groupName}>{groupData.group.name}</div>
-                    <div style={st.groupMeta}>
-                      <span>{ordinal(groupData.myRank)} of {groupData.members.length} member{groupData.members.length !== 1 ? 's' : ''}</span>
-                      {groupData.myWeekPts > 0 && (
-                        <span>{groupData.myWeekPts} pts this week</span>
-                      )}
+              {myGroups.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                  {myGroups.map(group => (
+                    <div key={group.id} style={st.groupBox}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        <div>
+                          <div style={st.groupName}>{group.name}</div>
+                          <div style={st.groupMeta}>
+                            <span>{group.memberCount} member{group.memberCount !== 1 ? 's' : ''}</span>
+                            {group.isFounder && <span style={st.founderBadge}>Founder</span>}
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                          <button
+                            style={copySuccess === group.id ? st.btnSmallSuccess : st.btnGold}
+                            onClick={() => handleCopyInvite(group)}
+                          >
+                            {copySuccess === group.id ? '✓ Copied!' : '🔗 Invite'}
+                          </button>
+                          <button style={st.leaveBtn} onClick={() => handleLeaveGroup(group.id)}>Leave</button>
+                        </div>
+                      </div>
                     </div>
-                    <button style={st.btnGold} onClick={handleCopyInvite}>
-                      {copySuccess ? '✓ Link copied!' : '🔗 Invite friends'}
-                    </button>
-                  </div>
-                  <button style={st.leaveBtn} onClick={handleLeaveGroup}>Leave group</button>
-                </>
+                  ))}
+                </div>
               ) : (
                 <div style={st.noGroupBox}>
                   <div style={{ fontSize: '2rem', marginBottom: '0.4rem' }}>👥</div>
-                  <div style={{ fontWeight: '600', color: '#e8f0e8', fontSize: '0.95rem', marginBottom: '0.3rem' }}>No group yet</div>
+                  <div style={{ fontWeight: '600', color: '#e8f0e8', fontSize: '0.95rem', marginBottom: '0.3rem' }}>No groups yet</div>
                   <div style={{ fontSize: '0.82rem', color: '#7a9e85', lineHeight: 1.5 }}>
-                    Groups are coming soon — ask your commissioner for an invite link.
+                    Create or join a group to play with friends.
                   </div>
+                  <button style={{ ...st.btnGold, marginTop: '0.75rem', fontSize: '0.82rem' }} onClick={() => navigate('/groups')}>
+                    Go to Groups →
+                  </button>
                 </div>
               )}
 
@@ -648,6 +682,9 @@ export default function Profile() {
         </a>
         <a href="/results" style={st.mobileBarItem}>
           <span>📊</span><span style={st.mobileBarLabel}>Results</span>
+        </a>
+        <a href="/groups" style={st.mobileBarItem}>
+          <span>👥</span><span style={st.mobileBarLabel}>Groups</span>
         </a>
       </nav>
 
@@ -729,11 +766,14 @@ const st = {
   careerLabel: { fontSize: '0.7rem', fontWeight: '600', color: '#7a9e85', textTransform: 'uppercase', letterSpacing: '0.05em' },
 
   // Groups
-  groupBox:    { background: 'rgba(201,168,76,0.05)', border: '1px solid rgba(201,168,76,0.2)', borderRadius: '8px', padding: '1rem 1.25rem', marginBottom: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.65rem' },
-  groupName:   { fontWeight: '700', fontSize: '1rem', color: '#e8f0e8' },
-  groupMeta:   { display: 'flex', gap: '1rem', flexWrap: 'wrap', fontSize: '0.82rem', color: '#7a9e85' },
-  leaveBtn:    { background: 'none', border: 'none', color: 'rgba(255,255,255,0.22)', fontSize: '0.73rem', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", padding: '0.2rem 0', textDecoration: 'underline', marginTop: '0.1rem', textAlign: 'left' },
-  noGroupBox:  { textAlign: 'center', padding: '1.25rem 0.5rem', marginBottom: '0.5rem' },
+  groupsPageBtn:   { background: 'none', border: 'none', color: '#c9a84c', fontSize: '0.78rem', fontWeight: '600', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", padding: 0 },
+  groupBox:        { background: 'rgba(201,168,76,0.05)', border: '1px solid rgba(201,168,76,0.2)', borderRadius: '8px', padding: '0.85rem 1rem' },
+  groupName:       { fontWeight: '700', fontSize: '0.95rem', color: '#e8f0e8', marginBottom: '0.2rem' },
+  groupMeta:       { display: 'flex', gap: '0.65rem', flexWrap: 'wrap', fontSize: '0.8rem', color: '#7a9e85', alignItems: 'center' },
+  founderBadge:    { background: 'rgba(201,168,76,0.12)', color: '#c9a84c', fontSize: '0.65rem', fontWeight: '700', padding: '0.12rem 0.5rem', borderRadius: '999px', letterSpacing: '0.06em', textTransform: 'uppercase' },
+  leaveBtn:        { background: 'none', border: '1px solid rgba(239,68,68,0.2)', color: '#f87171', fontSize: '0.73rem', fontWeight: '600', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", padding: '0.3rem 0.6rem', borderRadius: '5px' },
+  btnSmallSuccess: { background: 'rgba(74,222,128,0.1)', border: '1px solid rgba(74,222,128,0.3)', color: '#4ade80', fontWeight: '600', fontSize: '0.78rem', padding: '0.35rem 0.75rem', borderRadius: '5px', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", whiteSpace: 'nowrap' },
+  noGroupBox:      { textAlign: 'center', padding: '1.25rem 0.5rem', marginBottom: '0.5rem' },
   publicBox:   { marginTop: '1.25rem', paddingTop: '1.25rem', borderTop: '1px solid rgba(201,168,76,0.15)' },
   publicLabel: { fontSize: '0.68rem', fontWeight: '700', color: '#7a9e85', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '0.6rem' },
   publicRow:   { display: 'flex', alignItems: 'center', gap: '0.75rem' },
