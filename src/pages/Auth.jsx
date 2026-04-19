@@ -77,20 +77,18 @@ export default function Auth() {
 
         if (signInError) throw signInError
 
-        // On first-ever login: if user has no group and hasn't been onboarded,
-        // redirect to the Groups page with the welcome prompt.
+        // Check has_onboarded from profiles — if false, send to group prompt (first login only)
         const uid = data.user?.id
-        const onboardedKey = `silks_group_onboarded_${uid}`
-        if (uid && !localStorage.getItem(onboardedKey)) {
-          const { count } = await supabase
-            .from('group_members')
-            .select('id', { count: 'exact', head: true })
-            .eq('user_id', uid)
-          if (!count) {
-            navigate('/groups?welcome=1')
-          } else {
-            localStorage.setItem(onboardedKey, '1')
+        if (uid) {
+          const { data: prof } = await supabase
+            .from('profiles')
+            .select('has_onboarded')
+            .eq('id', uid)
+            .single()
+          if (prof?.has_onboarded) {
             navigate('/dashboard')
+          } else {
+            navigate('/groups?welcome=1')
           }
         } else {
           navigate('/dashboard')

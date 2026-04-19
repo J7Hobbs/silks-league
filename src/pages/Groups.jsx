@@ -143,6 +143,21 @@ export default function Groups() {
     }
   }
 
+  // ── Mark user as onboarded in DB ─────────────────────────────
+  async function markOnboarded() {
+    if (!user) return
+    await supabase
+      .from('profiles')
+      .update({ has_onboarded: true })
+      .eq('id', user.id)
+  }
+
+  // ── Skip group prompt ─────────────────────────────────────────
+  async function handleSkip() {
+    await markOnboarded()
+    navigate('/dashboard')
+  }
+
   // ── Create group ──────────────────────────────────────────────
   async function handleCreate(e) {
     e.preventDefault()
@@ -164,8 +179,9 @@ export default function Groups() {
       if (mErr) throw mErr
 
       if (isWelcome) {
-        localStorage.setItem(`silks_group_onboarded_${user.id}`, '1')
-        navigate('/groups', { replace: true })
+        await markOnboarded()
+        navigate('/dashboard')
+        return
       }
 
       setSuccess(`"${group.name}" created! Share the invite link with your friends.`)
@@ -217,8 +233,9 @@ export default function Groups() {
       if (mErr) throw mErr
 
       if (isWelcome) {
-        localStorage.setItem(`silks_group_onboarded_${user.id}`, '1')
-        navigate('/groups', { replace: true })
+        await markOnboarded()
+        navigate('/dashboard')
+        return
       }
 
       setSuccess(`Joined "${group.name}" successfully!`)
@@ -320,10 +337,11 @@ export default function Groups() {
         {isWelcome && (
           <div style={st.welcomeBanner}>
             <div style={st.welcomeIcon}>👋</div>
-            <div>
+            <div style={{ flex: 1 }}>
               <div style={st.welcomeTitle}>Welcome to Silks League!</div>
               <div style={st.welcomeSub}>Create a private group to play with friends, or join one with an invite code.</div>
             </div>
+            <button style={st.skipBtn} onClick={handleSkip}>Skip for now →</button>
           </div>
         )}
 
@@ -540,6 +558,7 @@ const st = {
   welcomeIcon:   { fontSize: '1.75rem', flexShrink: 0 },
   welcomeTitle:  { fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.3rem', letterSpacing: '0.05em', color: '#c9a84c', marginBottom: '0.2rem' },
   welcomeSub:    { fontSize: '0.875rem', color: '#7a9e85', lineHeight: 1.5 },
+  skipBtn:       { background: 'none', border: 'none', color: '#5a8a5a', fontSize: '0.8rem', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", whiteSpace: 'nowrap', flexShrink: 0, alignSelf: 'center' },
 
   // Page heading
   pageHeader:   { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' },
