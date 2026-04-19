@@ -1,6 +1,6 @@
 // Silks League — Service Worker
 // Bump this version string whenever you deploy a new build so the cache refreshes
-const CACHE_VERSION = 'silks-v1'
+const CACHE_VERSION = 'silks-v2'
 const SHELL_CACHE   = `${CACHE_VERSION}-shell`
 const DATA_CACHE    = `${CACHE_VERSION}-data`
 
