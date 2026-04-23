@@ -1,13 +1,74 @@
+/**
+ * Silks League — Auth Page (Login + Sign Up)
+ *
+ * ── HOW PROFILE CREATION WORKS ───────────────────────────────────────────────
+ *
+ *  The frontend does NOT manually insert into the profiles table.
+ *  A Supabase database trigger handles this automatically:
+ *
+ *  1. User calls supabase.auth.signUp() here with email, password, full_name
+ *  2. Supabase creates a row in auth.users
+ *  3. The trigger on_auth_user_created fires at the database level
+ *  4. The trigger inserts a row into public.profiles with:
+ *       id            = new user's UUID
+ *       full_name     = taken from raw_user_meta_data->>'full_name'
+ *       is_admin      = false
+ *       has_onboarded = false
+ *  5. On first login, has_onboarded = false routes the user to /groups?welcome=1
+ *  6. Once they create/join a group or skip, has_onboarded is set to true
+ *
+ *  To re-run the trigger setup: supabase/fix_signup.sql
+ *
+ * ── HOW ONBOARDING WORKS ─────────────────────────────────────────────────────
+ *
+ *  Login checks profiles.has_onboarded:
+ *    - false → /groups?welcome=1  (first time only)
+ *    - true  → /dashboard         (every login after that)
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+
 import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+
+// ── Map raw Supabase error messages to friendly user-facing ones ──────────────
+function friendlyError(err, mode) {
+  const msg = err?.message || ''
+
+  if (msg === 'Failed to fetch') {
+    return 'Cannot connect to the server. The Supabase project may be paused — go to supabase.com to restore it.'
+  }
+  if (msg.toLowerCase().includes('user already registered') ||
+      msg.toLowerCase().includes('already been registered') ||
+      msg.toLowerCase().includes('email address is already')) {
+    return 'An account with this email already exists. Please log in instead.'
+  }
+  if (msg.toLowerCase().includes('invalid login credentials') ||
+      msg.toLowerCase().includes('invalid email or password')) {
+    return 'Incorrect email or password. Please try again.'
+  }
+  if (msg.toLowerCase().includes('email not confirmed')) {
+    return 'Please check your email and click the confirmation link before logging in.'
+  }
+  if (msg.toLowerCase().includes('rate limit') || msg.toLowerCase().includes('too many')) {
+    return 'Too many attempts. Please wait a few minutes and try again.'
+  }
+  if (msg.toLowerCase().includes('database error saving new user') ||
+      msg.toLowerCase().includes('database error')) {
+    return 'There was a problem creating your account. Please try again or contact support.'
+  }
+  // Fall back to the actual Supabase message rather than a generic one —
+  // better to show something specific than "Something went wrong"
+  return msg || 'Something went wrong. Please try again.'
+}
 
 export default function Auth() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const [mode, setMode] = useState(searchParams.get('mode') === 'signup' ? 'signup' : 'login')
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  const [error, setError]   = useState('')
   const [success, setSuccess] = useState('')
 
   const [form, setForm] = useState({
@@ -27,6 +88,7 @@ export default function Auth() {
     setError('')
     setSuccess('')
 
+    // ── Client-side validation ────────────────────────────────────────────────
     if (mode === 'signup') {
       if (!form.fullName.trim()) {
         setError('Please enter your full name.')
@@ -45,20 +107,21 @@ export default function Auth() {
     setLoading(true)
 
     try {
+
+      // ── SIGN UP ─────────────────────────────────────────────────────────────
+      //
+      //  We only call supabase.auth.signUp here.
+      //  The database trigger handles inserting into public.profiles automatically.
+      //  DO NOT add a manual profiles insert here — it will conflict with the trigger.
+      //
       if (mode === 'signup') {
-        // Supabase v2 signUp syntax
-        const { data, error: signUpError } = await supabase.auth.signUp({
+        const { error: signUpError } = await supabase.auth.signUp({
           email: form.email,
           password: form.password,
           options: {
-            data: {
-              full_name: form.fullName,
-            },
+            data: { full_name: form.fullName.trim() },
           },
         })
-
-        // Log full response for diagnostics
-        console.log('[Auth] signUp response:', { data, error: signUpError })
 
         if (signUpError) throw signUpError
 
@@ -66,18 +129,16 @@ export default function Auth() {
         setMode('login')
         setForm({ fullName: '', email: form.email, password: '', confirmPassword: '' })
 
+      // ── LOG IN ──────────────────────────────────────────────────────────────
       } else {
         const { data, error: signInError } = await supabase.auth.signInWithPassword({
           email: form.email,
           password: form.password,
         })
 
-        // Log full response for diagnostics
-        console.log('[Auth] signIn response:', { data, error: signInError })
-
         if (signInError) throw signInError
 
-        // Check has_onboarded from profiles — if false, send to group prompt (first login only)
+        // Check has_onboarded — false means first login, send to group prompt
         const uid = data.user?.id
         if (uid) {
           const { data: prof } = await supabase
@@ -85,6 +146,7 @@ export default function Auth() {
             .select('has_onboarded')
             .eq('id', uid)
             .single()
+
           if (prof?.has_onboarded) {
             navigate('/dashboard')
           } else {
@@ -96,20 +158,8 @@ export default function Auth() {
       }
 
     } catch (err) {
-      // Log the full error so we can see exactly what Supabase is returning
-      console.error('[Auth] Full error object:', err)
-      console.error('[Auth] Error message:', err?.message)
-      console.error('[Auth] Error status:', err?.status)
-      console.error('[Auth] Error name:', err?.name)
-
-      // Show the actual Supabase message rather than generic "Failed to fetch"
-      if (err?.message === 'Failed to fetch') {
-        setError(
-          'Cannot connect to the server. This usually means: (1) the Supabase project is paused — go to supabase.com and restore it, or (2) the environment variables are missing.'
-        )
-      } else {
-        setError(err?.message || 'Something went wrong. Please try again.')
-      }
+      console.error('[Auth] error:', err)
+      setError(friendlyError(err, mode))
     } finally {
       setLoading(false)
     }
@@ -151,18 +201,10 @@ export default function Auth() {
         </p>
 
         {/* Success message */}
-        {success && (
-          <div style={styles.successBox}>
-            {success}
-          </div>
-        )}
+        {success && <div style={styles.successBox}>{success}</div>}
 
         {/* Error message */}
-        {error && (
-          <div style={styles.errorBox}>
-            {error}
-          </div>
-        )}
+        {error && <div style={styles.errorBox}>{error}</div>}
 
         {/* Form */}
         <form onSubmit={handleSubmit} style={styles.form}>
