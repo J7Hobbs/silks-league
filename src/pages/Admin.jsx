@@ -160,7 +160,7 @@ export default function Admin() {
   const [editRaceForm, setEditRaceForm] = useState({})
 
   // ── Runners ──
-  const EMPTY_RUNNER = { number: '', name: '', jockey: '', trainer: '', colour: '' }
+  const EMPTY_RUNNER = { number: '', name: '', jockey: '', trainer: '', colour: '', odds: '' }
   const [runners, setRunners]             = useState({})
   const [newRunnerForm, setNewRunnerForm] = useState({})       // keyed by raceId → EMPTY_RUNNER
   const [editingRunner, setEditingRunner] = useState(null)     // runner_id being edited
@@ -419,13 +419,14 @@ export default function Admin() {
   }
 
   // ── Runner CRUD ──────────────────────────────────────────────
-  function nrf(raceId) { return newRunnerForm[raceId] || { number: '', name: '', jockey: '', trainer: '', colour: '' } }
+  function nrf(raceId) { return newRunnerForm[raceId] || { number: '', name: '', jockey: '', trainer: '', colour: '', odds: '' } }
   function setNrf(raceId, patch) { setNewRunnerForm(p => ({ ...p, [raceId]: { ...nrf(raceId), ...patch } })) }
 
   async function addRunner(raceId) {
     const form = nrf(raceId)
     if (!form.name.trim()) { showToast('error', 'Horse name is required'); return }
     setLoading(true)
+    const oddsDecimal = parseFractionalOdds(form.odds) || null
     const { error } = await supabase.from('runners').insert({
       race_id: raceId,
       horse_name: form.name.trim(),
@@ -433,10 +434,12 @@ export default function Admin() {
       jockey: form.jockey.trim() || null,
       trainer: form.trainer.trim() || null,
       silk_colour: form.colour || null,
+      odds_fractional: form.odds.trim() || null,
+      odds_decimal: oddsDecimal,
     })
     setLoading(false)
     if (error) { showToast('error', error.message); return }
-    setNewRunnerForm(p => ({ ...p, [raceId]: { number: '', name: '', jockey: '', trainer: '', colour: '' } }))
+    setNewRunnerForm(p => ({ ...p, [raceId]: { number: '', name: '', jockey: '', trainer: '', colour: '', odds: '' } }))
     await loadRunners(raceId)
     showToast('success', 'Runner added')
   }
@@ -449,18 +452,22 @@ export default function Admin() {
       jockey:  runner.jockey || '',
       trainer: runner.trainer || '',
       colour:  runner.silk_colour || '',
+      odds:    runner.odds_fractional || '',
     })
   }
 
   async function saveEditRunner(raceId, runnerId) {
     if (!editRunnerForm.name.trim()) { showToast('error', 'Horse name is required'); return }
     setLoading(true)
+    const oddsDecimal = parseFractionalOdds(editRunnerForm.odds) || null
     const { error } = await supabase.from('runners').update({
-      horse_name:   editRunnerForm.name.trim(),
-      horse_number: editRunnerForm.number ? parseInt(editRunnerForm.number) : null,
-      jockey:       editRunnerForm.jockey.trim() || null,
-      trainer:      editRunnerForm.trainer.trim() || null,
-      silk_colour:  editRunnerForm.colour || null,
+      horse_name:      editRunnerForm.name.trim(),
+      horse_number:    editRunnerForm.number ? parseInt(editRunnerForm.number) : null,
+      jockey:          editRunnerForm.jockey.trim() || null,
+      trainer:         editRunnerForm.trainer.trim() || null,
+      silk_colour:     editRunnerForm.colour || null,
+      odds_fractional: editRunnerForm.odds.trim() || null,
+      odds_decimal:    oddsDecimal,
     }).eq('id', runnerId)
     setLoading(false)
     if (error) { showToast('error', error.message); return }
@@ -483,11 +490,8 @@ export default function Admin() {
       setResultForms(p => ({
         ...p, [race.id]: {
           horse1: existing.find(r => r.position === 1)?.horse_name || '',
-          sp1:    existing.find(r => r.position === 1)?.starting_price_display || '',
           horse2: existing.find(r => r.position === 2)?.horse_name || '',
-          sp2:    existing.find(r => r.position === 2)?.starting_price_display || '',
           horse3: existing.find(r => r.position === 3)?.horse_name || '',
-          sp3:    existing.find(r => r.position === 3)?.starting_price_display || '',
         }
       }))
     }
@@ -593,9 +597,20 @@ export default function Admin() {
   async function submitResults(race, isEdit = false) {
     const form = resultForms[race.id] || {}
     if (!form.horse1 || !form.horse2 || !form.horse3) { showToast('error', 'Select all 3 finishers'); return }
-    const sp1 = parseFractionalOdds(form.sp1), sp2 = parseFractionalOdds(form.sp2), sp3 = parseFractionalOdds(form.sp3)
-    if (!sp1 || !sp2 || !sp3) { showToast('error', 'Invalid SP — use e.g. 7/1 or Evs'); return }
     setLoading(true)
+
+    // Look up opening odds from the runner records
+    const raceRunners = runners[race.id] || []
+    function getRunnerOdds(horseName) {
+      const runner = raceRunners.find(r => r.horse_name === horseName)
+      return {
+        oddsDecimal: runner?.odds_decimal   || null,
+        oddsDisplay: runner?.odds_fractional || null,
+      }
+    }
+    const o1 = getRunnerOdds(form.horse1)
+    const o2 = getRunnerOdds(form.horse2)
+    const o3 = getRunnerOdds(form.horse3)
 
     // ── Step 1: delete old results for this race ────────────────
     const { error: delResErr } = await supabase.from('results').delete().eq('race_id', race.id)
@@ -603,9 +618,9 @@ export default function Admin() {
 
     // ── Step 2: insert the three result rows ────────────────────
     const { error: resErr } = await supabase.from('results').insert([
-      { race_id: race.id, position: 1, horse_name: form.horse1, starting_price_decimal: sp1, starting_price_display: form.sp1.trim() },
-      { race_id: race.id, position: 2, horse_name: form.horse2, starting_price_decimal: sp2, starting_price_display: form.sp2.trim() },
-      { race_id: race.id, position: 3, horse_name: form.horse3, starting_price_decimal: sp3, starting_price_display: form.sp3.trim() },
+      { race_id: race.id, position: 1, horse_name: form.horse1, starting_price_decimal: o1.oddsDecimal, starting_price_display: o1.oddsDisplay },
+      { race_id: race.id, position: 2, horse_name: form.horse2, starting_price_decimal: o2.oddsDecimal, starting_price_display: o2.oddsDisplay },
+      { race_id: race.id, position: 3, horse_name: form.horse3, starting_price_decimal: o3.oddsDecimal, starting_price_display: o3.oddsDisplay },
     ])
     if (resErr) { showToast('error', `Save results failed: ${resErr.message}`); setLoading(false); return }
 
@@ -1097,6 +1112,12 @@ export default function Admin() {
                                         value={editRunnerForm.trainer}
                                         onChange={e => setEditRunnerForm(f => ({ ...f, trainer: e.target.value }))} />
                                     </div>
+                                    <div style={{ ...st.formField, gridColumn: 'span 2' }}>
+                                      <label style={st.label}>Opening Odds</label>
+                                      <input style={st.input} placeholder="e.g. 7/1, Evens"
+                                        value={editRunnerForm.odds}
+                                        onChange={e => setEditRunnerForm(f => ({ ...f, odds: e.target.value }))} />
+                                    </div>
                                     <div style={{ ...st.formField, gridColumn: '1 / -1' }}>
                                       <label style={st.label}>Silk Colour</label>
                                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
@@ -1127,7 +1148,12 @@ export default function Admin() {
                                       <span style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'rgba(255,255,255,0.06)', flexShrink: 0, border: '1px dashed rgba(201,168,76,0.2)' }} />
                                     )}
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
-                                      <span style={{ color: '#e8f0e8', fontWeight: '600', fontSize: '0.875rem' }}>{runner.horse_name}</span>
+                                      <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem' }}>
+                                        <span style={{ color: '#e8f0e8', fontWeight: '600', fontSize: '0.875rem' }}>{runner.horse_name}</span>
+                                        {runner.odds_fractional && (
+                                          <span style={{ color: '#c9a84c', fontSize: '0.75rem', fontWeight: '700' }}>{runner.odds_fractional}</span>
+                                        )}
+                                      </div>
                                       <div style={{ display: 'flex', gap: '0.85rem', flexWrap: 'wrap' }}>
                                         {runner.jockey && <span style={st.runnerMeta}>J: {runner.jockey}</span>}
                                         {runner.trainer && <span style={st.runnerMeta}>T: {runner.trainer}</span>}
@@ -1172,6 +1198,12 @@ export default function Admin() {
                                 <input style={st.input} placeholder="Trainer name"
                                   value={nrf(race.id).trainer}
                                   onChange={e => setNrf(race.id, { trainer: e.target.value })} />
+                              </div>
+                              <div style={{ ...st.formField, gridColumn: 'span 2' }}>
+                                <label style={st.label}>Opening Odds</label>
+                                <input style={st.input} placeholder="e.g. 7/1, Evens"
+                                  value={nrf(race.id).odds}
+                                  onChange={e => setNrf(race.id, { odds: e.target.value })} />
                               </div>
                               <div style={{ ...st.formField, gridColumn: '1 / -1' }}>
                                 <label style={st.label}>Silk Colour</label>
@@ -1251,7 +1283,11 @@ export default function Admin() {
                             {r.position === 1 ? '1st' : r.position === 2 ? '2nd' : '3rd'}
                           </span>
                           <span style={{ color: '#e8f0e8', fontWeight: '500' }}>{r.horse_name}</span>
-                          <span style={{ color: '#c9a84c', marginLeft: 'auto', fontSize: '0.85rem' }}>{r.starting_price_display}</span>
+                          {r.starting_price_display && (
+                            <span style={{ color: '#c9a84c', marginLeft: 'auto', fontSize: '0.85rem' }}>
+                              Opening: {r.starting_price_display}
+                            </span>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -1272,20 +1308,21 @@ export default function Admin() {
                             </div>
                           )}
                           {[1,2,3].map(pos => {
-                            const hKey = `horse${pos}`, spKey = `sp${pos}`
+                            const hKey  = `horse${pos}`
                             const label = pos === 1 ? '1st' : pos === 2 ? '2nd' : '3rd'
                             const bg    = pos === 1 ? '#c9a84c' : pos === 2 ? '#9ca3af' : '#b87333'
                             return (
                               <div key={pos} style={st.resultInputRow}>
                                 <span style={{ ...st.posBadge, background: bg, minWidth: '44px' }}>{label}</span>
-                                <select style={{ ...st.input, flex: 2 }} value={form[hKey] || ''}
+                                <select style={{ ...st.input, flex: 1 }} value={form[hKey] || ''}
                                   onChange={e => setResultForms(p => ({ ...p, [race.id]: { ...p[race.id], [hKey]: e.target.value } }))}>
                                   <option value="">Select horse…</option>
-                                  {raceRunners.map(r => <option key={r.id} value={r.horse_name}>{r.horse_name}</option>)}
+                                  {raceRunners.map(r => (
+                                    <option key={r.id} value={r.horse_name}>
+                                      {r.horse_name}{r.odds_fractional ? ` (${r.odds_fractional})` : ''}
+                                    </option>
+                                  ))}
                                 </select>
-                                <input style={{ ...st.input, flex: 1, minWidth: '90px' }} placeholder="SP e.g. 7/1"
-                                  value={form[spKey] || ''}
-                                  onChange={e => setResultForms(p => ({ ...p, [race.id]: { ...p[race.id], [spKey]: e.target.value } }))} />
                               </div>
                             )
                           })}

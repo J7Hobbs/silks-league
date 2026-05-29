@@ -59,7 +59,7 @@ export default function Races() {
     // All runners for these races
     const { data: runners } = await supabase
       .from('runners')
-      .select('id, race_id, horse_number, horse_name, jockey, trainer, silk_colour')
+      .select('id, race_id, horse_number, horse_name, jockey, trainer, silk_colour, odds_fractional')
       .in('race_id', raceIds)
       .order('horse_number', { ascending: true })
 
@@ -278,6 +278,7 @@ export default function Races() {
                                 )}
                               </div>
                               <div style={st.runnerMeta}>
+                                {runner.odds_fractional && <span style={{ color: '#c9a84c', fontWeight: '700' }}>{runner.odds_fractional}</span>}
                                 {runner.jockey && <span>J: {runner.jockey}</span>}
                                 {runner.trainer && <span>T: {runner.trainer}</span>}
                               </div>

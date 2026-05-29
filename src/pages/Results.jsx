@@ -463,7 +463,12 @@ export default function Results() {
                                       </span>
                                       <span style={st.finisherName}>{r.horse_name}</span>
                                       {isMyPick && <span style={st.yourPickBadge}>Your pick</span>}
-                                      <span style={st.finisherSP}>{r.starting_price_display}</span>
+                                      {r.starting_price_display && (
+                                        <span style={st.finisherSP}>
+                                          <span style={{ color: '#5a8a5a', fontSize: '0.68rem', marginRight: '0.2rem' }}>Opening odds</span>
+                                          {r.starting_price_display}
+                                        </span>
+                                      )}
                                     </div>
                                   )
                                 })}

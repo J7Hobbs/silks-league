@@ -449,6 +449,13 @@ export default function Picks() {
                                     {/* Horse name */}
                                     <div style={st.runnerName}>{runner.horse_name}</div>
 
+                                    {/* Opening odds */}
+                                    {runner.odds_fractional && (
+                                      <div style={{ fontSize: '0.72rem', color: '#c9a84c', fontWeight: '700', marginTop: '0.1rem', letterSpacing: '0.02em' }}>
+                                        {runner.odds_fractional}
+                                      </div>
+                                    )}
+
                                     {/* Jockey / Trainer */}
                                     {(runner.jockey || runner.trainer) && (
                                       <div style={st.runnerMeta}>
