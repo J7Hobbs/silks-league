@@ -117,7 +117,7 @@ export default function Results() {
     if (picksData?.length) {
       const runnerIds = [...new Set(picksData.map(p => p.runner_id).filter(Boolean))]
       const { data: runnersData } = await supabase
-        .from('runners').select('id, horse_name, silk_colour, jockey, trainer').in('id', runnerIds)
+        .from('runners').select('id, horse_name, silk_colour, jockey, trainer, is_withdrawn').in('id', runnerIds)
       const runnerMap = {}
       runnersData?.forEach(r => { runnerMap[r.id] = r })
       picksData.forEach(p => {
@@ -129,7 +129,7 @@ export default function Results() {
     // User's scores
     const { data: scoresData } = await supabase
       .from('scores')
-      .select('race_id, base_points, bonus_points, total_points, position_achieved')
+      .select('race_id, base_points, bonus_points, total_points, position_achieved, score_note')
       .eq('user_id', userId).in('race_id', raceIds)
     const scoresMap = {}
     scoresData?.forEach(s => { scoresMap[s.race_id] = s })
@@ -334,14 +334,16 @@ export default function Results() {
                 {/* ── Race cards ── */}
                 <section style={st.raceList}>
                   {races.map(race => {
-                    const raceResults = results[race.id] || []
-                    const pick        = myPicks[race.id]
-                    const score       = myScores[race.id]
-                    const isExpanded  = expandedRaces.has(race.id)
-                    const hasResults  = raceResults.length > 0
-                    const cs          = circleStyle(race.id)
-                    const racePoints  = score?.total_points ?? 0
-                    const posDsp      = score?.position_achieved ? positionDisplay(score.position_achieved) : null
+                    const raceResults   = results[race.id] || []
+                    const pick          = myPicks[race.id]
+                    const score         = myScores[race.id]
+                    const isExpanded    = expandedRaces.has(race.id)
+                    const hasResults    = raceResults.length > 0
+                    const cs            = circleStyle(race.id)
+                    const racePoints    = score?.total_points ?? 0
+                    const posDsp        = score?.position_achieved ? positionDisplay(score.position_achieved) : null
+                    const isWithdrawn   = !!pick?.is_withdrawn
+                    const isAvgScore    = score?.score_note?.includes('withdrawn')
 
                     return (
                       <div key={race.id} style={st.raceCard}>
@@ -367,7 +369,14 @@ export default function Results() {
 
                           {/* Points + chevron */}
                           <div style={st.raceHeaderRight}>
-                            {hasResults ? (
+                            {isAvgScore ? (
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.15rem' }}>
+                                <div style={st.racePointsGold}>
+                                  {racePoints} <span style={{ fontSize: '0.65em', opacity: 0.7 }}>pts</span>
+                                </div>
+                                <span style={{ fontSize: '0.6rem', color: '#f87171', fontWeight: '600', letterSpacing: '0.06em' }}>WD AVG</span>
+                              </div>
+                            ) : hasResults ? (
                               <div style={racePoints > 0 ? st.racePointsGold : st.racePointsGrey}>
                                 {racePoints} <span style={{ fontSize: '0.65em', opacity: 0.7 }}>pts</span>
                               </div>
@@ -389,16 +398,25 @@ export default function Results() {
                             <div style={st.pickSection}>
                               <div style={st.sectionLabel}>MY PICK</div>
                               {pick ? (
-                                <div style={st.pickRow}>
+                                <div style={{ ...st.pickRow, ...(isWithdrawn ? { opacity: 0.85, borderLeft: '3px solid rgba(239,68,68,0.4)' } : {}) }}>
                                   {/* Silk colour bar */}
                                   <div style={{
                                     ...st.silkBar,
-                                    background: pick.silk_colour || '#1a3a10',
+                                    background: isWithdrawn ? '#4a1a1a' : (pick.silk_colour || '#1a3a10'),
                                   }} />
 
                                   {/* Horse info */}
                                   <div style={st.pickInfo}>
-                                    <div style={st.pickHorseName}>{pick.horse_name}</div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                      <span style={{ ...st.pickHorseName, textDecoration: isWithdrawn ? 'line-through' : 'none', color: isWithdrawn ? '#9ca3af' : undefined }}>
+                                        {pick.horse_name}
+                                      </span>
+                                      {isWithdrawn && (
+                                        <span style={{ fontSize: '0.62rem', fontWeight: '700', color: '#f87171', background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.35)', borderRadius: '3px', padding: '0.1rem 0.4rem', letterSpacing: '0.07em' }}>
+                                          WITHDRAWN
+                                        </span>
+                                      )}
+                                    </div>
                                     <div style={st.pickMeta}>
                                       {pick.jockey  && <span>J: {pick.jockey}</span>}
                                       {pick.trainer && <span>T: {pick.trainer}</span>}
@@ -407,8 +425,20 @@ export default function Results() {
 
                                   {/* Position + points */}
                                   <div style={st.pickRight}>
-                                    {!hasResults ? (
-                                      <span style={st.awaitingText}>Awaiting result</span>
+                                    {isAvgScore ? (
+                                      <>
+                                        <div style={{ ...st.positionLabel, color: '#f87171', fontSize: '0.75rem' }}>Horse withdrawn</div>
+                                        <div style={st.pointsChips}>
+                                          <span style={{ ...st.baseChip, background: 'rgba(239,68,68,0.1)', color: '#fca5a5', border: '1px solid rgba(239,68,68,0.2)' }}>
+                                            {racePoints} avg pts
+                                          </span>
+                                        </div>
+                                        <div style={{ fontSize: '0.65rem', color: '#9ca3af', marginTop: '0.2rem', textAlign: 'right' }}>
+                                          Average points awarded
+                                        </div>
+                                      </>
+                                    ) : !hasResults ? (
+                                      <span style={st.awaitingText}>{isWithdrawn ? 'Avg pts pending' : 'Awaiting result'}</span>
                                     ) : posDsp ? (
                                       <>
                                         <div style={{ ...st.positionLabel, color: posDsp.color }}>

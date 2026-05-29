@@ -171,6 +171,9 @@ export default function Admin() {
   const [bulkImportText,   setBulkImportText]   = useState({})          // { [raceId]: string }
   const [bulkImportResult, setBulkImportResult] = useState({})          // { [raceId]: { errors, warnings } }
 
+  // ── Withdrawals ──
+  // (no extra state needed — withdrawal state lives on runners.is_withdrawn in DB)
+
   // ── Results ──
   const [raceResults, setRaceResults]     = useState({})
   const [resultForms, setResultForms]     = useState({})
@@ -650,30 +653,36 @@ export default function Admin() {
     // 4. Resolve runner_id → horse_name
     const runnerIds = [...new Set(picks.map(p => p.runner_id).filter(Boolean))]
     const { data: runnerRows, error: runErr } = await supabase
-      .from('runners').select('id, horse_name').in('id', runnerIds)
+      .from('runners').select('id, horse_name, is_withdrawn').in('id', runnerIds)
     console.log(`[Scores] Runners:`, runnerRows, runErr)
 
     if (runErr) return { ok: false, msg: `Runners fetch failed: ${runErr.message}` }
-    const nameMap = {}
-    runnerRows?.forEach(r => { nameMap[r.id] = r.horse_name })
+    const nameMap      = {}
+    const withdrawnSet = new Set()
+    runnerRows?.forEach(r => {
+      nameMap[r.id] = r.horse_name
+      if (r.is_withdrawn) withdrawnSet.add(r.id)
+    })
 
-    // 5. Build score rows
-    const scoresToInsert = picks.map(pick => {
-      const horseName = nameMap[pick.runner_id]
-      const p = horseName ? placed[horseName] : null
-      if (p) {
-        const { base, bonus, total } = calcPoints(p.position, p.sp)
+    // 5. Build score rows — skip withdrawn picks (handled by calculateWithdrawalScores)
+    const scoresToInsert = picks
+      .filter(pick => !withdrawnSet.has(pick.runner_id))
+      .map(pick => {
+        const horseName = nameMap[pick.runner_id]
+        const p = horseName ? placed[horseName] : null
+        if (p) {
+          const { base, bonus, total } = calcPoints(p.position, p.sp)
+          return {
+            user_id: pick.user_id, race_id: raceId, pick_id: pick.id,
+            base_points: base, bonus_points: bonus, total_points: total,
+            position_achieved: p.position,
+          }
+        }
         return {
           user_id: pick.user_id, race_id: raceId, pick_id: pick.id,
-          base_points: base, bonus_points: bonus, total_points: total,
-          position_achieved: p.position,
+          base_points: 0, bonus_points: 0, total_points: 0, position_achieved: null,
         }
-      }
-      return {
-        user_id: pick.user_id, race_id: raceId, pick_id: pick.id,
-        base_points: 0, bonus_points: 0, total_points: 0, position_achieved: null,
-      }
-    })
+      })
     console.log(`[Scores] Rows to insert for race ${raceNumber}:`, scoresToInsert)
 
     // 6. Try full insert first
@@ -738,6 +747,9 @@ export default function Admin() {
     // ── Step 3: calculate scores ────────────────────────────────
     const result = await calculateScoresForRace(race.id, race.race_number)
 
+    // ── Step 4: award average points for any withdrawn picks ────
+    if (currentWeek) await calculateWithdrawalScores(currentWeek.id)
+
     lockResults(race.id)
     await loadResults(race.id)
     setLoading(false)
@@ -792,6 +804,9 @@ export default function Admin() {
       }
     }
 
+    // Award average points for any withdrawn picks across the week
+    if (weekArr?.[0]) await calculateWithdrawalScores(weekArr[0].id)
+
     setLoading(false)
 
     if (errors.length && totalInserted === 0) {
@@ -801,6 +816,120 @@ export default function Admin() {
     } else {
       showToast('success', `Done — ${totalInserted} score row${totalInserted !== 1 ? 's' : ''} written`)
     }
+  }
+
+  // ── Withdrawal scores ────────────────────────────────────────
+  //  Called after every race result submission and after toggling
+  //  a withdrawal. Finds all withdrawn picks for the week and
+  //  awards each affected player their average points from other
+  //  races that already have results.
+  async function calculateWithdrawalScores(weekId) {
+    console.log('[Withdrawal] Calculating withdrawal scores for week', weekId)
+
+    // 1. All races in the week
+    const { data: weekRaces } = await supabase
+      .from('races').select('id').eq('race_week_id', weekId)
+    if (!weekRaces?.length) return { ok: true, count: 0 }
+    const allRaceIds = weekRaces.map(r => r.id)
+
+    // 2. All withdrawn runners in those races
+    const { data: wdRunners } = await supabase
+      .from('runners').select('id, horse_name, race_id')
+      .in('race_id', allRaceIds).eq('is_withdrawn', true)
+    if (!wdRunners?.length) return { ok: true, count: 0 }
+
+    // 3. Picks for those withdrawn runners
+    const { data: affectedPicks } = await supabase
+      .from('picks').select('id, user_id, race_id, runner_id')
+      .in('runner_id', wdRunners.map(r => r.id))
+    if (!affectedPicks?.length) return { ok: true, count: 0 }
+
+    let inserted = 0
+    for (const pick of affectedPicks) {
+      const otherRaceIds = allRaceIds.filter(id => id !== pick.race_id)
+
+      // Get this player's scores for other races, excluding any other withdrawal scores
+      const { data: otherScores } = await supabase
+        .from('scores')
+        .select('total_points, score_note')
+        .eq('user_id', pick.user_id)
+        .in('race_id', otherRaceIds)
+
+      const normalScores = (otherScores || []).filter(s => !s.score_note?.includes('withdrawn'))
+      const avg = normalScores.length > 0
+        ? Math.round(normalScores.reduce((sum, s) => sum + (s.total_points || 0), 0) / normalScores.length)
+        : 0
+
+      // Remove any existing score for this player/race (withdrawal score from previous calc)
+      await supabase.from('scores')
+        .delete().eq('user_id', pick.user_id).eq('race_id', pick.race_id)
+
+      // Insert the average as the withdrawal score
+      const row = {
+        user_id: pick.user_id, race_id: pick.race_id, pick_id: pick.id,
+        base_points: avg, bonus_points: 0, total_points: avg,
+        position_achieved: null,
+        score_note: 'Horse withdrawn — average points awarded',
+      }
+      const { error } = await supabase.from('scores').insert(row)
+      if (!error) {
+        inserted++
+      } else {
+        // score_note column may not exist yet — retry without it
+        const { error: e2 } = await supabase.from('scores').insert({
+          user_id: pick.user_id, race_id: pick.race_id, pick_id: pick.id,
+          base_points: avg, bonus_points: 0, total_points: avg, position_achieved: null,
+        })
+        if (!e2) inserted++
+        else console.error('[Withdrawal] Insert failed:', e2)
+      }
+    }
+
+    console.log(`[Withdrawal] ${inserted} withdrawal score${inserted !== 1 ? 's' : ''} inserted`)
+    return { ok: true, count: inserted }
+  }
+
+  // ── Mark / reinstate a horse as withdrawn ────────────────────
+  async function withdrawRunner(runner, raceId) {
+    confirm(
+      `Mark ${runner.horse_name} as withdrawn?`,
+      `Any players who picked this horse will automatically receive average points for this race.`,
+      async () => {
+        setLoading(true)
+        const { error } = await supabase.from('runners').update({ is_withdrawn: true }).eq('id', runner.id)
+        if (error) { showToast('error', error.message); setLoading(false); return }
+        await loadRunners(raceId)
+        if (currentWeek) await calculateWithdrawalScores(currentWeek.id)
+        setLoading(false)
+        showToast('success', `${runner.horse_name} marked as withdrawn`)
+      }
+    )
+  }
+
+  async function reinstateRunner(runner, raceId) {
+    confirm(
+      `Reinstate ${runner.horse_name}?`,
+      `The horse will be reinstated. Scores for this race will be recalculated if results are available.`,
+      async () => {
+        setLoading(true)
+        const { error } = await supabase.from('runners').update({ is_withdrawn: false }).eq('id', runner.id)
+        if (error) { showToast('error', error.message); setLoading(false); return }
+        await loadRunners(raceId)
+
+        // Recalculate scores for the affected race if results exist
+        const raceObj = races.find(r => r.id === raceId)
+        if (raceObj) {
+          const { data: hasRes } = await supabase
+            .from('results').select('id').eq('race_id', raceId).limit(1)
+          if (hasRes?.length) {
+            await calculateScoresForRace(raceId, raceObj.race_number)
+            if (currentWeek) await calculateWithdrawalScores(currentWeek.id)
+          }
+        }
+        setLoading(false)
+        showToast('success', `${runner.horse_name} reinstated`)
+      }
+    )
   }
 
   // ── Auth gate ────────────────────────────────────────────────
@@ -1256,33 +1385,47 @@ export default function Admin() {
                                 </div>
                               ) : (
                                 /* ── Runner display row ── */
-                                <div style={st.runnerCardRow}>
+                                <div style={{ ...st.runnerCardRow, ...(runner.is_withdrawn ? { background: 'rgba(239,68,68,0.05)', borderLeft: '3px solid rgba(239,68,68,0.4)' } : {}) }}>
                                   <div style={st.runnerCardLeft}>
                                     {runner.horse_number && (
-                                      <span style={st.runnerNum}>{runner.horse_number}</span>
+                                      <span style={{ ...st.runnerNum, opacity: runner.is_withdrawn ? 0.5 : 1 }}>{runner.horse_number}</span>
                                     )}
                                     {runner.silk_colour ? (
-                                      <span style={{ width: '20px', height: '20px', borderRadius: '50%', background: runner.silk_colour, flexShrink: 0, border: '1px solid rgba(255,255,255,0.15)' }}
+                                      <span style={{ width: '20px', height: '20px', borderRadius: '50%', background: runner.silk_colour, flexShrink: 0, border: '1px solid rgba(255,255,255,0.15)', opacity: runner.is_withdrawn ? 0.4 : 1 }}
                                         title={SILK_COLOURS.find(c => c.hex === runner.silk_colour)?.label || runner.silk_colour} />
                                     ) : (
                                       <span style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'rgba(255,255,255,0.06)', flexShrink: 0, border: '1px dashed rgba(201,168,76,0.2)' }} />
                                     )}
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
-                                      <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem' }}>
-                                        <span style={{ color: '#e8f0e8', fontWeight: '600', fontSize: '0.875rem' }}>{runner.horse_name}</span>
-                                        {runner.odds_fractional && (
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                        <span style={{ color: runner.is_withdrawn ? '#9ca3af' : '#e8f0e8', fontWeight: '600', fontSize: '0.875rem', textDecoration: runner.is_withdrawn ? 'line-through' : 'none' }}>
+                                          {runner.horse_name}
+                                        </span>
+                                        {runner.is_withdrawn && (
+                                          <span style={{ fontSize: '0.62rem', fontWeight: '700', color: '#f87171', background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.35)', borderRadius: '3px', padding: '0.1rem 0.4rem', letterSpacing: '0.07em' }}>
+                                            WITHDRAWN
+                                          </span>
+                                        )}
+                                        {!runner.is_withdrawn && runner.odds_fractional && (
                                           <span style={{ color: '#c9a84c', fontSize: '0.75rem', fontWeight: '700' }}>{runner.odds_fractional}</span>
                                         )}
                                       </div>
                                       <div style={{ display: 'flex', gap: '0.85rem', flexWrap: 'wrap' }}>
-                                        {runner.jockey && <span style={st.runnerMeta}>J: {runner.jockey}</span>}
-                                        {runner.trainer && <span style={st.runnerMeta}>T: {runner.trainer}</span>}
+                                        {runner.jockey && <span style={{ ...st.runnerMeta, opacity: runner.is_withdrawn ? 0.5 : 1 }}>J: {runner.jockey}</span>}
+                                        {runner.trainer && <span style={{ ...st.runnerMeta, opacity: runner.is_withdrawn ? 0.5 : 1 }}>T: {runner.trainer}</span>}
                                         {!runner.jockey && !runner.trainer && <span style={{ ...st.runnerMeta, fontStyle: 'italic' }}>No jockey / trainer set</span>}
                                       </div>
                                     </div>
                                   </div>
-                                  <div style={{ display: 'flex', gap: '0.4rem' }}>
-                                    <button style={st.btnSmallGhost} onClick={() => startEditRunner(runner)}>Edit</button>
+                                  <div style={{ display: 'flex', gap: '0.4rem', flexShrink: 0 }}>
+                                    {!runner.is_withdrawn && (
+                                      <button style={st.btnSmallGhost} onClick={() => startEditRunner(runner)}>Edit</button>
+                                    )}
+                                    {runner.is_withdrawn ? (
+                                      <button style={{ ...st.btnSmallGhost, color: '#4ade80', borderColor: 'rgba(74,222,128,0.35)' }} onClick={() => reinstateRunner(runner, race.id)}>Reinstate</button>
+                                    ) : (
+                                      <button style={{ ...st.btnSmallGhost, color: '#fbbf24', borderColor: 'rgba(251,191,36,0.35)' }} onClick={() => withdrawRunner(runner, race.id)}>Withdraw</button>
+                                    )}
                                     <button style={st.btnSmallDanger} onClick={() => removeRunner(race.id, runner.id)}>Delete</button>
                                   </div>
                                 </div>

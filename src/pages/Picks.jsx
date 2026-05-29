@@ -154,6 +154,10 @@ export default function Picks() {
 
   function handleSelect(raceId, runnerId) {
     if (isLocked) return
+    // Don't allow selecting a withdrawn horse
+    const raceRunners = runners[raceId] || []
+    const runner = raceRunners.find(r => r.id === runnerId)
+    if (runner?.is_withdrawn) return
     setSelected(prev => ({ ...prev, [raceId]: runnerId }))
   }
 
@@ -394,7 +398,13 @@ export default function Picks() {
                       {/* Pick status + chevron */}
                       <div style={st.raceSummaryRight}>
                         {isPicked && pickedRunner ? (
-                          <span style={st.pickedBadge}>✓ {pickedRunner.horse_name}</span>
+                          pickedRunner.is_withdrawn ? (
+                            <span style={{ ...st.pickedBadge, background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171' }}>
+                              ⚠ Withdrawn
+                            </span>
+                          ) : (
+                            <span style={st.pickedBadge}>✓ {pickedRunner.horse_name}</span>
+                          )
                         ) : (
                           <span style={st.notPickedText}>
                             {isLocked ? 'No pick' : 'Not picked yet'}
@@ -410,25 +420,38 @@ export default function Picks() {
                     {/* ── Expanded runner cards ── */}
                     {isExpanded && (
                       <div style={st.expandedSection}>
+
+                        {/* Withdrawn pick warning */}
+                        {pickedRunner?.is_withdrawn && (
+                          <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '0.75rem', fontSize: '0.85rem', color: '#f87171', lineHeight: 1.5 }}>
+                            <strong>⚠ Your pick ({pickedRunner.horse_name}) has been withdrawn.</strong>
+                            <div style={{ marginTop: '0.25rem', color: '#fca5a5', fontSize: '0.8rem' }}>
+                              You will automatically receive average points for this race.
+                            </div>
+                          </div>
+                        )}
+
                         {raceRunners.length === 0 ? (
                           <p style={st.noRunners}>No runners added yet — check back soon.</p>
                         ) : (
                           <>
                             <div style={st.runnerGrid}>
                               {raceRunners.map(runner => {
-                                const isSelected = selRunnerId === runner.id
-                                const bg         = runner.silk_colour || '#1a2e1a'
+                                const isSelected   = selRunnerId === runner.id
+                                const isWithdrawn  = !!runner.is_withdrawn
+                                const bg           = isWithdrawn ? '#1a1a1a' : (runner.silk_colour || '#1a2e1a')
 
                                 return (
                                   <button
                                     key={runner.id}
-                                    disabled={isLocked}
+                                    disabled={isLocked || isWithdrawn}
                                     onClick={() => handleSelect(race.id, runner.id)}
                                     style={{
                                       ...st.runnerCard,
                                       background: bg,
-                                      ...(isSelected ? st.runnerCardSelected : {}),
-                                      ...(isLocked   ? st.runnerCardLocked   : {}),
+                                      ...(isSelected    ? st.runnerCardSelected : {}),
+                                      ...(isLocked      ? st.runnerCardLocked   : {}),
+                                      ...(isWithdrawn   ? { opacity: 0.5, cursor: 'not-allowed', border: '1px solid rgba(239,68,68,0.3)' } : {}),
                                     }}
                                   >
                                     {/* Horse number — top left */}
@@ -436,28 +459,33 @@ export default function Picks() {
                                       <div style={st.runnerNum}>{runner.horse_number}</div>
                                     )}
 
+                                    {/* Withdrawn badge — top right */}
+                                    {isWithdrawn && (
+                                      <div style={{ position: 'absolute', top: '0.4rem', right: '0.4rem', fontSize: '0.55rem', fontWeight: '700', color: '#f87171', background: 'rgba(239,68,68,0.2)', borderRadius: '3px', padding: '0.1rem 0.3rem', letterSpacing: '0.05em' }}>WD</div>
+                                    )}
+
                                     {/* Selected tick — top right */}
-                                    {isSelected && (
+                                    {isSelected && !isWithdrawn && (
                                       <div style={st.tickCircle}>✓</div>
                                     )}
 
                                     {/* Silk colour label — top right when not selected */}
-                                    {!isSelected && runner.silk_colour && (
+                                    {!isSelected && !isWithdrawn && runner.silk_colour && (
                                       <div style={st.silkDot} />
                                     )}
 
                                     {/* Horse name */}
-                                    <div style={st.runnerName}>{runner.horse_name}</div>
+                                    <div style={{ ...st.runnerName, textDecoration: isWithdrawn ? 'line-through' : 'none' }}>{runner.horse_name}</div>
 
-                                    {/* Opening odds */}
-                                    {runner.odds_fractional && (
+                                    {/* Opening odds (hidden if withdrawn) */}
+                                    {!isWithdrawn && runner.odds_fractional && (
                                       <div style={{ fontSize: '0.72rem', color: '#c9a84c', fontWeight: '700', marginTop: '0.1rem', letterSpacing: '0.02em' }}>
                                         {runner.odds_fractional}
                                       </div>
                                     )}
 
                                     {/* Jockey / Trainer */}
-                                    {(runner.jockey || runner.trainer) && (
+                                    {!isWithdrawn && (runner.jockey || runner.trainer) && (
                                       <div style={st.runnerMeta}>
                                         {runner.jockey  && <span>J: {runner.jockey}</span>}
                                         {runner.jockey && runner.trainer && <span style={{ opacity: 0.45 }}> · </span>}
