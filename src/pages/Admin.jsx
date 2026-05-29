@@ -166,6 +166,11 @@ export default function Admin() {
   const [editingRunner, setEditingRunner] = useState(null)     // runner_id being edited
   const [editRunnerForm, setEditRunnerForm] = useState(EMPTY_RUNNER)
 
+  // ── Bulk import ──
+  const [bulkImportOpen,   setBulkImportOpen]   = useState(new Set())   // Set of raceIds
+  const [bulkImportText,   setBulkImportText]   = useState({})          // { [raceId]: string }
+  const [bulkImportResult, setBulkImportResult] = useState({})          // { [raceId]: { errors, warnings } }
+
   // ── Results ──
   const [raceResults, setRaceResults]     = useState({})
   const [resultForms, setResultForms]     = useState({})
@@ -481,6 +486,112 @@ export default function Admin() {
     if (error) { showToast('error', error.message); return }
     setRunners(prev => ({ ...prev, [raceId]: prev[raceId].filter(r => r.id !== runnerId) }))
     showToast('success', 'Runner removed')
+  }
+
+  // ── Bulk import ──────────────────────────────────────────────
+  function toggleBulkImport(raceId) {
+    setBulkImportOpen(prev => {
+      const s = new Set(prev)
+      if (s.has(raceId)) { s.delete(raceId) } else { s.add(raceId) }
+      return s
+    })
+    setBulkImportResult(p => { const n = { ...p }; delete n[raceId]; return n })
+  }
+
+  async function bulkImportRunners(raceId) {
+    const text = bulkImportText[raceId] || ''
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0)
+    if (!lines.length) { showToast('error', 'Paste some runners first'); return }
+
+    const existingRunners = runners[raceId] || []
+    const existingNames   = new Set(existingRunners.map(r => r.horse_name.toLowerCase()))
+
+    const errors   = []
+    const warnings = []
+    const toInsert = []
+
+    lines.forEach((line, i) => {
+      const lineNum = i + 1
+      // Split on comma but limit to 6 parts so a colour like #1a3a10 doesn't get clipped
+      const raw   = line.split(',')
+      const parts = raw.map(p => p.trim())
+
+      if (parts.length < 6) {
+        errors.push(`Line ${lineNum}: expected 6 fields (got ${parts.length}) — "${line}"`)
+        return
+      }
+
+      const [numStr, name, jockey, trainer, oddsStr, colour] = parts
+
+      if (!name) {
+        errors.push(`Line ${lineNum}: horse name is empty`)
+        return
+      }
+
+      // Duplicate check
+      if (existingNames.has(name.toLowerCase())) {
+        warnings.push(`Line ${lineNum}: "${name}" already exists in this race — skipped`)
+        return
+      }
+
+      // Odds
+      const oddsDecimal = parseFractionalOdds(oddsStr)
+      if (oddsStr && !oddsDecimal) {
+        warnings.push(`Line ${lineNum}: odds "${oddsStr}" not recognised — imported with no odds`)
+      }
+
+      // Silk colour — validate hex
+      const hexValid  = /^#[0-9a-fA-F]{6}$/.test(colour)
+      const silkColour = hexValid ? colour : (colour ? '#1a3a10' : null)
+      if (colour && !hexValid) {
+        warnings.push(`Line ${lineNum}: colour "${colour}" is not a valid hex — defaulted to #1a3a10`)
+      }
+
+      const horseNum = parseInt(numStr)
+      toInsert.push({
+        race_id:         raceId,
+        horse_number:    !isNaN(horseNum) ? horseNum : null,
+        horse_name:      name,
+        jockey:          jockey || null,
+        trainer:         trainer || null,
+        odds_fractional: oddsStr  || null,
+        odds_decimal:    oddsDecimal || null,
+        silk_colour:     silkColour,
+      })
+    })
+
+    // Show errors and stop if nothing valid to insert
+    if (toInsert.length === 0) {
+      setBulkImportResult(p => ({ ...p, [raceId]: { errors, warnings } }))
+      return
+    }
+
+    // If there are line errors, show them and don't proceed
+    if (errors.length > 0) {
+      setBulkImportResult(p => ({ ...p, [raceId]: { errors, warnings } }))
+      return
+    }
+
+    setLoading(true)
+    const { error } = await supabase.from('runners').insert(toInsert)
+    setLoading(false)
+
+    if (error) {
+      setBulkImportResult(p => ({ ...p, [raceId]: { errors: [`Database error: ${error.message}`], warnings } }))
+      return
+    }
+
+    await loadRunners(raceId)
+
+    // Close panel + clear state
+    setBulkImportOpen(prev => { const s = new Set(prev); s.delete(raceId); return s })
+    setBulkImportText(p => { const n = { ...p }; delete n[raceId]; return n })
+    setBulkImportResult(p => { const n = { ...p }; delete n[raceId]; return n })
+
+    const count = toInsert.length
+    const warnStr = warnings.length > 0 ? ` (${warnings.length} warning${warnings.length !== 1 ? 's' : ''} — check console)` : ''
+    showToast('success', `${count} runner${count !== 1 ? 's' : ''} imported successfully${warnStr}`)
+    if (warnings.length) console.warn('[Bulk Import] Warnings:', warnings)
   }
 
   // ── Results CRUD ─────────────────────────────────────────────
@@ -1078,7 +1189,16 @@ export default function Admin() {
                       {/* Runners */}
                       {race && editingRace !== race.id && (
                         <div style={st.runnersSection}>
-                          <div style={st.runnersLabel}>Runners ({raceRunners.length})</div>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.1rem' }}>
+                            <div style={st.runnersLabel}>Runners ({raceRunners.length})</div>
+                            <button
+                              type="button"
+                              style={{ ...st.btnSmallGhost, fontSize: '0.72rem', padding: '0.25rem 0.6rem', borderColor: bulkImportOpen.has(race.id) ? '#c9a84c' : undefined, color: bulkImportOpen.has(race.id) ? '#c9a84c' : undefined }}
+                              onClick={() => toggleBulkImport(race.id)}
+                            >
+                              {bulkImportOpen.has(race.id) ? '✕ Close Import' : '⬇ Bulk Import'}
+                            </button>
+                          </div>
 
                           {/* Runner cards */}
                           {raceRunners.map(runner => (
@@ -1220,6 +1340,56 @@ export default function Admin() {
                               {loading ? 'Adding…' : '+ Add Runner'}
                             </button>
                           </div>
+
+                          {/* ── Bulk import panel ── */}
+                          {bulkImportOpen.has(race.id) && (
+                            <div style={{ background: 'rgba(201,168,76,0.04)', border: '1px solid rgba(201,168,76,0.25)', borderRadius: '8px', padding: '1rem', marginTop: '0.25rem' }}>
+                              <div style={{ fontSize: '0.7rem', fontWeight: '700', color: '#c9a84c', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
+                                Bulk Import Runners
+                              </div>
+                              <div style={{ fontSize: '0.75rem', color: '#5a8a5a', marginBottom: '0.65rem', lineHeight: 1.5 }}>
+                                One runner per line in this format:<br />
+                                <span style={{ color: '#7aaa7a', fontFamily: 'monospace' }}>number, horse_name, jockey, trainer, odds, #hex_colour</span><br />
+                                <span style={{ color: '#4a6a4a', fontFamily: 'monospace', fontSize: '0.7rem' }}>e.g. 7, Recency Bias, Jack Nicholls, K R Burke, 11/2, #1a3a10</span>
+                              </div>
+
+                              <textarea
+                                style={{
+                                  width: '100%', boxSizing: 'border-box',
+                                  background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(201,168,76,0.2)',
+                                  borderRadius: '6px', padding: '0.75rem', color: '#e8f0e8',
+                                  fontFamily: 'monospace', fontSize: '0.8rem', lineHeight: 1.6,
+                                  resize: 'vertical', minHeight: '130px', outline: 'none',
+                                }}
+                                placeholder={`1, Horse Name, Jockey Name, Trainer Name, 7/1, #1a3a10\n2, Another Horse, A. Jockey, G. Trainer, 11/4, #2a4a20\n3, Third Horse, B. Rider, H. Handler, Evens, #3a2a10`}
+                                value={bulkImportText[race.id] || ''}
+                                onChange={e => setBulkImportText(p => ({ ...p, [race.id]: e.target.value }))}
+                              />
+
+                              {/* Errors / warnings */}
+                              {bulkImportResult[race.id] && (
+                                <div style={{ marginTop: '0.6rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                  {bulkImportResult[race.id].errors.map((msg, i) => (
+                                    <div key={i} style={{ fontSize: '0.78rem', color: '#f87171', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '5px', padding: '0.4rem 0.65rem' }}>
+                                      ✕ {msg}
+                                    </div>
+                                  ))}
+                                  {bulkImportResult[race.id].warnings.map((msg, i) => (
+                                    <div key={i} style={{ fontSize: '0.78rem', color: '#fbbf24', background: 'rgba(251,191,36,0.07)', border: '1px solid rgba(251,191,36,0.2)', borderRadius: '5px', padding: '0.4rem 0.65rem' }}>
+                                      ⚠ {msg}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              <div style={{ display: 'flex', gap: '0.65rem', marginTop: '0.75rem' }}>
+                                <button style={st.btnGold} onClick={() => bulkImportRunners(race.id)} disabled={loading}>
+                                  {loading ? 'Importing…' : 'Import Runners'}
+                                </button>
+                                <button style={st.btnGhost} onClick={() => toggleBulkImport(race.id)}>Cancel</button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
