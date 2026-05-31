@@ -154,19 +154,20 @@ export default function Dashboard() {
     })
 
     const { data: profiles } = await supabase
-      .from('profiles').select('id, display_name, full_name').in('id', Object.keys(byUser))
+      .from('profiles').select('id, username, display_name, full_name').in('id', Object.keys(byUser))
     profiles?.forEach(p => {
-      if (byUser[p.id]) byUser[p.id].name = p.display_name || p.full_name || null
+      if (byUser[p.id]) byUser[p.id].name = p.username || p.display_name || p.full_name || null
     })
 
     const sorted = Object.values(byUser)
       .sort((a, b) => b.total - a.total)
       .slice(0, 5)
       .map((u, i) => ({
-        rank:   i + 1,
-        name:   u.user_id === myUserId ? 'You' : (u.name || `Player ${i + 1}`),
-        points: u.total,
-        isMe:   u.user_id === myUserId,
+        rank:    i + 1,
+        userId:  u.user_id,
+        name:    u.user_id === myUserId ? 'You' : (u.name || `Player ${i + 1}`),
+        points:  u.total,
+        isMe:    u.user_id === myUserId,
       }))
     setLeaderboard(sorted)
   }
@@ -188,7 +189,7 @@ export default function Dashboard() {
     return fullName.split(' ')[0] || 'there'
   }
 
-  // ── Live countdown to next Saturday 11:00 picks deadline ────
+  // ── Live countdown to next Saturday 12:00 picks deadline ────
   const getCountdownStatus = () => {
     const day  = now.getDay()   // 0 Sun … 6 Sat
     const hour = now.getHours()
@@ -197,10 +198,10 @@ export default function Dashboard() {
     const daysUntilSat = day === 6 ? 0 : (6 - day)
     const nextSat = new Date(now)
     nextSat.setDate(now.getDate() + daysUntilSat)
-    nextSat.setHours(11, 0, 0, 0) // 11:00 deadline
+    nextSat.setHours(12, 0, 0, 0) // 12:00 deadline
 
-    // If it's Saturday after 11am — show LIVE
-    if (day === 6 && hour >= 11) {
+    // If it's Saturday after 12pm — show LIVE
+    if (day === 6 && hour >= 12) {
       return { mode: 'live' }
     }
 
@@ -412,7 +413,8 @@ export default function Dashboard() {
                     <div style={styles.leaderRank}>
                       {row.rank === 1 ? '🥇' : row.rank === 2 ? '🥈' : row.rank === 3 ? '🥉' : `#${row.rank}`}
                     </div>
-                    <div style={styles.leaderName}>{row.name}</div>
+                    <div style={{ ...styles.leaderName, cursor: 'pointer', textDecoration: 'underline dotted' }}
+                      onClick={() => navigate(`/player-picks/${row.userId}`)}>{row.name}</div>
                     <div style={styles.leaderPoints}>{row.points} pts</div>
                   </div>
                 ))
@@ -436,7 +438,7 @@ export default function Dashboard() {
             <div style={styles.bottomCardIcon}>📅</div>
             <div style={styles.bottomCardBody}>
               <div style={styles.bottomCardTitle}>Next Race Day</div>
-              <div style={styles.bottomCardSub}>Picks close Saturday at 11am</div>
+              <div style={styles.bottomCardSub}>Picks close Saturday at 12pm</div>
             </div>
             <button style={styles.bottomCardBtn} onClick={() => navigate('/picks')}>Make picks →</button>
           </div>

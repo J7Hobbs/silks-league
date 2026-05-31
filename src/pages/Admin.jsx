@@ -242,10 +242,10 @@ export default function Admin() {
       twRaces?.forEach(r => thisWeekIds.add(r.id))
     }
     const { data: scores } = await supabase.from('scores')
-      .select('user_id, total_points, race_id, profiles(full_name)').in('race_id', raceList.map(r => r.id))
+      .select('user_id, total_points, race_id, profiles(username, full_name)').in('race_id', raceList.map(r => r.id))
     const totals = {}
     for (const s of (scores || [])) {
-      if (!totals[s.user_id]) totals[s.user_id] = { name: s.profiles?.full_name || 'Unknown', total: 0, week: 0 }
+      if (!totals[s.user_id]) totals[s.user_id] = { name: s.profiles?.username || s.profiles?.full_name || 'Unknown', total: 0, week: 0 }
       totals[s.user_id].total += s.total_points
       if (thisWeekIds.has(s.race_id)) totals[s.user_id].week += s.total_points
     }
@@ -328,7 +328,7 @@ export default function Admin() {
     const { data: weekList } = await supabase.from('race_weeks').select('id').eq('season_id', activeSeason.id)
     const { error } = await supabase.from('race_weeks').insert({
       season_id: activeSeason.id, week_number: (weekList?.length || 0) + 1,
-      saturday_date: weekDate, picks_deadline: `${weekDate}T11:00:00`, is_locked: false,
+      saturday_date: weekDate, picks_deadline: `${weekDate}T12:00:00`, is_locked: false,
     })
     setLoading(false)
     if (error) { showToast('error', error.message); return }
@@ -340,7 +340,7 @@ export default function Admin() {
   function startEditWeek() {
     setEditWeekForm({
       saturdayDate: currentWeek.saturday_date,
-      picksDeadline: currentWeek.picks_deadline?.slice(11, 16) || '11:00',
+      picksDeadline: currentWeek.picks_deadline?.slice(11, 16) || '12:00',
     })
     setEditingWeek(true)
   }
@@ -1157,7 +1157,7 @@ export default function Admin() {
                     onChange={e => setWeekDate(e.target.value)} required />
                 </div>
                 <p style={{ fontSize: '0.8rem', color: '#5a8a5a', margin: '0.5rem 0 1rem' }}>
-                  Picks deadline automatically set to 11:00am on this date.
+                  Picks deadline automatically set to 12:00pm on this date.
                 </p>
                 <div style={st.formActions}>
                   <button type="submit" style={st.btnGold} disabled={loading}>Create Week</button>
@@ -1195,7 +1195,7 @@ export default function Admin() {
                       <div>
                         <div style={st.infoCardBadge}>Current Week</div>
                         <div style={st.infoCardTitle}>Week {currentWeek.week_number} · {currentWeek.saturday_date}</div>
-                        <div style={st.infoCardSub}>Picks deadline: {currentWeek.picks_deadline?.slice(11, 16) || '11:00'} · {races.length}/5 races</div>
+                        <div style={st.infoCardSub}>Picks deadline: {currentWeek.picks_deadline?.slice(11, 16) || '12:00'} · {races.length}/5 races</div>
                       </div>
                       <div style={{ display: 'flex', gap: '0.5rem' }}>
                         <button style={st.btnSmallGhost} onClick={startEditWeek}>Edit</button>

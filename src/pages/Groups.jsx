@@ -123,9 +123,9 @@ export default function Groups() {
 
       // Fetch names
       const { data: profiles } = await supabase
-        .from('profiles').select('id, display_name, full_name').in('id', memberIds)
+        .from('profiles').select('id, username, display_name, full_name').in('id', memberIds)
       const nameMap = {}
-      profiles?.forEach(p => { nameMap[p.id] = p.display_name || p.full_name || null })
+      profiles?.forEach(p => { nameMap[p.id] = p.username || p.display_name || p.full_name || null })
 
       const ranked = Object.entries(totals)
         .sort((a, b) => b[1] - a[1])
@@ -496,7 +496,8 @@ export default function Groups() {
                     <div style={st.lbRank}>
                       {row.rank === 1 ? '🥇' : row.rank === 2 ? '🥈' : row.rank === 3 ? '🥉' : `#${row.rank}`}
                     </div>
-                    <div style={st.lbName}>{row.name}</div>
+                    <div style={{ ...st.lbName, cursor: 'pointer', textDecoration: 'underline dotted' }}
+                      onClick={() => navigate(`/player-picks/${row.userId}`)}>{row.name}</div>
                     <div style={st.lbPoints}>{row.points} pts</div>
                   </div>
                 ))}

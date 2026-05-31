@@ -93,9 +93,11 @@ export default function League() {
     console.log('[League] final scores array length:', scores.length)
 
     // ── 5. Display names ─────────────────────────────────────────
-    // profiles table only has id + is_admin — names come from auth metadata.
-    // For now: logged-in user shows as "You", others as "Player N".
-    const nameMap = {} // placeholder — extend later if display_name column is added
+    const allUserIds = [...new Set(scores.map(sc => sc.user_id))]
+    const { data: profData } = await supabase
+      .from('profiles').select('id, username, full_name, display_name').in('id', allUserIds)
+    const nameMap = {}
+    profData?.forEach(p => { nameMap[p.id] = p.username || p.display_name || p.full_name || null })
 
     // ── 6. Season aggregation ────────────────────────────────────
     // Filter to season races where possible; otherwise show everything
@@ -328,7 +330,10 @@ export default function League() {
 
                   {/* Name */}
                   <div style={st.nameCell}>
-                    <span style={st.playerName}>{row.name}</span>
+                    <span
+                      style={{ ...st.playerName, cursor: 'pointer', textDecoration: 'underline dotted' }}
+                      onClick={() => navigate(`/player-picks/${row.user_id}`)}
+                    >{row.name}</span>
                     {row.isMe && <span style={st.youBadge}>You</span>}
                   </div>
 
