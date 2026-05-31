@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import RunnerCard from '../components/RunnerCard.jsx'
 import ProfileDropdown from '../components/ProfileDropdown.jsx'
 
 export default function Results() {
@@ -377,33 +378,10 @@ export default function Results() {
                             <div style={st.pickSection}>
                               <div style={st.sectionLabel}>MY PICK</div>
                               {pick ? (
-                                <div style={{ ...st.pickRow, ...(isWithdrawn ? { opacity: 0.85, borderLeft: '3px solid rgba(239,68,68,0.4)' } : {}) }}>
-                                  {/* Silk colour bar */}
-                                  <div style={{
-                                    ...st.silkBar,
-                                    background: isWithdrawn ? '#4a1a1a' : (pick.silk_colour || '#1a3a10'),
-                                  }} />
-
-                                  {/* Horse info */}
-                                  <div style={st.pickInfo}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                                      <span style={{ ...st.pickHorseName, textDecoration: isWithdrawn ? 'line-through' : 'none', color: isWithdrawn ? '#9ca3af' : undefined }}>
-                                        {pick.horse_name}
-                                      </span>
-                                      {isWithdrawn && (
-                                        <span style={{ fontSize: '0.62rem', fontWeight: '700', color: '#f87171', background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.35)', borderRadius: '3px', padding: '0.1rem 0.4rem', letterSpacing: '0.07em' }}>
-                                          WITHDRAWN
-                                        </span>
-                                      )}
-                                    </div>
-                                    <div style={st.pickMeta}>
-                                      {pick.jockey  && <span>J: {pick.jockey}</span>}
-                                      {pick.trainer && <span>T: {pick.trainer}</span>}
-                                    </div>
-                                  </div>
-
-                                  {/* Position + points */}
-                                  <div style={st.pickRight}>
+                                <RunnerCard
+                                  runner={pick}
+                                  rightContent={
+                                    <div style={{ textAlign: 'right' }}>
                                     {isAvgScore ? (
                                       <>
                                         <div style={{ ...st.positionLabel, color: '#f87171', fontSize: '0.75rem' }}>Horse withdrawn</div>
@@ -446,7 +424,8 @@ export default function Results() {
                                       </>
                                     )}
                                   </div>
-                                </div>
+                                  }
+                                />
                               ) : (
                                 <div style={st.noPickNote}>No pick made for this race</div>
                               )}

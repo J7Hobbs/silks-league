@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import ProfileDropdown from '../components/ProfileDropdown.jsx'
+import RunnerCard from '../components/RunnerCard.jsx'
 
 export default function Races() {
   const navigate = useNavigate()
@@ -226,48 +227,27 @@ export default function Races() {
                       <div style={st.noRunners}>No runners added yet.</div>
                     ) : (
                       race.runners.map(runner => {
-                        const isMyPick    = runner.id === myPickId
-                        // Check if this runner placed in results
-                        const resultPos   = raceResult?.find(r => r.horse_name === runner.horse_name)
-                        const silkBg      = runner.silk_colour || '#1a2e1a'
+                        const isMyPick  = runner.id === myPickId
+                        const resultPos = raceResult?.find(r => r.horse_name === runner.horse_name)
+                        const tags = [
+                          isMyPick && (
+                            <span key="pick" style={{ fontSize: '0.65rem', fontWeight: '700', color: '#4ade80', background: 'rgba(74,222,128,0.12)', border: '1px solid rgba(74,222,128,0.3)', borderRadius: '3px', padding: '0.1rem 0.35rem' }}>
+                              My Pick
+                            </span>
+                          ),
+                          resultPos && (
+                            <span key="result" style={{ fontSize: '0.65rem', fontWeight: '700', color: '#c9a84c', background: 'rgba(201,168,76,0.1)', border: '1px solid rgba(201,168,76,0.25)', borderRadius: '3px', padding: '0.1rem 0.35rem' }}>
+                              {positionMedal(resultPos.position)}
+                            </span>
+                          ),
+                        ].filter(Boolean)
 
                         return (
-                          <div
+                          <RunnerCard
                             key={runner.id}
-                            style={{
-                              ...st.runnerRow,
-                              ...(isMyPick ? st.runnerRowPicked : {}),
-                            }}
-                          >
-                            {/* Silk swatch */}
-                            <div style={{ ...st.silkSwatch, background: silkBg }} />
-
-                            {/* Horse number */}
-                            <div style={st.horseNum}>{runner.horse_number || '—'}</div>
-
-                            {/* Main info */}
-                            <div style={st.runnerInfo}>
-                              <div style={st.horseName}>
-                                {runner.horse_name}
-                                {isMyPick && <span style={st.myPickTag}>My Pick</span>}
-                                {resultPos && (
-                                  <span style={st.finishedTag}>
-                                    {positionMedal(resultPos.position)} {resultPos.starting_price_display}
-                                  </span>
-                                )}
-                              </div>
-                              <div style={st.runnerMeta}>
-                                {runner.odds_fractional && <span style={{ color: '#c9a84c', fontWeight: '700' }}>{runner.odds_fractional}</span>}
-                                {runner.jockey && <span>J: {runner.jockey}</span>}
-                                {runner.trainer && <span>T: {runner.trainer}</span>}
-                              </div>
-                              {runner.form_string && (
-                                <div style={{ fontSize: '0.72rem', color: '#5a8a5a', marginTop: '0.1rem' }}>
-                                  Form: {runner.form_string}
-                                </div>
-                              )}
-                            </div>
-                          </div>
+                            runner={runner}
+                            tags={tags}
+                          />
                         )
                       })
                     )}

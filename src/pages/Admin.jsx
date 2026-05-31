@@ -53,6 +53,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import RunnerCard from '../components/RunnerCard.jsx'
 
 // ── Points calculation ───────────────────────────────────────
 function parseFractionalOdds(str) {
@@ -1396,37 +1397,9 @@ export default function Admin() {
                                 </div>
                               ) : (
                                 /* ── Runner display row ── */
-                                <div style={{ ...st.runnerCardRow, ...(runner.is_withdrawn ? { background: 'rgba(239,68,68,0.05)', borderLeft: '3px solid rgba(239,68,68,0.4)' } : {}) }}>
-                                  <div style={st.runnerCardLeft}>
-                                    {runner.horse_number && (
-                                      <span style={{ ...st.runnerNum, opacity: runner.is_withdrawn ? 0.5 : 1 }}>{runner.horse_number}</span>
-                                    )}
-                                    {runner.silk_colour ? (
-                                      <span style={{ width: '20px', height: '20px', borderRadius: '50%', background: runner.silk_colour, flexShrink: 0, border: '1px solid rgba(255,255,255,0.15)', opacity: runner.is_withdrawn ? 0.4 : 1 }}
-                                        title={SILK_COLOURS.find(c => c.hex === runner.silk_colour)?.label || runner.silk_colour} />
-                                    ) : (
-                                      <span style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'rgba(255,255,255,0.06)', flexShrink: 0, border: '1px dashed rgba(201,168,76,0.2)' }} />
-                                    )}
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                                        <span style={{ color: runner.is_withdrawn ? '#9ca3af' : '#e8f0e8', fontWeight: '600', fontSize: '0.875rem', textDecoration: runner.is_withdrawn ? 'line-through' : 'none' }}>
-                                          {runner.horse_name}
-                                        </span>
-                                        {runner.is_withdrawn && (
-                                          <span style={{ fontSize: '0.62rem', fontWeight: '700', color: '#f87171', background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.35)', borderRadius: '3px', padding: '0.1rem 0.4rem', letterSpacing: '0.07em' }}>
-                                            WITHDRAWN
-                                          </span>
-                                        )}
-                                        {!runner.is_withdrawn && runner.odds_fractional && (
-                                          <span style={{ color: '#c9a84c', fontSize: '0.75rem', fontWeight: '700' }}>{runner.odds_fractional}</span>
-                                        )}
-                                      </div>
-                                      <div style={{ display: 'flex', gap: '0.85rem', flexWrap: 'wrap' }}>
-                                        {runner.jockey && <span style={{ ...st.runnerMeta, opacity: runner.is_withdrawn ? 0.5 : 1 }}>J: {runner.jockey}</span>}
-                                        {runner.trainer && <span style={{ ...st.runnerMeta, opacity: runner.is_withdrawn ? 0.5 : 1 }}>T: {runner.trainer}</span>}
-                                        {!runner.jockey && !runner.trainer && <span style={{ ...st.runnerMeta, fontStyle: 'italic' }}>No jockey / trainer set</span>}
-                                      </div>
-                                    </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <RunnerCard runner={runner} />
                                   </div>
                                   <div style={{ display: 'flex', gap: '0.4rem', flexShrink: 0 }}>
                                     {!runner.is_withdrawn && (
