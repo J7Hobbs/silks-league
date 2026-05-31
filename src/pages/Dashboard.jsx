@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import ProfileDropdown from '../components/ProfileDropdown.jsx'
 
 export default function Dashboard() {
   const navigate = useNavigate()
@@ -289,34 +290,7 @@ export default function Dashboard() {
 
           {/* Avatar + dropdown */}
           <div style={styles.navRight}>
-            <div
-              style={styles.avatar}
-              onClick={() => navigate('/profile')}
-              title="View profile"
-            >
-              {getFirstName().charAt(0).toUpperCase()}
-            </div>
-
-            {menuOpen && (
-              <div style={styles.dropdownMenu}>
-                <div style={styles.dropdownEmail}>{user?.email}</div>
-                <hr style={styles.dropdownDivider} />
-                <button style={styles.dropdownItem} onClick={() => { setMenuOpen(false); navigate('/profile') }}>My Profile</button>
-                {isAdmin && (
-                  <>
-                    <hr style={styles.dropdownDivider} />
-                    <button style={{ ...styles.dropdownItem, color: '#c9a84c' }}
-                      onClick={() => { setMenuOpen(false); navigate('/admin') }}>
-                      Admin Panel
-                    </button>
-                  </>
-                )}
-                <hr style={styles.dropdownDivider} />
-                <button style={{ ...styles.dropdownItem, ...styles.dropdownSignOut }} onClick={handleSignOut}>
-                  Sign out
-                </button>
-              </div>
-            )}
+            <ProfileDropdown user={user} isAdmin={isAdmin} />
           </div>
         </div>
       </nav>

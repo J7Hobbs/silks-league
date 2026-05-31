@@ -9,6 +9,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import ProfileDropdown from '../components/ProfileDropdown.jsx'
 
 // ── Helpers ───────────────────────────────────────────────────
 function getUpcomingSaturday() {
@@ -237,34 +238,7 @@ export default function Picks() {
           </div>
 
           <div style={st.navRight}>
-            <div
-              style={st.avatar}
-              onClick={() => navigate('/profile')}
-              title="View profile"
-            >
-              {getFirstName().charAt(0).toUpperCase()}
-            </div>
-
-            {menuOpen && (
-              <div style={st.dropdownMenu}>
-                <div style={st.dropdownEmail}>{user?.email}</div>
-                <hr style={st.dropdownDivider} />
-                <button style={st.dropdownItem} onClick={() => { setMenuOpen(false); navigate('/profile') }}>My Profile</button>
-                {isAdmin && (
-                  <>
-                    <hr style={st.dropdownDivider} />
-                    <button style={{ ...st.dropdownItem, color: '#c9a84c' }}
-                      onClick={() => { setMenuOpen(false); navigate('/admin') }}>
-                      Admin Panel
-                    </button>
-                  </>
-                )}
-                <hr style={st.dropdownDivider} />
-                <button style={{ ...st.dropdownItem, ...st.dropdownSignOut }} onClick={handleSignOut}>
-                  Sign out
-                </button>
-              </div>
-            )}
+            <ProfileDropdown user={user} isAdmin={isAdmin} />
           </div>
         </div>
       </nav>
