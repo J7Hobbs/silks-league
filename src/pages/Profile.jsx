@@ -31,6 +31,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import ProfileDropdown from '../components/ProfileDropdown.jsx'
 
 // ── Ordinal helper ─────────────────────────────────────────────────────────
 function ordinal(n) {
@@ -391,33 +392,7 @@ export default function Profile() {
             {isAdmin && <a href="/admin" style={{ ...st.navLink, color: '#c9a84c' }}>Admin</a>}
           </div>
           <div style={st.navRight}>
-            <div style={{ ...st.avatar, outline: '2px solid #c9a84c', outlineOffset: '2px' }}
-              onClick={() => setMenuOpen(!menuOpen)} title={user?.email}>
-              {getInitials()}
-            </div>
-            {menuOpen && (
-              <div style={st.dropdownMenu}>
-                <div style={st.dropdownEmail}>{user?.email}</div>
-                <hr style={st.dropdownDivider} />
-                <button style={{ ...st.dropdownItem, color: '#c9a84c', fontWeight: '600' }}
-                  onClick={() => { setMenuOpen(false); navigate('/profile') }}>
-                  My Profile
-                </button>
-                {isAdmin && (
-                  <>
-                    <hr style={st.dropdownDivider} />
-                    <button style={{ ...st.dropdownItem, color: '#c9a84c' }}
-                      onClick={() => { setMenuOpen(false); navigate('/admin') }}>
-                      Admin Panel
-                    </button>
-                  </>
-                )}
-                <hr style={st.dropdownDivider} />
-                <button style={{ ...st.dropdownItem, color: '#f87171' }} onClick={handleSignOut}>
-                  Sign out
-                </button>
-              </div>
-            )}
+            <ProfileDropdown user={user} isAdmin={isAdmin} />
           </div>
         </div>
       </nav>
