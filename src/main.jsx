@@ -13,6 +13,7 @@ import Results        from './pages/Results.jsx'
 import Profile        from './pages/Profile.jsx'
 import Groups         from './pages/Groups.jsx'
 import PlayerPicks    from './pages/PlayerPicks.jsx'
+import Account        from './pages/Account.jsx'
 import InstallPrompt  from './components/InstallPrompt.jsx'
 
 createRoot(document.getElementById('root')).render(
@@ -30,6 +31,7 @@ createRoot(document.getElementById('root')).render(
         <Route path="/profile"   element={<Profile />}   />
         <Route path="/groups"              element={<Groups />}      />
         <Route path="/player-picks/:userId" element={<PlayerPicks />} />
+        <Route path="/account"             element={<Account />}      />
       </Routes>
       <InstallPrompt />
     </BrowserRouter>
