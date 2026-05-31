@@ -160,7 +160,7 @@ export default function Admin() {
   const [editRaceForm, setEditRaceForm] = useState({})
 
   // ── Runners ──
-  const EMPTY_RUNNER = { number: '', name: '', jockey: '', trainer: '', colour: '', odds: '' }
+  const EMPTY_RUNNER = { number: '', name: '', jockey: '', trainer: '', colour: '', odds: '', form: '' }
   const [runners, setRunners]             = useState({})
   const [newRunnerForm, setNewRunnerForm] = useState({})       // keyed by raceId → EMPTY_RUNNER
   const [editingRunner, setEditingRunner] = useState(null)     // runner_id being edited
@@ -427,7 +427,7 @@ export default function Admin() {
   }
 
   // ── Runner CRUD ──────────────────────────────────────────────
-  function nrf(raceId) { return newRunnerForm[raceId] || { number: '', name: '', jockey: '', trainer: '', colour: '', odds: '' } }
+  function nrf(raceId) { return newRunnerForm[raceId] || { number: '', name: '', jockey: '', trainer: '', colour: '', odds: '', form: '' } }
   function setNrf(raceId, patch) { setNewRunnerForm(p => ({ ...p, [raceId]: { ...nrf(raceId), ...patch } })) }
 
   async function addRunner(raceId) {
@@ -444,10 +444,11 @@ export default function Admin() {
       silk_colour: form.colour || null,
       odds_fractional: form.odds.trim() || null,
       odds_decimal: oddsDecimal,
+      form_string: form.form.trim() || null,
     })
     setLoading(false)
     if (error) { showToast('error', error.message); return }
-    setNewRunnerForm(p => ({ ...p, [raceId]: { number: '', name: '', jockey: '', trainer: '', colour: '', odds: '' } }))
+    setNewRunnerForm(p => ({ ...p, [raceId]: { number: '', name: '', jockey: '', trainer: '', colour: '', odds: '', form: '' } }))
     await loadRunners(raceId)
     showToast('success', 'Runner added')
   }
@@ -461,6 +462,7 @@ export default function Admin() {
       trainer: runner.trainer || '',
       colour:  runner.silk_colour || '',
       odds:    runner.odds_fractional || '',
+      form:    runner.form_string || '',
     })
   }
 
@@ -476,6 +478,7 @@ export default function Admin() {
       silk_colour:     editRunnerForm.colour || null,
       odds_fractional: editRunnerForm.odds.trim() || null,
       odds_decimal:    oddsDecimal,
+      form_string:     editRunnerForm.form.trim() || null,
     }).eq('id', runnerId)
     setLoading(false)
     if (error) { showToast('error', error.message); return }
@@ -520,11 +523,12 @@ export default function Admin() {
       const parts = raw.map(p => p.trim())
 
       if (parts.length < 6) {
-        errors.push(`Line ${lineNum}: expected 6 fields (got ${parts.length}) — "${line}"`)
+        errors.push(`Line ${lineNum}: expected at least 6 fields (got ${parts.length}) — "${line}"`)
         return
       }
 
-      const [numStr, name, jockey, trainer, oddsStr, colour] = parts
+      const [numStr, name, jockey, trainer, oddsStr, colour, ...rest] = parts
+      const formStr = rest.join(',').trim() || null   // 7th field (optional)
 
       if (!name) {
         errors.push(`Line ${lineNum}: horse name is empty`)
@@ -560,6 +564,7 @@ export default function Admin() {
         odds_fractional: oddsStr  || null,
         odds_decimal:    oddsDecimal || null,
         silk_colour:     silkColour,
+        form_string:     formStr,
       })
     })
 
@@ -1367,6 +1372,12 @@ export default function Admin() {
                                         value={editRunnerForm.odds}
                                         onChange={e => setEditRunnerForm(f => ({ ...f, odds: e.target.value }))} />
                                     </div>
+                                    <div style={{ ...st.formField, gridColumn: 'span 4' }}>
+                                      <label style={st.label}>Form</label>
+                                      <input style={st.input} placeholder="e.g. 322-42"
+                                        value={editRunnerForm.form || ''}
+                                        onChange={e => setEditRunnerForm(f => ({ ...f, form: e.target.value }))} />
+                                    </div>
                                     <div style={{ ...st.formField, gridColumn: '1 / -1' }}>
                                       <label style={st.label}>Silk Colour</label>
                                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
@@ -1468,6 +1479,12 @@ export default function Admin() {
                                   value={nrf(race.id).odds}
                                   onChange={e => setNrf(race.id, { odds: e.target.value })} />
                               </div>
+                              <div style={{ ...st.formField, gridColumn: 'span 4' }}>
+                                <label style={st.label}>Form</label>
+                                <input style={st.input} placeholder="e.g. 322-42"
+                                  value={nrf(race.id).form || ''}
+                                  onChange={e => setNrf(race.id, { form: e.target.value })} />
+                              </div>
                               <div style={{ ...st.formField, gridColumn: '1 / -1' }}>
                                 <label style={st.label}>Silk Colour</label>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
@@ -1492,8 +1509,9 @@ export default function Admin() {
                               </div>
                               <div style={{ fontSize: '0.75rem', color: '#5a8a5a', marginBottom: '0.65rem', lineHeight: 1.5 }}>
                                 One runner per line in this format:<br />
-                                <span style={{ color: '#7aaa7a', fontFamily: 'monospace' }}>number, horse_name, jockey, trainer, odds, #hex_colour</span><br />
-                                <span style={{ color: '#4a6a4a', fontFamily: 'monospace', fontSize: '0.7rem' }}>e.g. 7, Recency Bias, Jack Nicholls, K R Burke, 11/2, #1a3a10</span>
+                                <span style={{ color: '#7aaa7a', fontFamily: 'monospace' }}>number, horse_name, jockey, trainer, odds, #hex_colour, form_string</span><br />
+                                <span style={{ color: '#4a6a4a', fontFamily: 'monospace', fontSize: '0.7rem' }}>e.g. 7, Recency Bias, Jack Nicholls, K R Burke, 11/2, #1a3a10, 9017-9</span><br />
+                                <span style={{ color: '#4a6a4a', fontSize: '0.7rem' }}>Form string is optional — omit if not available.</span>
                               </div>
 
                               <textarea
@@ -1504,7 +1522,7 @@ export default function Admin() {
                                   fontFamily: 'monospace', fontSize: '0.8rem', lineHeight: 1.6,
                                   resize: 'vertical', minHeight: '130px', outline: 'none',
                                 }}
-                                placeholder={`1, Horse Name, Jockey Name, Trainer Name, 7/1, #1a3a10\n2, Another Horse, A. Jockey, G. Trainer, 11/4, #2a4a20\n3, Third Horse, B. Rider, H. Handler, Evens, #3a2a10`}
+                                placeholder={`1, Horse Name, Jockey Name, Trainer Name, 7/1, #1a3a10, 322-42\n2, Another Horse, A. Jockey, G. Trainer, 11/4, #2a4a20, 1-2113\n3, Third Horse, B. Rider, H. Handler, Evens, #3a2a10`}
                                 value={bulkImportText[race.id] || ''}
                                 onChange={e => setBulkImportText(p => ({ ...p, [race.id]: e.target.value }))}
                               />

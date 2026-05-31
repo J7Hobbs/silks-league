@@ -59,7 +59,7 @@ export default function Races() {
     // All runners for these races
     const { data: runners } = await supabase
       .from('runners')
-      .select('id, race_id, horse_number, horse_name, jockey, trainer, silk_colour, odds_fractional')
+      .select('id, race_id, horse_number, horse_name, jockey, trainer, silk_colour, odds_fractional, form_string')
       .in('race_id', raceIds)
       .order('horse_number', { ascending: true })
 
@@ -282,6 +282,11 @@ export default function Races() {
                                 {runner.jockey && <span>J: {runner.jockey}</span>}
                                 {runner.trainer && <span>T: {runner.trainer}</span>}
                               </div>
+                              {runner.form_string && (
+                                <div style={{ fontSize: '0.72rem', color: '#5a8a5a', marginTop: '0.1rem' }}>
+                                  Form: {runner.form_string}
+                                </div>
+                              )}
                             </div>
                           </div>
                         )
