@@ -2,9 +2,9 @@ import { useNavigate } from 'react-router-dom'
 import './index.css'
 
 const STATS = [
-  { value: '5', label: 'Races every Saturday' },
+  { value: '7', label: 'Races every Saturday' },
   { value: '25pts', label: 'For a winner' },
-  { value: '200', label: 'Max points per week' },
+  { value: '280', label: 'Max points per week' },
   { value: '£0', label: 'Cost to play' },
 ]
 
@@ -17,14 +17,14 @@ const STEPS = [
   },
   {
     num: '02',
-    title: 'Pick your 5 horses',
+    title: 'Pick your 7 horses',
     desc: 'Each Saturday, pick one horse per race from the listed runners. Picks open on Friday and close at 12pm Saturday — change your mind as many times as you like before the cutoff.',
     icon: '✏️',
   },
   {
     num: '03',
     title: 'Watch the races live',
-    desc: 'Tune in and see how your picks perform across all 5 races throughout the afternoon.',
+    desc: 'Tune in and see how your picks perform across all 7 races throughout the afternoon.',
     icon: '📺',
   },
   {
@@ -109,7 +109,7 @@ export default function App() {
         <div className="hero-inner">
           <div className="hero-badge">
             <span className="badge-pulse" />
-            Every Saturday &middot; 5 races &middot; Free to play
+            Every Saturday &middot; 7 races &middot; Free to play
           </div>
           <h1 className="hero-headline">
             Pick your horses.<br />Rule the league.
@@ -169,7 +169,7 @@ export default function App() {
               all the way up to 40 points in a single race.
             </p>
             <p className="split-body">
-              With 5 races and a maximum of 200 points on offer each week, every pick matters.
+              With 7 races and a maximum of 280 points on offer each week, every pick matters.
               The season runs across four quarters — Q1 (Jan–Mar), Q2 (Apr–Jun),
               Q3 (Jul–Sep) and Q4 (Oct–Dec) — 13 Saturdays each. Compete for the weekly
               prize, your quarterly title, or go all out for the annual championship.
@@ -216,7 +216,7 @@ export default function App() {
             </div>
 
             <div className="points-max-banner">
-              Maximum <strong>40 points</strong> per race &nbsp;·&nbsp; <strong>200 points</strong> per week
+              Maximum <strong>40 points</strong> per race &nbsp;·&nbsp; <strong>280 points</strong> per week
             </div>
           </div>
         </div>
@@ -256,7 +256,7 @@ export default function App() {
 
           <p className="lb-note">
             Live results update automatically each Saturday after the final race.
-            Max 40 pts per race · 200 pts per week · Odds bonus applied to winners and placed horses.
+            Max 40 pts per race · 280 pts per week · Odds bonus applied to winners and placed horses.
           </p>
         </div>
       </section>

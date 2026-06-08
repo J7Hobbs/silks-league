@@ -344,7 +344,7 @@ export default function Dashboard() {
           <div style={styles.card}>
             <div style={styles.cardHeader}>
               <span style={styles.cardTitle}>This Week's Races</span>
-              <span style={styles.cardBadge}>{races.length} / 5 races</span>
+              <span style={styles.cardBadge}>{races.length} / 7 races</span>
             </div>
             <div style={styles.raceList}>
               {races.length === 0 ? (

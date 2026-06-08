@@ -147,9 +147,11 @@ export default function Admin() {
   const [editSeasonForm, setEditSeasonForm] = useState({})
 
   // ── Race week ──
-  const [currentWeek, setCurrentWeek]     = useState(null)
+  const [allWeeks, setAllWeeks]           = useState([])
+  const [currentWeek, setCurrentWeek]     = useState(null)   // the week currently being viewed/edited
   const [showWeekForm, setShowWeekForm]   = useState(false)
   const [weekDate, setWeekDate]           = useState('')
+  const [weekDeadlineTime, setWeekDeadlineTime] = useState('12:00')
   const [editingWeek, setEditingWeek]     = useState(false)
   const [editWeekForm, setEditWeekForm]   = useState({ saturdayDate: '', picksDeadline: '' })
 
@@ -201,15 +203,38 @@ export default function Admin() {
     setSeasons(data || [])
     const active = data?.find(s => s.is_active)
     setActiveSeason(active || null)
-    if (active) await loadCurrentWeek(active.id)
+    if (active) await loadAllWeeks(active.id)
   }
 
-  async function loadCurrentWeek(seasonId) {
+  // Returns the ID of the "active" week — closest upcoming Saturday, or most recent past
+  function getActiveWeekId(weeks) {
+    if (!weeks.length) return null
+    const todayStr = new Date().toISOString().split('T')[0]
+    const upcoming = weeks
+      .filter(w => w.saturday_date >= todayStr)
+      .sort((a, b) => a.saturday_date.localeCompare(b.saturday_date))
+    if (upcoming.length) return upcoming[0].id
+    return weeks[0].id  // weeks[0] = most recent (desc-sorted)
+  }
+
+  async function loadAllWeeks(seasonId, selectId) {
     const { data } = await supabase.from('race_weeks').select('*').eq('season_id', seasonId)
-      .order('saturday_date', { ascending: false }).limit(1)
-    const week = data?.[0] || null
+      .order('saturday_date', { ascending: false })
+    const weeks = data || []
+    setAllWeeks(weeks)
+    const targetId = selectId || getActiveWeekId(weeks)
+    const week = weeks.find(w => w.id === targetId) || weeks[0] || null
     setCurrentWeek(week)
     if (week) await loadRaces(week.id)
+  }
+
+  async function switchToWeek(week) {
+    if (week.id === currentWeek?.id) return
+    setCurrentWeek(week)
+    setRaces([])
+    setRunners({})
+    setRaceResults({})
+    await loadRaces(week.id)
   }
 
   async function loadRaces(weekId) {
@@ -326,16 +351,31 @@ export default function Admin() {
     e.preventDefault()
     if (!activeSeason) { showToast('error', 'Set an active season first'); return }
     setLoading(true)
+
+    // Duplicate check — warn if a week already exists for this Saturday
+    const { data: existing } = await supabase
+      .from('race_weeks').select('id, week_number').eq('season_id', activeSeason.id).eq('saturday_date', weekDate)
+    if (existing?.length) {
+      setLoading(false)
+      showToast('error', `A race week already exists for ${weekDate} (Week ${existing[0].week_number}) — select it from the week list`)
+      return
+    }
+
     const { data: weekList } = await supabase.from('race_weeks').select('id').eq('season_id', activeSeason.id)
-    const { error } = await supabase.from('race_weeks').insert({
-      season_id: activeSeason.id, week_number: (weekList?.length || 0) + 1,
-      saturday_date: weekDate, picks_deadline: `${weekDate}T12:00:00`, is_locked: false,
-    })
+    const { data: newWeek, error } = await supabase.from('race_weeks').insert({
+      season_id: activeSeason.id,
+      week_number: (weekList?.length || 0) + 1,
+      saturday_date: weekDate,
+      picks_deadline: `${weekDate}T${weekDeadlineTime}:00`,
+      is_locked: false,
+    }).select().single()
     setLoading(false)
     if (error) { showToast('error', error.message); return }
-    showToast('success', 'Race week created')
+    showToast('success', `Week ${(weekList?.length || 0) + 1} created — now add your 7 races below`)
     setShowWeekForm(false)
-    await loadCurrentWeek(activeSeason.id)
+    setWeekDate('')
+    setWeekDeadlineTime('12:00')
+    await loadAllWeeks(activeSeason.id, newWeek?.id)
   }
 
   function startEditWeek() {
@@ -356,7 +396,7 @@ export default function Admin() {
     if (error) { showToast('error', error.message); return }
     showToast('success', 'Race week updated')
     setEditingWeek(false)
-    await loadCurrentWeek(activeSeason.id)
+    await loadAllWeeks(activeSeason.id, currentWeek.id)
   }
 
   function deleteRaceWeek() {
@@ -366,8 +406,9 @@ export default function Admin() {
       async () => {
         const { error } = await supabase.from('race_weeks').delete().eq('id', currentWeek.id)
         if (error) { showToast('error', error.message); return }
-        setCurrentWeek(null); setRaces([]); setRunners({}); setRaceResults({})
+        setRaces([]); setRunners({}); setRaceResults({})
         showToast('success', 'Race week deleted')
+        await loadAllWeeks(activeSeason.id)
       }
     )
   }
@@ -1108,36 +1149,89 @@ export default function Admin() {
         {activeTab === 'races' && (
           <div style={st.section}>
             <div style={st.sectionHeader}>
-              <h2 style={st.sectionTitle}>This Week's Races</h2>
-              {activeSeason && !currentWeek && (
-                <button style={st.btnGold} onClick={() => setShowWeekForm(v => !v)}>+ Create Race Week</button>
+              <h2 style={st.sectionTitle}>Race Weeks</h2>
+              {activeSeason && (
+                <button style={st.btnGold} onClick={() => setShowWeekForm(v => !v)}>
+                  {showWeekForm ? 'Cancel' : '+ Create Race Week'}
+                </button>
               )}
             </div>
 
             {!activeSeason && <div style={st.warningCard}>No active season — go to Seasons tab first.</div>}
-            {activeSeason && !currentWeek && !showWeekForm && (
-              <div style={st.warningCard}>No race week yet. Click "Create Race Week".</div>
-            )}
 
-            {showWeekForm && (
+            {/* Create form */}
+            {activeSeason && showWeekForm && (
               <form onSubmit={createRaceWeek} style={st.formCard}>
-                <div style={st.formTitle}>Create Race Week</div>
-                <div style={st.formField}>
-                  <label style={st.label}>Saturday Date</label>
-                  <input style={{ ...st.input, maxWidth: '220px' }} type="date" value={weekDate}
-                    onChange={e => setWeekDate(e.target.value)} required />
+                <div style={st.formTitle}>Create New Race Week</div>
+                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                  <div style={st.formField}>
+                    <label style={st.label}>Saturday Date</label>
+                    <input style={{ ...st.input, maxWidth: '220px' }} type="date" value={weekDate}
+                      onChange={e => setWeekDate(e.target.value)} required />
+                  </div>
+                  <div style={st.formField}>
+                    <label style={st.label}>Picks Deadline (time)</label>
+                    <input style={{ ...st.input, maxWidth: '160px' }} type="time" value={weekDeadlineTime}
+                      onChange={e => setWeekDeadlineTime(e.target.value)} />
+                  </div>
                 </div>
-                <p style={{ fontSize: '0.8rem', color: '#5a8a5a', margin: '0.5rem 0 1rem' }}>
-                  Picks deadline automatically set to 12:00pm on this date.
+                <p style={{ fontSize: '0.78rem', color: '#5a8a5a', margin: '0.5rem 0 1rem' }}>
+                  Picks deadline defaults to 12:00pm. Creates a fresh week with 7 race slots.
                 </p>
                 <div style={st.formActions}>
-                  <button type="submit" style={st.btnGold} disabled={loading}>Create Week</button>
+                  <button type="submit" style={st.btnGold} disabled={loading}>{loading ? 'Creating…' : 'Create Race Week'}</button>
                   <button type="button" style={st.btnGhost} onClick={() => setShowWeekForm(false)}>Cancel</button>
                 </div>
               </form>
             )}
 
-            {currentWeek && (
+            {/* Week selector — show all weeks as pills */}
+            {activeSeason && allWeeks.length > 0 && (() => {
+              const todayStr = new Date().toISOString().split('T')[0]
+              const upcomingIds = allWeeks.filter(w => w.saturday_date >= todayStr)
+                .sort((a, b) => a.saturday_date.localeCompare(b.saturday_date))
+              const activeWeekId = upcomingIds[0]?.id || allWeeks[0]?.id
+              return (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                  {allWeeks.map(week => {
+                    const isActive   = week.id === activeWeekId
+                    const isSelected = week.id === currentWeek?.id
+                    return (
+                      <button key={week.id}
+                        onClick={() => switchToWeek(week)}
+                        style={{
+                          background: isSelected ? 'rgba(201,168,76,0.18)' : 'rgba(0,0,0,0.25)',
+                          border: `1px solid ${isSelected ? '#c9a84c' : 'rgba(201,168,76,0.15)'}`,
+                          borderRadius: '6px', padding: '0.4rem 0.85rem', cursor: 'pointer',
+                          fontFamily: "'DM Sans', sans-serif", fontSize: '0.78rem',
+                          color: isSelected ? '#e8f0e8' : '#5a8a5a', display: 'flex', alignItems: 'center', gap: '0.45rem',
+                          fontWeight: isSelected ? '600' : '400',
+                        }}>
+                        Week {week.week_number} · {week.saturday_date}
+                        {isActive && (
+                          <span style={{ fontSize: '0.62rem', fontWeight: '700', letterSpacing: '0.07em', color: '#c9a84c', background: 'rgba(201,168,76,0.15)', padding: '0.1rem 0.45rem', borderRadius: '999px', border: '1px solid rgba(201,168,76,0.3)' }}>
+                            ACTIVE
+                          </span>
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+              )
+            })()}
+
+            {activeSeason && allWeeks.length === 0 && !showWeekForm && (
+              <div style={st.warningCard}>No race week yet — click "+ Create Race Week" above to set one up.</div>
+            )}
+
+            {currentWeek && (() => {
+              const todayStr = new Date().toISOString().split('T')[0]
+              const isCurrentPastWeek = currentWeek.saturday_date < todayStr
+              const upcomingIds2 = allWeeks.filter(w => w.saturday_date >= todayStr)
+                .sort((a, b) => a.saturday_date.localeCompare(b.saturday_date))
+              const activeWeekId2 = upcomingIds2[0]?.id || allWeeks[0]?.id
+              const isActiveWeek = currentWeek.id === activeWeekId2
+              return (
               <>
                 {/* Week summary card */}
                 {editingWeek ? (
@@ -1161,23 +1255,33 @@ export default function Admin() {
                     </div>
                   </div>
                 ) : (
-                  <div style={st.infoCard}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div style={{ ...st.infoCard, ...(isCurrentPastWeek ? { borderColor: 'rgba(201,168,76,0.35)', borderLeftColor: 'rgba(201,168,76,0.35)', background: 'rgba(22,42,26,0.6)' } : {}) }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem', flexWrap: 'wrap' }}>
                       <div>
-                        <div style={st.infoCardBadge}>Current Week</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.3rem' }}>
+                          {isActiveWeek
+                            ? <span style={{ fontSize: '0.65rem', fontWeight: '700', letterSpacing: '0.1em', color: '#0a1a08', background: '#c9a84c', padding: '0.15rem 0.5rem', borderRadius: '999px' }}>ACTIVE</span>
+                            : <span style={{ fontSize: '0.65rem', fontWeight: '700', letterSpacing: '0.1em', color: '#5a8a5a', background: 'rgba(0,0,0,0.3)', padding: '0.15rem 0.5rem', borderRadius: '999px' }}>ARCHIVED</span>
+                          }
+                        </div>
                         <div style={st.infoCardTitle}>Week {currentWeek.week_number} · {currentWeek.saturday_date}</div>
-                        <div style={st.infoCardSub}>Picks deadline: {currentWeek.picks_deadline?.slice(11, 16) || '12:00'} · {races.length}/5 races</div>
+                        <div style={st.infoCardSub}>Picks deadline: {currentWeek.picks_deadline?.slice(11, 16) || '12:00'} · {races.length}/7 races</div>
                       </div>
-                      <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <button style={st.btnSmallGhost} onClick={startEditWeek}>Edit</button>
-                        <button style={st.btnSmallDanger} onClick={deleteRaceWeek}>Delete Week</button>
-                      </div>
+                      {!isCurrentPastWeek && (
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                          <button style={st.btnSmallGhost} onClick={startEditWeek}>Edit</button>
+                          <button style={st.btnSmallDanger} onClick={deleteRaceWeek}>Delete Week</button>
+                        </div>
+                      )}
+                      {isCurrentPastWeek && (
+                        <span style={{ fontSize: '0.72rem', color: '#5a8a5a', fontStyle: 'italic' }}>Past week — read only</span>
+                      )}
                     </div>
                     <div style={st.progressBar}>
-                      <div style={{ ...st.progressFill, width: `${(races.length / 5) * 100}%` }} />
+                      <div style={{ ...st.progressFill, width: `${(races.length / 7) * 100}%` }} />
                     </div>
-                    <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.75rem' }}>
-                      {[1,2,3,4,5].map(n => {
+                    <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.75rem', flexWrap: 'wrap' }}>
+                      {[1,2,3,4,5,6,7].map(n => {
                         const done = !!races.find(r => r.race_number === n)
                         return (
                           <div key={n} style={{
@@ -1194,8 +1298,14 @@ export default function Admin() {
                   </div>
                 )}
 
+                {isCurrentPastWeek && (
+                  <div style={{ background: 'rgba(90,138,90,0.06)', border: '1px solid rgba(90,138,90,0.2)', borderRadius: '8px', padding: '0.75rem 1rem', fontSize: '0.82rem', color: '#5a8a5a' }}>
+                    📦 This is a past week. Race setup is locked. You can still view and edit results from the Results tab.
+                  </div>
+                )}
+
                 {/* Race cards */}
-                {[1,2,3,4,5].map(raceNum => {
+                {[1,2,3,4,5,6,7].map(raceNum => {
                   const race        = races.find(r => r.race_number === raceNum)
                   const raceRunners = race ? (runners[race.id] || []) : []
 
@@ -1221,10 +1331,12 @@ export default function Admin() {
                                 </div>
                               </>
                             ) : (
-                              <button style={st.btnSmall}
-                                onClick={() => setShowRaceForm(p => ({ ...p, [raceNum]: !p[raceNum] }))}>
-                                {showRaceForm[raceNum] ? 'Cancel' : '+ Add Race'}
-                              </button>
+                              !isCurrentPastWeek && (
+                                <button style={st.btnSmall}
+                                  onClick={() => setShowRaceForm(p => ({ ...p, [raceNum]: !p[raceNum] }))}>
+                                  {showRaceForm[raceNum] ? 'Cancel' : '+ Add Race'}
+                                </button>
+                              )
                             )}
                           </>
                         )}
@@ -1236,7 +1348,7 @@ export default function Admin() {
                           <div style={st.formGrid} className="app-grid-2">
                             <div style={st.formField}>
                               <label style={st.label}>Race Number</label>
-                              <input style={st.input} type="number" min="1" max="5"
+                              <input style={st.input} type="number" min="1" max="7"
                                 value={editRaceForm.raceNumber}
                                 onChange={e => setEditRaceForm({ ...editRaceForm, raceNumber: e.target.value })} />
                             </div>
@@ -1264,7 +1376,7 @@ export default function Admin() {
                       )}
 
                       {/* New race form */}
-                      {!race && showRaceForm[raceNum] && (
+                      {!race && showRaceForm[raceNum] && !isCurrentPastWeek && (
                         <div style={st.raceCardBody}>
                           <div style={st.formGrid} className="app-grid-2">
                             <div style={st.formField}>
@@ -1387,8 +1499,8 @@ export default function Admin() {
                             </div>
                           ))}
 
-                          {/* Add runner form */}
-                          <div style={st.addRunnerCard}>
+                          {/* Add runner form — hidden for past weeks */}
+                          {!isCurrentPastWeek && <div style={st.addRunnerCard}>
                             <div style={{ fontSize: '0.7rem', fontWeight: '700', color: '#5a8a5a', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '0.75rem' }}>Add Runner</div>
                             <div style={st.runnerFormGrid} className="admin-runner-grid">
                               <div style={st.formField}>
@@ -1442,7 +1554,7 @@ export default function Admin() {
                             <button style={{ ...st.btnGold, marginTop: '0.85rem' }} onClick={() => addRunner(race.id)} disabled={loading}>
                               {loading ? 'Adding…' : '+ Add Runner'}
                             </button>
-                          </div>
+                          </div>}
 
                           {/* ── Bulk import panel ── */}
                           {bulkImportOpen.has(race.id) && (
@@ -1500,7 +1612,8 @@ export default function Admin() {
                   )
                 })}
               </>
-            )}
+              )
+            })()}
           </div>
         )}
 

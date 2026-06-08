@@ -1,9 +1,11 @@
 /**
  * Silks League — Picks Page
  *
- * Lets users make their 5 picks for the current race week.
+ * Lets users make their 7 picks for the current race week.
  * Loads race week, races, runners and existing picks from Supabase.
  * Picks lock automatically once the picks_deadline passes.
+ * Race week selection: finds the closest upcoming week whose deadline
+ * has not yet passed, or falls back to the most recent week.
  */
 
 import { useState, useEffect } from 'react'
@@ -82,16 +84,19 @@ export default function Picks() {
       .from('seasons').select('id').eq('is_active', true).single()
     if (!season) { setNoWeek(true); setLoading(false); return }
 
-    // ── Race week — prefer this Saturday, fall back to most recent ──
-    const satDate = getUpcomingSaturday()
+    // ── Race week — find closest upcoming week whose deadline hasn't passed ──
+    const now = new Date()
     const { data: weeks } = await supabase
       .from('race_weeks').select('*')
       .eq('season_id', season.id)
-      .order('saturday_date', { ascending: false })
-      .limit(5)
+      .order('saturday_date', { ascending: true })  // ascending so find() hits closest first
 
-    const week =
-      weeks?.find(w => w.saturday_date === satDate) || weeks?.[0] || null
+    // Pick the first week whose picks_deadline hasn't passed yet
+    // (or if none, fall back to the most recent week)
+    const week = weeks?.find(w => {
+      const deadline = w.picks_deadline ? new Date(w.picks_deadline) : new Date(w.saturday_date + 'T12:00:00')
+      return now < deadline
+    }) || (weeks?.length ? weeks[weeks.length - 1] : null)
 
     if (!week) { setNoWeek(true); setLoading(false); return }
     setCurrentWeek(week)
