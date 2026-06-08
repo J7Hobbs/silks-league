@@ -2366,8 +2366,7 @@ export default function Admin() {
                                     <textarea style={{ ...st.input, width: '100%', minHeight: '120px', fontFamily: 'monospace', fontSize: '0.8rem', resize: 'vertical', boxSizing: 'border-box' }}
                                       value={festivalBulkText[race.id] || ''}
                                       onChange={e => setFestivalBulkText(p => ({...p, [race.id]: e.target.value}))}
-                                      placeholder={"1, Corach Rambler, D. Skelton, H. Skelton, 7/2, #1a3a7a
-2, Galopin Des Champs, W. Mullins, P. Townend, 2/1, #5a1010"} />
+                                      placeholder={"1, Corach Rambler, D. Skelton, H. Skelton, 7/2, #1a3a7a\n2, Galopin Des Champs, W. Mullins, P. Townend, 2/1, #5a1010"} />
                                     {festivalBulkResult[race.id] && (
                                       <div style={{ marginTop: '0.5rem' }}>
                                         {festivalBulkResult[race.id].errors.map((msg, i) => <div key={i} style={{ fontSize: '0.75rem', color: '#f87171' }}>✗ {msg}</div>)}
