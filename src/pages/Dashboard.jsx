@@ -16,6 +16,11 @@ export default function Dashboard() {
   const [currentWeekNum, setCurrentWeekNum] = useState(null)
   const [now, setNow] = useState(new Date())
 
+  const [festival, setFestival]             = useState(null)
+  const [festivalEntry, setFestivalEntry]   = useState(null)
+  const [festivalPoints, setFestivalPoints] = useState(null)
+  const [joiningFestival, setJoiningFestival] = useState(false)
+
   // Tick every second
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000)
@@ -34,6 +39,7 @@ export default function Dashboard() {
         await loadRaces()
         await loadStats(user.id)
         await loadLeaderboard(user.id)
+        await loadFestival(user.id)
         setLoading(false)
       }
     })
@@ -155,22 +161,67 @@ export default function Dashboard() {
     })
 
     const { data: profiles } = await supabase
-      .from('profiles').select('id, username, display_name, full_name').in('id', Object.keys(byUser))
+      .from('profiles').select('id, username, display_name, full_name, season_starting_points').in('id', Object.keys(byUser))
     profiles?.forEach(p => {
-      if (byUser[p.id]) byUser[p.id].name = p.username || p.display_name || p.full_name || null
+      if (byUser[p.id]) {
+        byUser[p.id].name = p.username || p.display_name || p.full_name || null
+        byUser[p.id].startingPoints = p.season_starting_points || 0
+        byUser[p.id].total += (p.season_starting_points || 0)
+      }
     })
 
     const sorted = Object.values(byUser)
       .sort((a, b) => b.total - a.total)
       .slice(0, 5)
       .map((u, i) => ({
-        rank:    i + 1,
-        userId:  u.user_id,
-        name:    u.user_id === myUserId ? 'You' : (u.name || `Player ${i + 1}`),
-        points:  u.total,
-        isMe:    u.user_id === myUserId,
+        rank:         i + 1,
+        userId:       u.user_id,
+        name:         u.user_id === myUserId ? 'You' : (u.name || `Player ${i + 1}`),
+        points:       u.total,
+        isMe:         u.user_id === myUserId,
+        midSeason:    (u.startingPoints || 0) > 0,
       }))
     setLeaderboard(sorted)
+  }
+
+
+  async function loadFestival(userId) {
+    // Find the active festival
+    const { data: fest } = await supabase
+      .from('festivals').select('*').eq('is_active', true).single()
+    if (!fest) return
+    setFestival(fest)
+
+    // Check if user has entered
+    const { data: entry } = await supabase
+      .from('festival_entries').select('*').eq('festival_id', fest.id).eq('user_id', userId).single()
+    setFestivalEntry(entry || null)
+
+    // Sum user's festival scores
+    if (entry) {
+      const { data: days } = await supabase
+        .from('festival_days').select('id').eq('festival_id', fest.id)
+      if (!days?.length) return
+      const { data: races } = await supabase
+        .from('festival_races').select('id').in('festival_day_id', days.map(d => d.id))
+      if (!races?.length) return
+      const { data: scores } = await supabase
+        .from('festival_scores').select('total_points').eq('user_id', userId).in('festival_race_id', races.map(r => r.id))
+      const total = (scores?.reduce((s, r) => s + (r.total_points || 0), 0) ?? 0) + (entry.starting_points || 0)
+      setFestivalPoints(total)
+    }
+  }
+
+  async function joinFestival() {
+    if (!festival || !user || joiningFestival) return
+    setJoiningFestival(true)
+    const { error } = await supabase.from('festival_entries').insert({
+      festival_id: festival.id,
+      user_id: user.id,
+      starting_points: 0,
+    })
+    setJoiningFestival(false)
+    if (!error) await loadFestival(user.id)
   }
 
   const handleSignOut = async () => {
@@ -282,6 +333,10 @@ export default function Dashboard() {
             <a href="/races"     style={styles.navLink}>Races</a>
             <a href="/results"   style={styles.navLink}>Results</a>
             <a href="/groups"    style={styles.navLink}>Groups</a>
+            {/* Festival link — shown when a festival is active */}
+            {festival && (
+              <a href="/festival-picks" style={{ ...styles.navLink, color: '#c9a84c' }}>🏇 Festival</a>
+            )}
             {/* Admin link — only shown to admin users */}
             {isAdmin && (
               <a href="/admin" style={{ ...styles.navLink, color: '#c9a84c' }}>Admin</a>
@@ -337,6 +392,35 @@ export default function Dashboard() {
           ))}
         </section>
 
+
+        {/* Festival banner */}
+        {festival && (
+          <section style={{ background: festival.banner_colour || '#1a6b3a', borderRadius: '12px', padding: '1.25rem 1.5rem', border: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
+            <div>
+              <div style={{ fontSize: '0.65rem', fontWeight: '700', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.6)', marginBottom: '0.25rem' }}>Festival Tournament · Active</div>
+              <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.6rem', color: '#fff', letterSpacing: '0.04em', lineHeight: 1 }}>{festival.display_name || festival.name}</div>
+              <div style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.65)', marginTop: '0.2rem' }}>{festival.start_date} → {festival.end_date}</div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', flexWrap: 'wrap' }}>
+              {festivalEntry ? (
+                <>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '2rem', color: '#fff', lineHeight: 1 }}>{festivalPoints ?? '—'}</div>
+                    <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>pts</div>
+                  </div>
+                  <button style={{ background: 'rgba(255,255,255,0.15)', border: '1.5px solid rgba(255,255,255,0.4)', color: '#fff', borderRadius: '8px', padding: '0.55rem 1.1rem', fontFamily: "'DM Sans', sans-serif", fontWeight: '600', fontSize: '0.875rem', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                    onClick={() => navigate('/festival-picks')}>Make Picks →</button>
+                </>
+              ) : (
+                <button style={{ background: '#fff', color: festival.banner_colour || '#1a6b3a', border: 'none', borderRadius: '8px', padding: '0.6rem 1.3rem', fontFamily: "'DM Sans', sans-serif", fontWeight: '700', fontSize: '0.9rem', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                  onClick={joinFestival} disabled={joiningFestival}>
+                  {joiningFestival ? 'Joining…' : 'Join Festival →'}
+                </button>
+              )}
+            </div>
+          </section>
+        )}
+
         {/* Two-column layout */}
         <section style={styles.twoCol} className="app-grid-2">
 
@@ -387,8 +471,11 @@ export default function Dashboard() {
                     <div style={styles.leaderRank}>
                       {row.rank === 1 ? '🥇' : row.rank === 2 ? '🥈' : row.rank === 3 ? '🥉' : `#${row.rank}`}
                     </div>
-                    <div style={{ ...styles.leaderName, cursor: 'pointer', textDecoration: 'underline dotted' }}
-                      onClick={() => navigate(`/player-picks/${row.userId}`)}>{row.name}</div>
+                    <div style={{ ...styles.leaderName, cursor: 'pointer', textDecoration: 'underline dotted', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+                      onClick={() => navigate(`/player-picks/${row.userId}`)}>
+                      {row.name}
+                      {row.midSeason && <span style={{ fontSize: '0.6rem', fontWeight: '700', letterSpacing: '0.06em', color: '#5a8a5a', background: 'rgba(90,138,90,0.12)', padding: '0.1rem 0.4rem', borderRadius: '3px', whiteSpace: 'nowrap' }}>mid-season</span>}
+                    </div>
                     <div style={styles.leaderPoints}>{row.points} pts</div>
                   </div>
                 ))
@@ -439,6 +526,11 @@ export default function Dashboard() {
         <a href="/groups" style={styles.mobileBarItem}>
           <span>👥</span><span style={styles.mobileBarLabel}>Groups</span>
         </a>
+        {festival && (
+          <a href="/festival-picks" style={{ ...styles.mobileBarItem, color: '#c9a84c' }}>
+            <span>🏇</span><span style={styles.mobileBarLabel}>Festival</span>
+          </a>
+        )}
       </nav>
 
     </div>

@@ -142,7 +142,7 @@ export default function Admin() {
   const [seasons, setSeasons]               = useState([])
   const [activeSeason, setActiveSeason]     = useState(null)
   const [showSeasonForm, setShowSeasonForm] = useState(false)
-  const [seasonForm, setSeasonForm]         = useState({ name: '', quarter: 'Q1', year: new Date().getFullYear(), startDate: '', endDate: '' })
+  const [seasonForm, setSeasonForm]         = useState({ name: '', displayName: '', quarter: 'Q1', year: new Date().getFullYear(), startDate: '', endDate: '' })
   const [editingSeason, setEditingSeason]   = useState(null)   // id being edited
   const [editSeasonForm, setEditSeasonForm] = useState({})
 
@@ -173,6 +173,27 @@ export default function Admin() {
   const [bulkImportOpen,   setBulkImportOpen]   = useState(new Set())   // Set of raceIds
   const [bulkImportText,   setBulkImportText]   = useState({})          // { [raceId]: string }
   const [bulkImportResult, setBulkImportResult] = useState({})          // { [raceId]: { errors, warnings } }
+
+
+  // ── Festivals ──
+  const [festivals, setFestivals]                     = useState([])
+  const [selectedFestival, setSelectedFestival]       = useState(null)
+  const [festivalDays, setFestivalDays]               = useState([])
+  const [selectedDay, setSelectedDay]                 = useState(null)
+  const [festivalRaces, setFestivalRaces]             = useState([])
+  const [festivalRunners, setFestivalRunners]         = useState({})  // { raceId: [...] }
+  const [festivalResults, setFestivalResults]         = useState({})  // { raceId: [...] }
+  const [showFestivalForm, setShowFestivalForm]       = useState(false)
+  const [festivalForm, setFestivalForm]               = useState({ name: '', displayName: '', bannerColour: '#c9a84c', startDate: '', endDate: '' })
+  const [editingFestival, setEditingFestival]         = useState(null)
+  const [editFestivalForm, setEditFestivalForm]       = useState({})
+  const [festivalBulkOpen, setFestivalBulkOpen]       = useState(new Set())
+  const [festivalBulkText, setFestivalBulkText]       = useState({})
+  const [festivalBulkResult, setFestivalBulkResult]   = useState({})
+  const [festivalResultForms, setFestivalResultForms] = useState({})
+  const [festivalUnlocked, setFestivalUnlocked]       = useState(new Set())
+  const [showFestivalRaceForm, setShowFestivalRaceForm] = useState({})
+  const [festivalRaceForms, setFestivalRaceForms]     = useState({})
 
   // ── Withdrawals ──
   // (no extra state needed — withdrawal state lives on runners.is_withdrawn in DB)
@@ -293,14 +314,14 @@ export default function Admin() {
   async function createSeason(e) {
     e.preventDefault(); setLoading(true)
     const { error } = await supabase.from('seasons').insert({
-      name: seasonForm.name, quarter: seasonForm.quarter,
+      name: seasonForm.name, display_name: seasonForm.displayName || null, quarter: seasonForm.quarter,
       year: parseInt(seasonForm.year), start_date: seasonForm.startDate, end_date: seasonForm.endDate, is_active: false,
     })
     setLoading(false)
     if (error) { showToast('error', error.message); return }
     showToast('success', 'Season created')
     setShowSeasonForm(false)
-    setSeasonForm({ name: '', quarter: 'Q1', year: new Date().getFullYear(), startDate: '', endDate: '' })
+    setSeasonForm({ name: '', displayName: '', quarter: 'Q1', year: new Date().getFullYear(), startDate: '', endDate: '' })
     await loadSeasons()
   }
 
@@ -949,6 +970,321 @@ export default function Admin() {
     )
   }
 
+
+  // ── Festival loaders ──────────────────────────────────────────
+  async function loadFestivals() {
+    const { data } = await supabase.from('festivals').select('*').order('start_date', { ascending: false })
+    setFestivals(data || [])
+    const first = data?.find(f => f.is_active) || data?.[0] || null
+    setSelectedFestival(first)
+    if (first) await loadFestivalDays(first.id)
+  }
+
+  async function selectFestivalById(festival) {
+    setSelectedFestival(festival)
+    setFestivalDays([])
+    setSelectedDay(null)
+    setFestivalRaces([])
+    setFestivalRunners({})
+    setFestivalResults({})
+    await loadFestivalDays(festival.id)
+  }
+
+  async function loadFestivalDays(festivalId) {
+    const { data } = await supabase.from('festival_days').select('*').eq('festival_id', festivalId).order('day_number')
+    setFestivalDays(data || [])
+    if (data?.length) {
+      setSelectedDay(data[0])
+      await loadFestivalRaces(data[0].id)
+    } else {
+      setSelectedDay(null)
+      setFestivalRaces([])
+    }
+  }
+
+  async function selectFestivalDay(day) {
+    if (day.id === selectedDay?.id) return
+    setSelectedDay(day)
+    setFestivalRaces([])
+    setFestivalRunners({})
+    setFestivalResults({})
+    await loadFestivalRaces(day.id)
+  }
+
+  async function loadFestivalRaces(dayId) {
+    const { data } = await supabase.from('festival_races').select('*').eq('festival_day_id', dayId).order('race_number')
+    setFestivalRaces(data || [])
+    for (const race of (data || [])) {
+      await loadFestivalRunners(race.id)
+      await loadFestivalResults(race.id)
+    }
+  }
+
+  async function loadFestivalRunners(raceId) {
+    const { data } = await supabase.from('festival_runners').select('*').eq('festival_race_id', raceId).order('horse_number')
+    setFestivalRunners(prev => ({ ...prev, [raceId]: data || [] }))
+  }
+
+  async function loadFestivalResults(raceId) {
+    const { data } = await supabase.from('festival_results').select('*').eq('festival_race_id', raceId).order('position')
+    setFestivalResults(prev => ({ ...prev, [raceId]: data || [] }))
+  }
+
+  // ── Festival CRUD ─────────────────────────────────────────────
+  async function createFestival(e) {
+    e.preventDefault(); setLoading(true)
+    const { data: fest, error } = await supabase.from('festivals').insert({
+      name: festivalForm.name,
+      display_name: festivalForm.displayName || null,
+      banner_colour: festivalForm.bannerColour || '#c9a84c',
+      start_date: festivalForm.startDate,
+      end_date: festivalForm.endDate,
+      is_active: false,
+    }).select().single()
+    setLoading(false)
+    if (error) { showToast('error', error.message); return }
+    showToast('success', 'Festival created')
+    setShowFestivalForm(false)
+    setFestivalForm({ name: '', displayName: '', bannerColour: '#c9a84c', startDate: '', endDate: '' })
+    await loadFestivals()
+    // Auto-generate days
+    if (fest) await generateFestivalDays(fest)
+  }
+
+  async function saveFestivalEdit(id) {
+    setLoading(true)
+    const { error } = await supabase.from('festivals').update({
+      name: editFestivalForm.name,
+      display_name: editFestivalForm.displayName || null,
+      banner_colour: editFestivalForm.bannerColour || '#c9a84c',
+      start_date: editFestivalForm.startDate,
+      end_date: editFestivalForm.endDate,
+    }).eq('id', id)
+    setLoading(false)
+    if (error) { showToast('error', error.message); return }
+    showToast('success', 'Festival updated')
+    setEditingFestival(null)
+    await loadFestivals()
+  }
+
+  async function activateFestival(id) {
+    setLoading(true)
+    await supabase.from('festivals').update({ is_active: false }).neq('id', id)
+    await supabase.from('festivals').update({ is_active: true }).eq('id', id)
+    await loadFestivals()
+    setLoading(false)
+    showToast('success', 'Festival set as active')
+  }
+
+  async function deactivateFestival(id) {
+    setLoading(true)
+    await supabase.from('festivals').update({ is_active: false }).eq('id', id)
+    await loadFestivals()
+    setLoading(false)
+    showToast('success', 'Festival deactivated')
+  }
+
+  async function deleteFestivalFn(id) {
+    const f = festivals.find(x => x.id === id)
+    confirm(
+      'Delete festival?',
+      `"${f?.name}" and all its days, races, runners and results will be permanently deleted.`,
+      async () => {
+        const { error } = await supabase.from('festivals').delete().eq('id', id)
+        if (error) { showToast('error', error.message); return }
+        showToast('success', 'Festival deleted')
+        await loadFestivals()
+      }
+    )
+  }
+
+  async function generateFestivalDays(festival) {
+    const start = new Date(festival.start_date + 'T12:00:00')
+    const end   = new Date(festival.end_date   + 'T12:00:00')
+    if (isNaN(start) || isNaN(end) || start > end) { showToast('error', 'Invalid date range'); return }
+
+    // Delete existing days first
+    await supabase.from('festival_days').delete().eq('festival_id', festival.id)
+
+    const dayRows = []
+    let cur = new Date(start)
+    let num = 1
+    const DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
+    while (cur <= end) {
+      const dateStr  = cur.toISOString().split('T')[0]
+      const dayName  = DAY_NAMES[cur.getDay()]
+      const deadline = dateStr + 'T11:30:00+00:00'
+      dayRows.push({
+        festival_id:    festival.id,
+        day_number:     num,
+        race_date:      dateStr,
+        label:          `Day ${num} — ${dayName}`,
+        picks_deadline: deadline,
+      })
+      cur.setDate(cur.getDate() + 1)
+      num++
+    }
+
+    setLoading(true)
+    const { error } = await supabase.from('festival_days').insert(dayRows)
+    setLoading(false)
+    if (error) { showToast('error', `Day generation failed: ${error.message}`); return }
+    showToast('success', `${dayRows.length} day${dayRows.length !== 1 ? 's' : ''} generated`)
+    await loadFestivalDays(festival.id)
+  }
+
+  // ── Festival race CRUD ────────────────────────────────────────
+  async function saveFestivalRace(dayId, raceNum) {
+    const form = festivalRaceForms[`${dayId}_${raceNum}`] || {}
+    setLoading(true)
+    const { error } = await supabase.from('festival_races').upsert({
+      festival_day_id: dayId,
+      race_number:     raceNum,
+      race_time:       form.raceTime || null,
+      venue:           form.venue    || null,
+      race_name:       form.raceName || null,
+    }, { onConflict: 'festival_day_id,race_number' })
+    setLoading(false)
+    if (error) { showToast('error', error.message); return }
+    showToast('success', `Race ${raceNum} saved`)
+    setShowFestivalRaceForm(p => { const n = { ...p }; delete n[`${dayId}_${raceNum}`]; return n })
+    setFestivalRaceForms(p => { const n = { ...p }; delete n[`${dayId}_${raceNum}`]; return n })
+    await loadFestivalRaces(dayId)
+  }
+
+  async function deleteFestivalRace(raceId, dayId) {
+    confirm('Delete race?', 'This will also delete all runners and results for this race.', async () => {
+      const { error } = await supabase.from('festival_races').delete().eq('id', raceId)
+      if (error) { showToast('error', error.message); return }
+      showToast('success', 'Race deleted')
+      await loadFestivalRaces(dayId)
+    })
+  }
+
+  // ── Festival bulk import ──────────────────────────────────────
+  async function bulkImportFestivalRunners(raceId) {
+    const text = festivalBulkText[raceId] || ''
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0)
+    if (!lines.length) { showToast('error', 'Paste some runners first'); return }
+
+    const existing     = festivalRunners[raceId] || []
+    const existingNames = new Set(existing.map(r => r.horse_name.toLowerCase()))
+    const errors = []; const warnings = []; const toInsert = []
+
+    lines.forEach((line, i) => {
+      const lineNum = i + 1
+      const parts = line.split(',').map(p => p.trim())
+      if (parts.length < 6) { errors.push(`Line ${lineNum}: expected 6 fields — "${line}"`); return }
+      const [numStr, name, jockey, trainer, oddsStr, colour] = parts
+      if (!name) { errors.push(`Line ${lineNum}: horse name is empty`); return }
+      if (existingNames.has(name.toLowerCase())) { warnings.push(`Line ${lineNum}: "${name}" already exists — skipped`); return }
+      const oddsDecimal = parseFractionalOdds(oddsStr)
+      if (oddsStr && !oddsDecimal) warnings.push(`Line ${lineNum}: odds "${oddsStr}" not recognised`)
+      const hexValid = /^#[0-9a-fA-F]{6}$/.test(colour)
+      const silkColour = hexValid ? colour : (colour ? '#1a3a10' : null)
+      if (colour && !hexValid) warnings.push(`Line ${lineNum}: colour "${colour}" invalid — defaulted`)
+      const horseNum = parseInt(numStr)
+      toInsert.push({
+        festival_race_id: raceId,
+        horse_number:     !isNaN(horseNum) ? horseNum : null,
+        horse_name:       name,
+        odds_fractional:  oddsStr || null,
+        odds_decimal:     oddsDecimal || null,
+        silk_colour:      silkColour,
+      })
+    })
+
+    if (toInsert.length === 0 || errors.length > 0) {
+      setFestivalBulkResult(p => ({ ...p, [raceId]: { errors, warnings } })); return
+    }
+
+    setLoading(true)
+    const { error } = await supabase.from('festival_runners').insert(toInsert)
+    setLoading(false)
+    if (error) { setFestivalBulkResult(p => ({ ...p, [raceId]: { errors: [`DB error: ${error.message}`], warnings } })); return }
+
+    await loadFestivalRunners(raceId)
+    setFestivalBulkOpen(prev => { const s = new Set(prev); s.delete(raceId); return s })
+    setFestivalBulkText(p => { const n = { ...p }; delete n[raceId]; return n })
+    setFestivalBulkResult(p => { const n = { ...p }; delete n[raceId]; return n })
+    showToast('success', `${toInsert.length} runner${toInsert.length !== 1 ? 's' : ''} imported`)
+    if (warnings.length) console.warn('[Festival Bulk] Warnings:', warnings)
+  }
+
+  // ── Festival results ──────────────────────────────────────────
+  function unlockFestivalResults(race) {
+    const existing = festivalResults[race.id]
+    if (existing?.length) {
+      setFestivalResultForms(p => ({
+        ...p, [race.id]: {
+          horse1: existing.find(r => r.position === 1)?.horse_name || '',
+          horse2: existing.find(r => r.position === 2)?.horse_name || '',
+          horse3: existing.find(r => r.position === 3)?.horse_name || '',
+        }
+      }))
+    }
+    setFestivalUnlocked(prev => new Set([...prev, race.id]))
+  }
+
+  async function submitFestivalResults(race) {
+    const form = festivalResultForms[race.id] || {}
+    if (!form.horse1 || !form.horse2 || !form.horse3) { showToast('error', 'Select all 3 finishers'); return }
+    setLoading(true)
+
+    const raceRunnersArr = festivalRunners[race.id] || []
+    function getFestivalRunnerOdds(horseName) {
+      const r = raceRunnersArr.find(x => x.horse_name === horseName)
+      return { oddsDecimal: r?.odds_decimal || null, oddsDisplay: r?.odds_fractional || null }
+    }
+    const o1 = getFestivalRunnerOdds(form.horse1)
+    const o2 = getFestivalRunnerOdds(form.horse2)
+    const o3 = getFestivalRunnerOdds(form.horse3)
+
+    // Delete old results
+    await supabase.from('festival_results').delete().eq('festival_race_id', race.id)
+
+    // Insert 3 results
+    const { error: resErr } = await supabase.from('festival_results').insert([
+      { festival_race_id: race.id, position: 1, horse_name: form.horse1, starting_price_display: o1.oddsDisplay },
+      { festival_race_id: race.id, position: 2, horse_name: form.horse2, starting_price_display: o2.oddsDisplay },
+      { festival_race_id: race.id, position: 3, horse_name: form.horse3, starting_price_display: o3.oddsDisplay },
+    ])
+    if (resErr) { showToast('error', `Results save failed: ${resErr.message}`); setLoading(false); return }
+
+    // Calculate scores for all picks on this race
+    const { data: picks } = await supabase
+      .from('festival_picks').select('id, user_id, runner_id').eq('festival_race_id', race.id)
+
+    if (picks?.length) {
+      const runnerIds = [...new Set(picks.map(p => p.runner_id).filter(Boolean))]
+      const { data: runnerRows } = await supabase.from('festival_runners').select('id, horse_name, odds_decimal').in('id', runnerIds)
+      const nameMap = {}; runnerRows?.forEach(r => { nameMap[r.id] = { name: r.horse_name, sp: r.odds_decimal } })
+
+      const placed = { [form.horse1]: { position: 1, sp: o1.oddsDecimal }, [form.horse2]: { position: 2, sp: o2.oddsDecimal }, [form.horse3]: { position: 3, sp: o3.oddsDecimal } }
+
+      // Delete old scores first
+      await supabase.from('festival_scores').delete().eq('festival_race_id', race.id)
+
+      const scoreRows = picks.map(pick => {
+        const runner = nameMap[pick.runner_id]
+        const p = runner ? placed[runner.name] : null
+        if (p) {
+          const { base, bonus, total } = calcPoints(p.position, p.sp || 1)
+          return { festival_race_id: race.id, user_id: pick.user_id, base_points: base, bonus_points: bonus, total_points: total, position_achieved: p.position }
+        }
+        return { festival_race_id: race.id, user_id: pick.user_id, base_points: 0, bonus_points: 0, total_points: 0, position_achieved: null }
+      })
+
+      const { error: scoreErr } = await supabase.from('festival_scores').insert(scoreRows)
+      if (scoreErr) { showToast('error', `Results saved but scores failed: ${scoreErr.message}`); setLoading(false); return }
+    }
+
+    setFestivalUnlocked(prev => { const s = new Set(prev); s.delete(race.id); return s })
+    await loadFestivalResults(race.id)
+    setLoading(false)
+    showToast('success', `Race ${race.race_number} results saved`)
+  }
+
   // ── Auth gate ────────────────────────────────────────────────
   if (authLoading) {
     return (
@@ -963,6 +1299,7 @@ export default function Admin() {
     { id: 'races',       label: '02 · This Week'   },
     { id: 'results',     label: '03 · Results'     },
     { id: 'leaderboard', label: '04 · Leaderboard' },
+    { id: 'festivals',   label: '05 · Festivals'   },
   ]
 
   return (
@@ -983,7 +1320,7 @@ export default function Admin() {
           {TABS.map(tab => (
             <button key={tab.id}
               style={{ ...st.tabBtn, ...(activeTab === tab.id ? st.tabBtnActive : {}) }}
-              onClick={() => { setActiveTab(tab.id); if (tab.id === 'leaderboard') loadLeaderboard() }}>
+              onClick={() => { setActiveTab(tab.id); if (tab.id === 'leaderboard') loadLeaderboard(); if (tab.id === 'festivals') loadFestivals() }}>
               {tab.label}
             </button>
           ))}
@@ -1044,6 +1381,11 @@ export default function Admin() {
                     <label style={st.label}>Season Name</label>
                     <input style={st.input} placeholder="Q2 2026" value={seasonForm.name}
                       onChange={e => setSeasonForm({ ...seasonForm, name: e.target.value })} required />
+                  </div>
+                  <div style={st.formField}>
+                    <label style={st.label}>Display Name (optional)</label>
+                    <input style={st.input} placeholder="Spring Season 2026" value={seasonForm.displayName || ''}
+                      onChange={e => setSeasonForm({ ...seasonForm, displayName: e.target.value })} />
                   </div>
                   <div style={st.formField}>
                     <label style={st.label}>Quarter</label>
@@ -1772,6 +2114,339 @@ export default function Admin() {
             )}
           </div>
         )}
+
+        {/* ══════════════ FESTIVALS ══════════════ */}
+        {activeTab === 'festivals' && (
+          <div style={st.section}>
+            <div style={st.sectionHeader}>
+              <h2 style={st.sectionTitle}>Festival Management</h2>
+              <button style={st.btnGold} onClick={() => setShowFestivalForm(v => !v)}>
+                {showFestivalForm ? 'Cancel' : '+ New Festival'}
+              </button>
+            </div>
+
+            {/* Create festival form */}
+            {showFestivalForm && (
+              <form onSubmit={createFestival} style={st.formCard}>
+                <div style={st.formTitle}>CREATE NEW FESTIVAL</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                  <div style={st.formField}>
+                    <label style={st.label}>Internal Name *</label>
+                    <input style={st.input} placeholder="cheltenham-2026" value={festivalForm.name}
+                      onChange={e => setFestivalForm({ ...festivalForm, name: e.target.value })} required />
+                  </div>
+                  <div style={st.formField}>
+                    <label style={st.label}>Display Name</label>
+                    <input style={st.input} placeholder="Cheltenham Festival 2026" value={festivalForm.displayName}
+                      onChange={e => setFestivalForm({ ...festivalForm, displayName: e.target.value })} />
+                  </div>
+                  <div style={st.formField}>
+                    <label style={st.label}>Start Date *</label>
+                    <input style={st.input} type="date" value={festivalForm.startDate}
+                      onChange={e => setFestivalForm({ ...festivalForm, startDate: e.target.value })} required />
+                  </div>
+                  <div style={st.formField}>
+                    <label style={st.label}>End Date *</label>
+                    <input style={st.input} type="date" value={festivalForm.endDate}
+                      onChange={e => setFestivalForm({ ...festivalForm, endDate: e.target.value })} required />
+                  </div>
+                  <div style={st.formField}>
+                    <label style={st.label}>Banner Colour</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <input style={{ ...st.input, width: '80px', padding: '0.35rem' }} type="color"
+                        value={festivalForm.bannerColour}
+                        onChange={e => setFestivalForm({ ...festivalForm, bannerColour: e.target.value })} />
+                      <span style={{ fontSize: '0.8rem', color: '#5a8a5a' }}>{festivalForm.bannerColour}</span>
+                    </div>
+                  </div>
+                </div>
+                {/* Saturday warning */}
+                {(() => {
+                  if (!festivalForm.startDate || !festivalForm.endDate) return null
+                  const start = new Date(festivalForm.startDate + 'T12:00:00')
+                  const end   = new Date(festivalForm.endDate   + 'T12:00:00')
+                  const satDays = []
+                  let cur = new Date(start); let num = 1
+                  while (cur <= end) {
+                    if (cur.getDay() === 6) satDays.push(`Day ${num} (${cur.toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'short' })})`)
+                    cur.setDate(cur.getDate() + 1); num++
+                  }
+                  if (!satDays.length) return null
+                  return (
+                    <div style={{ background: 'rgba(201,168,76,0.08)', border: '1px solid rgba(201,168,76,0.4)', borderLeft: '4px solid #c9a84c', borderRadius: '7px', padding: '0.85rem 1rem', marginTop: '0.5rem', fontSize: '0.82rem', color: '#c9a84c', lineHeight: 1.5 }}>
+                      ⚠ <strong>Saturday clash:</strong> {satDays.join(', ')} fall{satDays.length === 1 ? 's' : ''} on a Saturday — this is also a regular league race day. Players will need to make separate picks for both.
+                    </div>
+                  )
+                })()}
+                <div style={st.formActions}>
+                  <button style={st.btnGold} type="submit" disabled={loading}>Create Festival</button>
+                </div>
+              </form>
+            )}
+
+            {/* Festival selector */}
+            {festivals.length === 0 && !showFestivalForm && (
+              <div style={st.warningCard}>No festivals yet — create one above.</div>
+            )}
+            {festivals.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                {festivals.map(f => (
+                  <button key={f.id}
+                    style={{ ...st.tabBtn, borderBottom: '3px solid', borderBottomColor: f.id === selectedFestival?.id ? '#c9a84c' : 'transparent', color: f.id === selectedFestival?.id ? '#c9a84c' : '#5a8a5a', padding: '0.6rem 1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                    onClick={() => selectFestivalById(f)}>
+                    {f.display_name || f.name}
+                    {f.is_active && <span style={{ fontSize: '0.6rem', fontWeight: '700', letterSpacing: '0.08em', color: '#4ade80', background: 'rgba(74,222,128,0.1)', padding: '0.1rem 0.4rem', borderRadius: '3px' }}>ACTIVE</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Selected festival panel */}
+            {selectedFestival && (() => {
+              const isEditing = editingFestival === selectedFestival.id
+              return (
+                <>
+                  {/* Festival info / edit card */}
+                  {isEditing ? (
+                    <div style={st.formCard}>
+                      <div style={st.formTitle}>EDIT FESTIVAL</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                        <div style={st.formField}>
+                          <label style={st.label}>Internal Name</label>
+                          <input style={st.input} value={editFestivalForm.name || ''}
+                            onChange={e => setEditFestivalForm({ ...editFestivalForm, name: e.target.value })} />
+                        </div>
+                        <div style={st.formField}>
+                          <label style={st.label}>Display Name</label>
+                          <input style={st.input} value={editFestivalForm.displayName || ''}
+                            onChange={e => setEditFestivalForm({ ...editFestivalForm, displayName: e.target.value })} />
+                        </div>
+                        <div style={st.formField}>
+                          <label style={st.label}>Start Date</label>
+                          <input style={st.input} type="date" value={editFestivalForm.startDate || ''}
+                            onChange={e => setEditFestivalForm({ ...editFestivalForm, startDate: e.target.value })} />
+                        </div>
+                        <div style={st.formField}>
+                          <label style={st.label}>End Date</label>
+                          <input style={st.input} type="date" value={editFestivalForm.endDate || ''}
+                            onChange={e => setEditFestivalForm({ ...editFestivalForm, endDate: e.target.value })} />
+                        </div>
+                        <div style={st.formField}>
+                          <label style={st.label}>Banner Colour</label>
+                          <input style={{ ...st.input, width: '80px', padding: '0.35rem' }} type="color"
+                            value={editFestivalForm.bannerColour || '#c9a84c'}
+                            onChange={e => setEditFestivalForm({ ...editFestivalForm, bannerColour: e.target.value })} />
+                        </div>
+                      </div>
+                      <div style={st.formActions}>
+                        <button style={st.btnGold} onClick={() => saveFestivalEdit(selectedFestival.id)} disabled={loading}>Save</button>
+                        <button style={st.btnGhost} onClick={() => setEditingFestival(null)}>Cancel</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={st.infoCard}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                            <div style={st.infoCardBadge}>Festival</div>
+                            {selectedFestival.is_active && <span style={{ ...st.infoCardBadge, color: '#4ade80' }}>● ACTIVE</span>}
+                          </div>
+                          <div style={st.infoCardTitle}>{selectedFestival.display_name || selectedFestival.name}</div>
+                          <div style={st.infoCardSub}>{selectedFestival.start_date} → {selectedFestival.end_date}</div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                          {!selectedFestival.is_active
+                            ? <button style={st.btnSmall} onClick={() => activateFestival(selectedFestival.id)}>Set Active</button>
+                            : <button style={st.btnSmallGhost} onClick={() => deactivateFestival(selectedFestival.id)}>Deactivate</button>
+                          }
+                          <button style={st.btnSmall} onClick={() => { setEditingFestival(selectedFestival.id); setEditFestivalForm({ name: selectedFestival.name, displayName: selectedFestival.display_name || '', bannerColour: selectedFestival.banner_colour || '#c9a84c', startDate: selectedFestival.start_date, endDate: selectedFestival.end_date }) }}>Edit</button>
+                          <button style={st.btnSmall} onClick={() => generateFestivalDays(selectedFestival)} disabled={loading}>↻ Regenerate Days</button>
+                          <button style={st.btnSmallDanger} onClick={() => deleteFestivalFn(selectedFestival.id)}>Delete</button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Day tabs */}
+                  {festivalDays.length === 0 ? (
+                    <div style={st.warningCard}>No days generated yet. Click "Regenerate Days" above to auto-generate from the date range.</div>
+                  ) : (
+                    <>
+                      <div style={{ background: '#0d1f0d', borderRadius: '8px', padding: '0.5rem 0.75rem', display: 'flex', gap: '0.35rem', flexWrap: 'wrap', border: '1px solid rgba(201,168,76,0.1)' }}>
+                        {festivalDays.map(day => {
+                          const isSat = new Date(day.race_date + 'T12:00:00').getDay() === 6
+                          return (
+                            <button key={day.id}
+                              style={{ ...st.tabBtn, padding: '0.45rem 0.85rem', fontSize: '0.78rem', borderBottom: '2px solid', borderBottomColor: day.id === selectedDay?.id ? '#c9a84c' : 'transparent', color: day.id === selectedDay?.id ? '#c9a84c' : '#5a8a5a' }}
+                              onClick={() => selectFestivalDay(day)}>
+                              {day.label}
+                              {isSat && <span title="Saturday — regular race day also" style={{ marginLeft: '4px', color: '#c9a84c', fontSize: '0.7em' }}>⚠</span>}
+                            </button>
+                          )
+                        })}
+                      </div>
+
+                      {/* Selected day content */}
+                      {selectedDay && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span style={{ fontSize: '0.85rem', color: '#5a8a5a' }}>{selectedDay.label} · {selectedDay.race_date} · Deadline: {selectedDay.picks_deadline ? new Date(selectedDay.picks_deadline).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : 'N/A'}</span>
+                          </div>
+
+                          {/* Race cards */}
+                          {[1,2,3,4,5,6,7,8,9,10].map(raceNum => {
+                            const race      = festivalRaces.find(r => r.race_number === raceNum)
+                            const raceKey   = `${selectedDay.id}_${raceNum}`
+                            const isOpen    = showFestivalRaceForm[raceKey]
+                            const rForm     = festivalRaceForms[raceKey] || {}
+                            const rRunners  = race ? (festivalRunners[race.id] || []) : []
+                            const rResults  = race ? (festivalResults[race.id] || []) : []
+                            const hasDone   = rResults.length > 0
+                            const bulkOpen  = race && festivalBulkOpen.has(race.id)
+                            const isUnlocked = race && festivalUnlocked.has(race.id)
+                            const resForm   = race ? (festivalResultForms[race.id] || {}) : {}
+
+                            return (
+                              <div key={raceNum} style={{ ...st.raceCard, ...(hasDone ? st.raceCardDone : {}) }}>
+                                <div style={st.raceCardHead}>
+                                  <span style={st.raceCardNum}>Race {raceNum}</span>
+                                  {race ? (
+                                    <>
+                                      <span style={st.raceCardMeta}>
+                                        <strong style={{ color: '#e8f0e8' }}>{race.race_time || '—'}</strong>
+                                        {race.venue && <span style={{ color: '#c9a84c' }}> · {race.venue}</span>}
+                                        {race.race_name && <span style={{ color: '#5a8a5a' }}> · {race.race_name}</span>}
+                                      </span>
+                                      <span style={{ fontSize: '0.75rem', color: rRunners.length > 0 ? '#4ade80' : '#5a8a5a' }}>{rRunners.length} runners</span>
+                                      {hasDone && <span style={st.badgeDone}>✓ Results</span>}
+                                      <button style={st.btnSmallGhost} onClick={() => { setShowFestivalRaceForm(p => ({...p, [raceKey]: !p[raceKey]})); if (!festivalRaceForms[raceKey]) setFestivalRaceForms(p => ({...p, [raceKey]: { raceTime: race.race_time||'', venue: race.venue||'', raceName: race.race_name||'' }})) }}>
+                                        {isOpen ? '✕' : 'Edit'}
+                                      </button>
+                                      <button style={{ ...st.btnSmallGhost, borderColor: bulkOpen ? '#c9a84c' : undefined, color: bulkOpen ? '#c9a84c' : undefined }}
+                                        onClick={() => setFestivalBulkOpen(prev => { const s = new Set(prev); bulkOpen ? s.delete(race.id) : s.add(race.id); return s })}>
+                                        {bulkOpen ? '✕ Import' : '⬇ Bulk Import'}
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <button style={st.btnSmall} onClick={() => { setShowFestivalRaceForm(p => ({...p, [raceKey]: true})); setFestivalRaceForms(p => ({...p, [raceKey]: { raceTime: '', venue: '', raceName: '' }})) }}>
+                                      + Add Race
+                                    </button>
+                                  )}
+                                </div>
+
+                                {/* Race edit/create form */}
+                                {isOpen && (
+                                  <div style={{ padding: '0.85rem 1.25rem', borderTop: '1px solid rgba(201,168,76,0.08)', display: 'grid', gridTemplateColumns: 'auto 1fr 1fr 1fr', gap: '0.6rem', alignItems: 'end' }}>
+                                    <div style={st.formField}>
+                                      <label style={st.label}>Time</label>
+                                      <input style={{ ...st.input, width: '80px' }} placeholder="14:00" value={rForm.raceTime || ''}
+                                        onChange={e => setFestivalRaceForms(p => ({...p, [raceKey]: {...(p[raceKey]||{}), raceTime: e.target.value}}))} />
+                                    </div>
+                                    <div style={st.formField}>
+                                      <label style={st.label}>Venue</label>
+                                      <input style={st.input} placeholder="Cheltenham" value={rForm.venue || ''}
+                                        onChange={e => setFestivalRaceForms(p => ({...p, [raceKey]: {...(p[raceKey]||{}), venue: e.target.value}}))} />
+                                    </div>
+                                    <div style={st.formField}>
+                                      <label style={st.label}>Race Name</label>
+                                      <input style={st.input} placeholder="Gold Cup" value={rForm.raceName || ''}
+                                        onChange={e => setFestivalRaceForms(p => ({...p, [raceKey]: {...(p[raceKey]||{}), raceName: e.target.value}}))} />
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '0.4rem' }}>
+                                      <button style={st.btnGold} onClick={() => saveFestivalRace(selectedDay.id, raceNum)} disabled={loading}>Save</button>
+                                      {race && <button style={st.btnSmallDanger} onClick={() => deleteFestivalRace(race.id, selectedDay.id)}>Del</button>}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Bulk import */}
+                                {race && bulkOpen && (
+                                  <div style={{ padding: '0.85rem 1.25rem', borderTop: '1px solid rgba(201,168,76,0.06)' }}>
+                                    <div style={{ fontSize: '0.7rem', color: '#5a8a5a', marginBottom: '0.5rem' }}>Paste runners — one per line: <code style={{ color: '#c9a84c' }}>number, name, jockey, trainer, odds, #colour</code></div>
+                                    <textarea style={{ ...st.input, width: '100%', minHeight: '120px', fontFamily: 'monospace', fontSize: '0.8rem', resize: 'vertical', boxSizing: 'border-box' }}
+                                      value={festivalBulkText[race.id] || ''}
+                                      onChange={e => setFestivalBulkText(p => ({...p, [race.id]: e.target.value}))}
+                                      placeholder={"1, Corach Rambler, D. Skelton, H. Skelton, 7/2, #1a3a7a
+2, Galopin Des Champs, W. Mullins, P. Townend, 2/1, #5a1010"} />
+                                    {festivalBulkResult[race.id] && (
+                                      <div style={{ marginTop: '0.5rem' }}>
+                                        {festivalBulkResult[race.id].errors.map((msg, i) => <div key={i} style={{ fontSize: '0.75rem', color: '#f87171' }}>✗ {msg}</div>)}
+                                        {festivalBulkResult[race.id].warnings.map((msg, i) => <div key={i} style={{ fontSize: '0.75rem', color: '#c9a84c' }}>⚠ {msg}</div>)}
+                                      </div>
+                                    )}
+                                    <button style={{ ...st.btnGold, marginTop: '0.65rem' }} onClick={() => bulkImportFestivalRunners(race.id)} disabled={loading}>Import Runners</button>
+                                  </div>
+                                )}
+
+                                {/* Runners list */}
+                                {race && rRunners.length > 0 && (
+                                  <div style={st.runnersSection}>
+                                    <div style={st.runnersLabel}>{rRunners.length} Runners</div>
+                                    {rRunners.map(r => (
+                                      <div key={r.id} style={st.runnerCard}>
+                                        <div style={st.runnerCardRow}>
+                                          <div style={st.runnerCardLeft}>
+                                            {r.silk_colour && <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: r.silk_colour, border: '1px solid rgba(255,255,255,0.2)', flexShrink: 0 }} />}
+                                            <span style={st.runnerNum}>{r.horse_number}</span>
+                                            <span style={{ fontWeight: '600', fontSize: '0.875rem', color: '#e8f0e8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.horse_name}</span>
+                                            {r.odds_fractional && <span style={{ fontSize: '0.72rem', color: '#c9a84c' }}>{r.odds_fractional}</span>}
+                                          </div>
+                                          <button style={st.btnSmallDanger} onClick={async () => { await supabase.from('festival_runners').delete().eq('id', r.id); loadFestivalRunners(race.id) }}>✕</button>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+
+                                {/* Results */}
+                                {race && (
+                                  <div style={{ padding: '0.85rem 1.25rem', borderTop: '1px solid rgba(201,168,76,0.06)' }}>
+                                    {!isUnlocked ? (
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                        {hasDone && (
+                                          <div style={{ fontSize: '0.82rem', color: '#4ade80' }}>
+                                            1st: {rResults.find(r=>r.position===1)?.horse_name} · 2nd: {rResults.find(r=>r.position===2)?.horse_name} · 3rd: {rResults.find(r=>r.position===3)?.horse_name}
+                                          </div>
+                                        )}
+                                        <button style={st.btnSmall} onClick={() => unlockFestivalResults(race)}>
+                                          {hasDone ? 'Edit Results' : 'Enter Results'}
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <div>
+                                        <div style={{ fontSize: '0.7rem', fontWeight: '700', color: '#5a8a5a', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '0.6rem' }}>Enter Result</div>
+                                        {[1,2,3].map(pos => (
+                                          <div key={pos} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.5rem' }}>
+                                            <div style={{ ...st.posBadge, background: pos===1?'#c9a84c':pos===2?'#9ca3af':'#b45309', width: '28px' }}>{pos===1?'1st':pos===2?'2nd':'3rd'}</div>
+                                            <select style={{ ...st.input, flex: 1 }}
+                                              value={resForm[`horse${pos}`] || ''}
+                                              onChange={e => setFestivalResultForms(p => ({...p, [race.id]: {...(p[race.id]||{}), [`horse${pos}`]: e.target.value}}))}>
+                                              <option value="">— Select horse —</option>
+                                              {rRunners.map(r => <option key={r.id} value={r.horse_name}>{r.horse_number}. {r.horse_name}</option>)}
+                                            </select>
+                                          </div>
+                                        ))}
+                                        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
+                                          <button style={st.btnGold} onClick={() => submitFestivalResults(race)} disabled={loading}>Save Results & Scores</button>
+                                          <button style={st.btnGhost} onClick={() => setFestivalUnlocked(prev => { const s = new Set(prev); s.delete(race.id); return s })}>Cancel</button>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </>
+              )
+            })()}
+          </div>
+        )}
+
 
       </main>
     </div>

@@ -12,9 +12,11 @@ import Races          from './pages/Races.jsx'
 import Results        from './pages/Results.jsx'
 import Profile        from './pages/Profile.jsx'
 import Groups         from './pages/Groups.jsx'
-import PlayerPicks    from './pages/PlayerPicks.jsx'
-import Account        from './pages/Account.jsx'
-import InstallPrompt  from './components/InstallPrompt.jsx'
+import PlayerPicks         from './pages/PlayerPicks.jsx'
+import Account             from './pages/Account.jsx'
+import FestivalPicks       from './pages/FestivalPicks.jsx'
+import FestivalLeaderboard from './pages/FestivalLeaderboard.jsx'
+import InstallPrompt       from './components/InstallPrompt.jsx'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
@@ -30,8 +32,10 @@ createRoot(document.getElementById('root')).render(
         <Route path="/results"   element={<Results />}   />
         <Route path="/profile"   element={<Profile />}   />
         <Route path="/groups"              element={<Groups />}      />
-        <Route path="/player-picks/:userId" element={<PlayerPicks />} />
-        <Route path="/account"             element={<Account />}      />
+        <Route path="/player-picks/:userId"    element={<PlayerPicks />}         />
+        <Route path="/account"               element={<Account />}             />
+        <Route path="/festival-picks"        element={<FestivalPicks />}       />
+        <Route path="/festival-leaderboard"  element={<FestivalLeaderboard />} />
       </Routes>
       <InstallPrompt />
     </BrowserRouter>
