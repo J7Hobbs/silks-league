@@ -351,7 +351,7 @@ const st = {
   joinCard:    { background: '#162a1a', border: '1px solid rgba(201,168,76,0.3)', borderLeft: '4px solid #c9a84c', borderRadius: '12px', padding: '1.5rem', marginBottom: '1.25rem' },
   btnGold:     { background: '#c9a84c', color: '#0a1a08', fontWeight: '700', fontSize: '0.875rem', padding: '0.65rem 1.4rem', borderRadius: '8px', border: 'none', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" },
   dayTabBar:   { display: 'flex', gap: '0.25rem', flexWrap: 'wrap', background: '#0d1f0d', borderRadius: '8px', padding: '0.4rem 0.5rem', marginBottom: '0.85rem', border: '1px solid rgba(201,168,76,0.1)' },
-  dayTab:      { background: 'none', border: 'none', borderBottom: '2px solid transparent', padding: '0.4rem 0.75rem', fontSize: '0.78rem', fontWeight: '500', color: '#5a8a5a', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif', borderRadius: '5px", whiteSpace: 'nowrap' },
+  dayTab:      { background: 'none', border: 'none', borderRadius: '5px', borderBottom: '2px solid transparent', padding: '0.4rem 0.75rem', fontSize: '0.78rem', fontWeight: '500', color: '#5a8a5a', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", whiteSpace: 'nowrap' },
   dayTabActive:{ color: '#c9a84c', background: 'rgba(201,168,76,0.08)', borderRadius: '5px', borderBottom: '2px solid #c9a84c' },
   dayInfo:     { display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' },
   deadlineBadge:      { background: 'rgba(201,168,76,0.1)', border: '1px solid rgba(201,168,76,0.3)', borderRadius: '999px', padding: '0.2rem 0.65rem', fontSize: '0.72rem', fontWeight: '600', color: '#c9a84c' },
