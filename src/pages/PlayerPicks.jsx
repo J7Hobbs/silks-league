@@ -67,7 +67,7 @@ export default function PlayerPicks() {
 
       // Target player's picks for these races
       const { data: picksData } = await supabase
-        .from('picks').select('race_id, runner_id').eq('user_id', userId).in('race_id', raceIds)
+        .from('picks').select('race_id, runner_id, was_replaced, original_runner_id').eq('user_id', userId).in('race_id', raceIds)
 
       // Load runner details for picks
       const runnerIds = (picksData || []).map(p => p.runner_id).filter(Boolean)
@@ -77,7 +77,15 @@ export default function PlayerPicks() {
       const runnerMap = {}
       runnersData?.forEach(r => { runnerMap[r.id] = r })
       const picksMap = {}
-      picksData?.forEach(p => { if (p.runner_id && runnerMap[p.runner_id]) picksMap[p.race_id] = runnerMap[p.runner_id] })
+      picksData?.forEach(p => {
+        if (p.runner_id && runnerMap[p.runner_id]) {
+          picksMap[p.race_id] = {
+            ...runnerMap[p.runner_id],
+            was_replaced: p.was_replaced,
+            original_runner_id: p.original_runner_id,
+          }
+        }
+      })
       setPicks(picksMap)
 
       // Results
@@ -149,12 +157,12 @@ export default function PlayerPicks() {
             {races.length === 0 ? (
               <div style={st.emptyMsg}>No races set up for this week yet.</div>
             ) : races.map(race => {
-              const pick   = picks[race.id]
-              const score  = scores[race.id]
+              const pick        = picks[race.id]
+              const score       = scores[race.id]
               const raceResults = results[race.id] || []
               const hasResult   = raceResults.length > 0
               const silkBg      = pick?.silk_colour || '#1a3a10'
-              const isWD        = score?.score_note?.includes('withdrawn')
+              const wasReplaced = !!pick?.was_replaced
 
               return (
                 <div key={race.id} style={st.raceCard}>
@@ -168,9 +176,7 @@ export default function PlayerPicks() {
                     </span>
                     {/* Points chip */}
                     <div style={{ marginLeft: 'auto', flexShrink: 0 }}>
-                      {isWD ? (
-                        <span style={st.wdChip}>WD — {score?.total_points ?? 0} avg pts</span>
-                      ) : score ? (
+                      {score ? (
                         <span style={st.ptsChip}>{score.total_points} pts</span>
                       ) : (
                         <span style={st.pendingChip}>Pending</span>
@@ -185,9 +191,7 @@ export default function PlayerPicks() {
                         runner={pick}
                         rightContent={
                           <div style={{ textAlign: 'right' }}>
-                            {isWD ? (
-                              <div style={{ fontSize: '0.72rem', color: '#f87171', fontWeight: '700' }}>WD — avg pts</div>
-                            ) : !hasResult ? (
+                            {!hasResult ? (
                               <span style={{ fontSize: '0.75rem', color: '#5a8a5a' }}>Pending</span>
                             ) : score ? (
                               <>
@@ -202,6 +206,11 @@ export default function PlayerPicks() {
                           </div>
                         }
                       />
+                      {wasReplaced && (
+                        <div style={{ fontSize: '0.7rem', color: '#9ca3af', marginTop: '0.3rem', paddingLeft: '0.25rem', fontStyle: 'italic' }}>
+                          Auto-replaced — original pick scratched
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div style={st.noPick}>No pick made for this race</div>

@@ -54,6 +54,7 @@ export default function Picks() {
   const [saving,       setSaving]       = useState(null) // raceId | null
   const [toast,        setToast]        = useState(null) // { text, type }
   const [now,          setNow]          = useState(new Date())
+  const [origRunners,  setOrigRunners]  = useState({})  // { [runnerId]: horse_name } for replaced picks
 
   // Tick every second for live countdown
   useEffect(() => {
@@ -130,6 +131,18 @@ export default function Picks() {
     }
     setUserPicks(picksMap)
     setSelected(selMap)
+
+    // ── Fetch original runner names for any auto-replaced picks ──
+    const origIds = (picks || [])
+      .filter(p => p.was_replaced && p.original_runner_id)
+      .map(p => p.original_runner_id)
+    if (origIds.length) {
+      const { data: origData } = await supabase
+        .from('runners').select('id, horse_name').in('id', origIds)
+      const origMap = {}
+      origData?.forEach(r => { origMap[r.id] = r.horse_name })
+      setOrigRunners(origMap)
+    }
 
     setLoading(false)
   }
@@ -373,7 +386,11 @@ export default function Picks() {
                       {/* Pick status + chevron */}
                       <div style={st.raceSummaryRight}>
                         {isPicked && pickedRunner ? (
-                          pickedRunner.is_withdrawn ? (
+                          pick?.was_replaced ? (
+                            <span style={{ ...st.pickedBadge, background: 'rgba(201,168,76,0.12)', border: '1px solid rgba(201,168,76,0.4)', color: '#c9a84c' }}>
+                              ⚠️ {pickedRunner.horse_name}
+                            </span>
+                          ) : pickedRunner.is_withdrawn ? (
                             <span style={{ ...st.pickedBadge, background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171' }}>
                               ⚠ Withdrawn
                             </span>
@@ -396,13 +413,20 @@ export default function Picks() {
                     {isExpanded && (
                       <div style={st.expandedSection}>
 
-                        {/* Withdrawn pick warning */}
-                        {pickedRunner?.is_withdrawn && (
+                        {/* Auto-replaced pick banner */}
+                        {pick?.was_replaced && pick?.original_runner_id && (
+                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.6rem', background: 'rgba(201,168,76,0.15)', border: '1px solid #c9a84c', borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '0.75rem', lineHeight: 1.5 }}>
+                            <span style={{ fontSize: '1rem', flexShrink: 0, marginTop: '0.05rem' }}>⚠️</span>
+                            <div style={{ fontSize: '0.82rem', color: '#c9a84c' }}>
+                              Your original pick <strong style={{ color: '#e8c96e' }}>{origRunners[pick.original_runner_id] || 'your horse'}</strong> was scratched and has been automatically replaced with the race favourite <strong style={{ color: '#e8c96e' }}>{pickedRunner?.horse_name || '—'}</strong>.
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Withdrawn pick warning (fallback for edge cases) */}
+                        {pickedRunner?.is_withdrawn && !pick?.was_replaced && (
                           <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '0.75rem', fontSize: '0.85rem', color: '#f87171', lineHeight: 1.5 }}>
                             <strong>⚠ Your pick ({pickedRunner.horse_name}) has been withdrawn.</strong>
-                            <div style={{ marginTop: '0.25rem', color: '#fca5a5', fontSize: '0.8rem' }}>
-                              You will automatically receive average points for this race.
-                            </div>
                           </div>
                         )}
 

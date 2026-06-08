@@ -659,20 +659,17 @@ export default function Admin() {
     // 4. Resolve runner_id → horse_name
     const runnerIds = [...new Set(picks.map(p => p.runner_id).filter(Boolean))]
     const { data: runnerRows, error: runErr } = await supabase
-      .from('runners').select('id, horse_name, is_withdrawn').in('id', runnerIds)
+      .from('runners').select('id, horse_name').in('id', runnerIds)
     console.log(`[Scores] Runners:`, runnerRows, runErr)
 
     if (runErr) return { ok: false, msg: `Runners fetch failed: ${runErr.message}` }
-    const nameMap      = {}
-    const withdrawnSet = new Set()
+    const nameMap = {}
     runnerRows?.forEach(r => {
       nameMap[r.id] = r.horse_name
-      if (r.is_withdrawn) withdrawnSet.add(r.id)
     })
 
-    // 5. Build score rows — skip withdrawn picks (handled by calculateWithdrawalScores)
+    // 5. Build score rows
     const scoresToInsert = picks
-      .filter(pick => !withdrawnSet.has(pick.runner_id))
       .map(pick => {
         const horseName = nameMap[pick.runner_id]
         const p = horseName ? placed[horseName] : null
@@ -753,9 +750,6 @@ export default function Admin() {
     // ── Step 3: calculate scores ────────────────────────────────
     const result = await calculateScoresForRace(race.id, race.race_number)
 
-    // ── Step 4: award average points for any withdrawn picks ────
-    if (currentWeek) await calculateWithdrawalScores(currentWeek.id)
-
     lockResults(race.id)
     await loadResults(race.id)
     setLoading(false)
@@ -810,9 +804,6 @@ export default function Admin() {
       }
     }
 
-    // Award average points for any withdrawn picks across the week
-    if (weekArr?.[0]) await calculateWithdrawalScores(weekArr[0].id)
-
     setLoading(false)
 
     if (errors.length && totalInserted === 0) {
@@ -824,90 +815,62 @@ export default function Admin() {
     }
   }
 
-  // ── Withdrawal scores ────────────────────────────────────────
-  //  Called after every race result submission and after toggling
-  //  a withdrawal. Finds all withdrawn picks for the week and
-  //  awards each affected player their average points from other
-  //  races that already have results.
-  async function calculateWithdrawalScores(weekId) {
-    console.log('[Withdrawal] Calculating withdrawal scores for week', weekId)
-
-    // 1. All races in the week
-    const { data: weekRaces } = await supabase
-      .from('races').select('id').eq('race_week_id', weekId)
-    if (!weekRaces?.length) return { ok: true, count: 0 }
-    const allRaceIds = weekRaces.map(r => r.id)
-
-    // 2. All withdrawn runners in those races
-    const { data: wdRunners } = await supabase
-      .from('runners').select('id, horse_name, race_id')
-      .in('race_id', allRaceIds).eq('is_withdrawn', true)
-    if (!wdRunners?.length) return { ok: true, count: 0 }
-
-    // 3. Picks for those withdrawn runners
-    const { data: affectedPicks } = await supabase
-      .from('picks').select('id, user_id, race_id, runner_id')
-      .in('runner_id', wdRunners.map(r => r.id))
-    if (!affectedPicks?.length) return { ok: true, count: 0 }
-
-    let inserted = 0
-    for (const pick of affectedPicks) {
-      const otherRaceIds = allRaceIds.filter(id => id !== pick.race_id)
-
-      // Get this player's scores for other races, excluding any other withdrawal scores
-      const { data: otherScores } = await supabase
-        .from('scores')
-        .select('total_points, score_note')
-        .eq('user_id', pick.user_id)
-        .in('race_id', otherRaceIds)
-
-      const normalScores = (otherScores || []).filter(s => !s.score_note?.includes('withdrawn'))
-      const avg = normalScores.length > 0
-        ? Math.round(normalScores.reduce((sum, s) => sum + (s.total_points || 0), 0) / normalScores.length)
-        : 0
-
-      // Remove any existing score for this player/race (withdrawal score from previous calc)
-      await supabase.from('scores')
-        .delete().eq('user_id', pick.user_id).eq('race_id', pick.race_id)
-
-      // Insert the average as the withdrawal score
-      const row = {
-        user_id: pick.user_id, race_id: pick.race_id, pick_id: pick.id,
-        base_points: avg, bonus_points: 0, total_points: avg,
-        position_achieved: null,
-        score_note: 'Horse withdrawn — average points awarded',
-      }
-      const { error } = await supabase.from('scores').insert(row)
-      if (!error) {
-        inserted++
-      } else {
-        // score_note column may not exist yet — retry without it
-        const { error: e2 } = await supabase.from('scores').insert({
-          user_id: pick.user_id, race_id: pick.race_id, pick_id: pick.id,
-          base_points: avg, bonus_points: 0, total_points: avg, position_achieved: null,
-        })
-        if (!e2) inserted++
-        else console.error('[Withdrawal] Insert failed:', e2)
-      }
-    }
-
-    console.log(`[Withdrawal] ${inserted} withdrawal score${inserted !== 1 ? 's' : ''} inserted`)
-    return { ok: true, count: inserted }
-  }
-
   // ── Mark / reinstate a horse as withdrawn ────────────────────
   async function withdrawRunner(runner, raceId) {
+    setLoading(true)
+    // Find the favourite for this race (lowest odds_decimal, not already withdrawn, not this runner)
+    const { data: raceRunners } = await supabase
+      .from('runners')
+      .select('id, horse_name, odds_decimal, odds_fractional')
+      .eq('race_id', raceId)
+      .eq('is_withdrawn', false)
+      .neq('id', runner.id)
+      .order('odds_decimal', { ascending: true })
+      .limit(1)
+    setLoading(false)
+
+    const favourite = raceRunners?.[0] || null
+
+    if (!favourite) {
+      confirm(
+        `Cannot withdraw ${runner.horse_name}`,
+        `No valid favourite found — all other runners may also be withdrawn. Please handle this manually.`,
+        () => {}
+      )
+      return
+    }
+
+    const oddsDisplay = favourite.odds_fractional || (favourite.odds_decimal ? `${favourite.odds_decimal}` : '?')
+
     confirm(
       `Mark ${runner.horse_name} as withdrawn?`,
-      `Any players who picked this horse will automatically receive average points for this race.`,
+      `Any players who picked this horse will automatically be switched to the race favourite: ${favourite.horse_name} (${oddsDisplay}).`,
       async () => {
         setLoading(true)
-        const { error } = await supabase.from('runners').update({ is_withdrawn: true }).eq('id', runner.id)
-        if (error) { showToast('error', error.message); setLoading(false); return }
+
+        // 1. Mark runner as withdrawn
+        const { error: wdErr } = await supabase.from('runners').update({ is_withdrawn: true }).eq('id', runner.id)
+        if (wdErr) { showToast('error', wdErr.message); setLoading(false); return }
+
+        // 2. Find all picks for this withdrawn runner
+        const { data: affectedPicks } = await supabase
+          .from('picks').select('id').eq('runner_id', runner.id)
+
+        // 3. Update each affected pick — switch to favourite and record the replacement
+        if (affectedPicks?.length) {
+          const { error: pickErr } = await supabase.from('picks').update({
+            runner_id: favourite.id,
+            original_runner_id: runner.id,
+            was_replaced: true,
+            replacement_reason: 'Horse withdrawn — replaced with race favourite',
+          }).eq('runner_id', runner.id)
+          if (pickErr) showToast('error', `Withdrawal saved but pick update failed: ${pickErr.message}`)
+        }
+
         await loadRunners(raceId)
-        if (currentWeek) await calculateWithdrawalScores(currentWeek.id)
         setLoading(false)
-        showToast('success', `${runner.horse_name} marked as withdrawn`)
+        const pickCount = affectedPicks?.length || 0
+        showToast('success', `${runner.horse_name} withdrawn — ${pickCount} pick${pickCount !== 1 ? 's' : ''} switched to ${favourite.horse_name}`)
       }
     )
   }
@@ -915,25 +878,32 @@ export default function Admin() {
   async function reinstateRunner(runner, raceId) {
     confirm(
       `Reinstate ${runner.horse_name}?`,
-      `The horse will be reinstated. Scores for this race will be recalculated if results are available.`,
+      `The horse will be reinstated. Any auto-replaced picks will be reverted back to this horse.`,
       async () => {
         setLoading(true)
-        const { error } = await supabase.from('runners').update({ is_withdrawn: false }).eq('id', runner.id)
-        if (error) { showToast('error', error.message); setLoading(false); return }
-        await loadRunners(raceId)
 
-        // Recalculate scores for the affected race if results exist
-        const raceObj = races.find(r => r.id === raceId)
-        if (raceObj) {
-          const { data: hasRes } = await supabase
-            .from('results').select('id').eq('race_id', raceId).limit(1)
-          if (hasRes?.length) {
-            await calculateScoresForRace(raceId, raceObj.race_number)
-            if (currentWeek) await calculateWithdrawalScores(currentWeek.id)
-          }
+        // 1. Reinstate the runner
+        const { error: reErr } = await supabase.from('runners').update({ is_withdrawn: false }).eq('id', runner.id)
+        if (reErr) { showToast('error', reErr.message); setLoading(false); return }
+
+        // 2. Revert any picks that were auto-replaced from this runner
+        const { data: replacedPicks } = await supabase
+          .from('picks').select('id').eq('original_runner_id', runner.id).eq('was_replaced', true)
+
+        if (replacedPicks?.length) {
+          const { error: revertErr } = await supabase.from('picks').update({
+            runner_id: runner.id,
+            original_runner_id: null,
+            was_replaced: false,
+            replacement_reason: null,
+          }).eq('original_runner_id', runner.id).eq('was_replaced', true)
+          if (revertErr) showToast('error', `Reinstated but pick revert failed: ${revertErr.message}`)
         }
+
+        await loadRunners(raceId)
+        const revertCount = replacedPicks?.length || 0
         setLoading(false)
-        showToast('success', `${runner.horse_name} reinstated`)
+        showToast('success', `${runner.horse_name} reinstated${revertCount > 0 ? ` — ${revertCount} pick${revertCount !== 1 ? 's' : ''} reverted` : ''}`)
       }
     )
   }

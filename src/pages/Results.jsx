@@ -114,7 +114,7 @@ export default function Results() {
 
     // User's picks → runner details (no FK join — fetch separately)
     const { data: picksData } = await supabase
-      .from('picks').select('race_id, runner_id').eq('user_id', userId).in('race_id', raceIds)
+      .from('picks').select('race_id, runner_id, was_replaced, original_runner_id').eq('user_id', userId).in('race_id', raceIds)
     const picksMap = {}
     if (picksData?.length) {
       const runnerIds = [...new Set(picksData.map(p => p.runner_id).filter(Boolean))]
@@ -123,7 +123,13 @@ export default function Results() {
       const runnerMap = {}
       runnersData?.forEach(r => { runnerMap[r.id] = r })
       picksData.forEach(p => {
-        if (p.runner_id && runnerMap[p.runner_id]) picksMap[p.race_id] = runnerMap[p.runner_id]
+        if (p.runner_id && runnerMap[p.runner_id]) {
+          picksMap[p.race_id] = {
+            ...runnerMap[p.runner_id],
+            was_replaced: p.was_replaced,
+            original_runner_id: p.original_runner_id,
+          }
+        }
       })
     }
     setMyPicks(picksMap)
@@ -323,7 +329,7 @@ export default function Results() {
                     const racePoints    = score?.total_points ?? 0
                     const posDsp        = score?.position_achieved ? positionDisplay(score.position_achieved) : null
                     const isWithdrawn   = !!pick?.is_withdrawn
-                    const isAvgScore    = score?.score_note?.includes('withdrawn')
+                    const wasReplaced   = !!pick?.was_replaced
 
                     return (
                       <div key={race.id} style={st.raceCard}>
@@ -349,14 +355,7 @@ export default function Results() {
 
                           {/* Points + chevron */}
                           <div style={st.raceHeaderRight}>
-                            {isAvgScore ? (
-                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.15rem' }}>
-                                <div style={st.racePointsGold}>
-                                  {racePoints} <span style={{ fontSize: '0.65em', opacity: 0.7 }}>pts</span>
-                                </div>
-                                <span style={{ fontSize: '0.6rem', color: '#f87171', fontWeight: '600', letterSpacing: '0.06em' }}>WD AVG</span>
-                              </div>
-                            ) : hasResults ? (
+                            {hasResults ? (
                               <div style={racePoints > 0 ? st.racePointsGold : st.racePointsGrey}>
                                 {racePoints} <span style={{ fontSize: '0.65em', opacity: 0.7 }}>pts</span>
                               </div>
@@ -378,24 +377,13 @@ export default function Results() {
                             <div style={st.pickSection}>
                               <div style={st.sectionLabel}>MY PICK</div>
                               {pick ? (
+                                <>
                                 <RunnerCard
                                   runner={pick}
                                   rightContent={
                                     <div style={{ textAlign: 'right' }}>
-                                    {isAvgScore ? (
-                                      <>
-                                        <div style={{ ...st.positionLabel, color: '#f87171', fontSize: '0.75rem' }}>Horse withdrawn</div>
-                                        <div style={st.pointsChips}>
-                                          <span style={{ ...st.baseChip, background: 'rgba(239,68,68,0.1)', color: '#fca5a5', border: '1px solid rgba(239,68,68,0.2)' }}>
-                                            {racePoints} avg pts
-                                          </span>
-                                        </div>
-                                        <div style={{ fontSize: '0.65rem', color: '#9ca3af', marginTop: '0.2rem', textAlign: 'right' }}>
-                                          Average points awarded
-                                        </div>
-                                      </>
-                                    ) : !hasResults ? (
-                                      <span style={st.awaitingText}>{isWithdrawn ? 'Avg pts pending' : 'Awaiting result'}</span>
+                                    {!hasResults ? (
+                                      <span style={st.awaitingText}>Awaiting result</span>
                                     ) : posDsp ? (
                                       <>
                                         <div style={{ ...st.positionLabel, color: posDsp.color }}>
@@ -426,6 +414,12 @@ export default function Results() {
                                   </div>
                                   }
                                 />
+                                {wasReplaced && (
+                                  <div style={{ fontSize: '0.72rem', color: '#9ca3af', marginTop: '0.35rem', paddingLeft: '0.25rem', fontStyle: 'italic' }}>
+                                    Auto-replaced — original pick scratched
+                                  </div>
+                                )}
+                                </>
                               ) : (
                                 <div style={st.noPickNote}>No pick made for this race</div>
                               )}
