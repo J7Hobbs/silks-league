@@ -823,6 +823,7 @@ const st = {
     padding: '0.5rem 0', zIndex: 100, justifyContent: 'space-around',
   },
   mobileBarItem: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', padding: '0.3rem 0', color: 'rgba(232,220,200,0.4)', textDecoration: 'none', flex: 1 },
+  mobileBarItemActive: { color: '#c9a84c' },
   mobileBarLabel: { fontSize: '10px', fontWeight: '500' },
   mobileDot: { width: '4px', height: '4px', borderRadius: '50%', background: '#c9a84c', marginTop: '1px' },
 }
