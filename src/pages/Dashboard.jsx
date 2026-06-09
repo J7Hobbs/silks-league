@@ -816,7 +816,7 @@ const s = {
   // Festival banner
   festBanner: {
     position: 'relative',
-    background: "linear-gradient(to right, rgba(10,26,8,0.93) 0%, rgba(10,26,8,0.6) 55%, rgba(10,26,8,0.2) 100%), url('https://images.unsplash.com/photo-1597651482572-9957ddaacfab?w=1400&q=85&fit=crop&crop=center') center 65% / cover no-repeat",
+    background: "linear-gradient(to right, rgba(10,26,8,0.93) 0%, rgba(10,26,8,0.6) 55%, rgba(10,26,8,0.2) 100%), url('https://images.unsplash.com/photo-1597651482572-9957ddaacfab?w=1400&q=85&fit=crop&crop=center') center 25% / cover no-repeat",
     border: '1.5px solid #c9a84c',
     borderRadius: '12px',
     overflow: 'hidden',
