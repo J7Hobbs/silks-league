@@ -816,7 +816,7 @@ const s = {
   // Festival banner
   festBanner: {
     position: 'relative',
-    background: "linear-gradient(to right, rgba(10,26,8,0.93) 0%, rgba(10,26,8,0.6) 55%, rgba(10,26,8,0.2) 100%), url('https://images.unsplash.com/photo-1597651482572-9957ddaacfab?w=1400&q=85&fit=crop&crop=center') center/cover no-repeat",
+    background: "linear-gradient(to right, rgba(10,26,8,0.93) 0%, rgba(10,26,8,0.6) 55%, rgba(10,26,8,0.2) 100%), url('https://images.unsplash.com/photo-1597651482572-9957ddaacfab?w=1400&q=85&fit=crop&crop=center') center 65% / cover no-repeat",
     border: '1.5px solid #c9a84c',
     borderRadius: '12px',
     overflow: 'hidden',
@@ -837,7 +837,7 @@ const s = {
 
   // Stat pills
   pillsRow: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' },
-  pill: { background: '#162a1a', border: '1px solid #c9a84c', borderLeft: '4px solid #c9a84c', borderRadius: '8px', padding: '1.1rem 1.5rem', display: 'flex', alignItems: 'center', gap: '1rem' },
+  pill: { background: 'linear-gradient(180deg, #152e12 0%, #0a1a08 100%)', border: '1px solid #c9a84c', borderLeft: '4px solid #c9a84c', borderRadius: '8px', padding: '1.1rem 1.5rem', display: 'flex', alignItems: 'center', gap: '1rem' },
   pillIcon: { fontSize: '1.6rem', flexShrink: 0 },
   pillValue: { fontFamily: "'Bebas Neue', sans-serif", fontSize: '2.2rem', color: '#c9a84c', letterSpacing: '0.03em', lineHeight: 1 },
   pillValueSub: { fontFamily: "'DM Sans', sans-serif", fontSize: '1.1rem', color: '#5a8a5a', fontWeight: '400' },
@@ -845,7 +845,7 @@ const s = {
 
   // Cards
   twoCol: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' },
-  card: { background: '#162a1a', border: '1px solid #c9a84c', borderLeft: '4px solid #c9a84c', borderRadius: '8px', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' },
+  card: { background: 'linear-gradient(180deg, #152e12 0%, #0a1a08 100%)', border: '1px solid #c9a84c', borderLeft: '4px solid #c9a84c', borderRadius: '8px', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' },
   cardHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' },
   cardTitle: { fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.1rem', color: '#e8f0e8', letterSpacing: '0.08em' },
   cardBadge: { background: 'rgba(201,168,76,0.12)', color: '#c9a84c', fontSize: '0.72rem', fontWeight: '600', padding: '0.2rem 0.6rem', borderRadius: '999px', whiteSpace: 'nowrap' },
