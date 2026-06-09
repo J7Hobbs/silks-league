@@ -5,23 +5,24 @@ import ProfileDropdown from '../components/ProfileDropdown.jsx'
 
 export default function Dashboard() {
   const navigate = useNavigate()
-  const [user, setUser]                   = useState(null)
-  const [isAdmin, setIsAdmin]             = useState(false)
-  const [loading, setLoading]             = useState(true)
-  const [menuOpen, setMenuOpen]           = useState(false)
-  const [races, setRaces]                 = useState([])
-  const [seasonPoints, setSeasonPoints]   = useState(null)
-  const [weekPicksCount, setWeekPicksCount] = useState(null)
-  const [leaderboard, setLeaderboard]     = useState([])
-  const [currentWeekNum, setCurrentWeekNum] = useState(null)
-  const [now, setNow] = useState(new Date())
-
-  const [festival, setFestival]             = useState(null)
-  const [festivalEntry, setFestivalEntry]   = useState(null)
-  const [festivalPoints, setFestivalPoints] = useState(null)
+  const [user, setUser]                       = useState(null)
+  const [isAdmin, setIsAdmin]                 = useState(false)
+  const [loading, setLoading]                 = useState(true)
+  const [races, setRaces]                     = useState([])
+  const [seasonPoints, setSeasonPoints]       = useState(null)
+  const [leaderboard, setLeaderboard]         = useState([])
+  const [weekLeaderboard, setWeekLeaderboard] = useState([])
+  const [leaderboardTab, setLeaderboardTab]   = useState('season')
+  const [currentWeekNum, setCurrentWeekNum]   = useState(null)
+  const [now, setNow]                         = useState(new Date())
+  const [thisWeekPicks, setThisWeekPicks]     = useState({})
+  const [lastWeekData, setLastWeekData]       = useState([])
+  const [festival, setFestival]               = useState(null)
+  const [festivalEntry, setFestivalEntry]     = useState(null)
+  const [festivalPoints, setFestivalPoints]   = useState(null)
   const [joiningFestival, setJoiningFestival] = useState(false)
+  const [myGroup, setMyGroup]                 = useState(null)
 
-  // Tick every second
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000)
     return () => clearInterval(t)
@@ -36,16 +37,23 @@ export default function Dashboard() {
         const { data: profile } = await supabase
           .from('profiles').select('is_admin').eq('id', user.id).single()
         setIsAdmin(profile?.is_admin || false)
-        await loadRaces()
-        await loadStats(user.id)
-        await loadLeaderboard(user.id)
-        await loadFestival(user.id)
+        await Promise.all([
+          loadRaces(user.id),
+          loadStats(user.id),
+          loadLeaderboard(user.id),
+          loadWeekLeaderboard(user.id),
+          loadLastWeekData(user.id),
+          loadFestival(user.id),
+          loadMyGroup(user.id),
+        ])
         setLoading(false)
       }
     })
   }, [navigate])
 
-  async function loadRaces() {
+  // ── Data loaders ────────────────────────────────────────────────────────────
+
+  async function loadRaces(userId) {
     const { data: season } = await supabase
       .from('seasons').select('id').eq('is_active', true).single()
     if (!season) return
@@ -66,6 +74,23 @@ export default function Dashboard() {
       .order('race_number')
     if (!raceData) return
 
+    const raceIds = raceData.map(r => r.id)
+
+    const { data: picksData } = await supabase
+      .from('picks')
+      .select('race_id, runner_id, runners(horse_name, silk_colour)')
+      .eq('user_id', userId)
+      .in('race_id', raceIds)
+
+    const picksMap = {}
+    picksData?.forEach(p => {
+      picksMap[p.race_id] = {
+        horseName:  p.runners?.horse_name || '',
+        silkColour: p.runners?.silk_colour || '#888',
+      }
+    })
+    setThisWeekPicks(picksMap)
+
     setRaces(raceData.map(r => ({
       id:      r.id,
       number:  r.race_number,
@@ -76,50 +101,74 @@ export default function Dashboard() {
     })))
   }
 
-  async function loadStats(userId) {
-    // Active season
+  async function loadLastWeekData(userId) {
+    if (!userId) return
     const { data: season } = await supabase
       .from('seasons').select('id').eq('is_active', true).single()
-    if (!season) { setSeasonPoints(0); setWeekPicksCount(0); return }
+    if (!season) return
 
-    // All weeks in season
+    const today = new Date().toISOString().split('T')[0]
     const { data: weeks } = await supabase
-      .from('race_weeks').select('id').eq('season_id', season.id)
-    if (!weeks?.length) { setSeasonPoints(0); setWeekPicksCount(0); return }
-
-    // Current week (most recent)
-    const { data: currentWeekArr } = await supabase
-      .from('race_weeks').select('id')
+      .from('race_weeks').select('id, week_number, saturday_date')
       .eq('season_id', season.id)
+      .lt('saturday_date', today)
       .order('saturday_date', { ascending: false })
       .limit(1)
-    const currentWeekId = currentWeekArr?.[0]?.id
+    const lastWeek = weeks?.[0]
+    if (!lastWeek) return
 
-    // All race IDs for the season
+    const { data: raceData } = await supabase
+      .from('races').select('id, race_number, race_time, venue, race_name')
+      .eq('race_week_id', lastWeek.id)
+      .order('race_number')
+    if (!raceData?.length) return
+
+    const raceIds = raceData.map(r => r.id)
+
+    const [{ data: picksData }, { data: scoresData }] = await Promise.all([
+      supabase.from('picks')
+        .select('race_id, runner_id, runners(horse_name, silk_colour)')
+        .eq('user_id', userId).in('race_id', raceIds),
+      supabase.from('scores')
+        .select('race_id, total_points, position_achieved')
+        .eq('user_id', userId).in('race_id', raceIds),
+    ])
+
+    const picksMap = {}
+    picksData?.forEach(p => {
+      picksMap[p.race_id] = {
+        horseName:  p.runners?.horse_name || '—',
+        silkColour: p.runners?.silk_colour || '#888',
+      }
+    })
+    const scoresMap = {}
+    scoresData?.forEach(s => { scoresMap[s.race_id] = s })
+
+    setLastWeekData(raceData.map(r => ({
+      race:  r,
+      pick:  picksMap[r.id]  || null,
+      score: scoresMap[r.id] || null,
+    })))
+  }
+
+  async function loadStats(userId) {
+    const { data: season } = await supabase
+      .from('seasons').select('id').eq('is_active', true).single()
+    if (!season) { setSeasonPoints(0); return }
+
+    const { data: weeks } = await supabase
+      .from('race_weeks').select('id').eq('season_id', season.id)
+    if (!weeks?.length) { setSeasonPoints(0); return }
+
     const weekIds = weeks.map(w => w.id)
     const { data: allRaces } = await supabase
-      .from('races').select('id, race_week_id').in('race_week_id', weekIds)
-    if (!allRaces?.length) { setSeasonPoints(0); setWeekPicksCount(0); return }
+      .from('races').select('id').in('race_week_id', weekIds)
+    if (!allRaces?.length) { setSeasonPoints(0); return }
 
-    const allRaceIds  = allRaces.map(r => r.id)
-    const weekRaceIds = currentWeekId
-      ? allRaces.filter(r => r.race_week_id === currentWeekId).map(r => r.id)
-      : []
-
-    // Season total: sum scores for this user across all season races
+    const allRaceIds = allRaces.map(r => r.id)
     const { data: seasonScores } = await supabase
       .from('scores').select('total_points').eq('user_id', userId).in('race_id', allRaceIds)
-    const total = seasonScores?.reduce((s, r) => s + (r.total_points || 0), 0) ?? 0
-    setSeasonPoints(total)
-
-    // Picks made this week = picks rows (saved before results come in)
-    if (weekRaceIds.length) {
-      const { data: weekPicks } = await supabase
-        .from('picks').select('id').eq('user_id', userId).in('race_id', weekRaceIds)
-      setWeekPicksCount(weekPicks?.length ?? 0)
-    } else {
-      setWeekPicksCount(0)
-    }
+    setSeasonPoints(seasonScores?.reduce((s, r) => s + (r.total_points || 0), 0) ?? 0)
   }
 
   async function loadLeaderboard(myUserId) {
@@ -138,7 +187,6 @@ export default function Dashboard() {
       allRaceIds = allRaces?.map(r => r.id) || []
     }
 
-    // Try all scores first; fall back to own scores if RLS blocks the query
     let scores = []
     if (allRaceIds.length) {
       const { data: allScores, error } = await supabase
@@ -161,12 +209,14 @@ export default function Dashboard() {
     })
 
     const { data: profiles } = await supabase
-      .from('profiles').select('id, username, display_name, full_name, season_starting_points').in('id', Object.keys(byUser))
+      .from('profiles')
+      .select('id, username, display_name, full_name, season_starting_points')
+      .in('id', Object.keys(byUser))
     profiles?.forEach(p => {
       if (byUser[p.id]) {
-        byUser[p.id].name = p.username || p.display_name || p.full_name || null
+        byUser[p.id].name          = p.username || p.display_name || p.full_name || null
         byUser[p.id].startingPoints = p.season_starting_points || 0
-        byUser[p.id].total += (p.season_starting_points || 0)
+        byUser[p.id].total         += (p.season_starting_points || 0)
       }
     })
 
@@ -174,40 +224,107 @@ export default function Dashboard() {
       .sort((a, b) => b.total - a.total)
       .slice(0, 5)
       .map((u, i) => ({
-        rank:         i + 1,
-        userId:       u.user_id,
-        name:         u.user_id === myUserId ? 'You' : (u.name || `Player ${i + 1}`),
-        points:       u.total,
-        isMe:         u.user_id === myUserId,
-        midSeason:    (u.startingPoints || 0) > 0,
+        rank:      i + 1,
+        userId:    u.user_id,
+        name:      u.user_id === myUserId ? 'You' : (u.name || `Player ${i + 1}`),
+        points:    u.total,
+        isMe:      u.user_id === myUserId,
+        midSeason: (u.startingPoints || 0) > 0,
       }))
     setLeaderboard(sorted)
   }
 
+  async function loadWeekLeaderboard(myUserId) {
+    const { data: season } = await supabase
+      .from('seasons').select('id').eq('is_active', true).single()
+    if (!season) return
+
+    const { data: weekArr } = await supabase
+      .from('race_weeks').select('id')
+      .eq('season_id', season.id)
+      .order('saturday_date', { ascending: false })
+      .limit(1)
+    const week = weekArr?.[0]
+    if (!week) return
+
+    const { data: raceArr } = await supabase
+      .from('races').select('id').eq('race_week_id', week.id)
+    if (!raceArr?.length) return
+    const raceIds = raceArr.map(r => r.id)
+
+    const { data: scores } = await supabase
+      .from('scores').select('user_id, total_points').in('race_id', raceIds)
+    if (!scores?.length) return
+
+    const byUser = {}
+    scores.forEach(s => {
+      if (!byUser[s.user_id]) byUser[s.user_id] = 0
+      byUser[s.user_id] += (s.total_points || 0)
+    })
+
+    const { data: profiles } = await supabase
+      .from('profiles').select('id, username, display_name, full_name')
+      .in('id', Object.keys(byUser))
+    const nameMap = {}
+    profiles?.forEach(p => { nameMap[p.id] = p.username || p.display_name || p.full_name || null })
+
+    const sorted = Object.entries(byUser)
+      .map(([uid, pts]) => ({
+        userId: uid,
+        points: pts,
+        name:   uid === myUserId ? 'You' : (nameMap[uid] || 'Player'),
+        isMe:   uid === myUserId,
+      }))
+      .sort((a, b) => b.points - a.points)
+      .slice(0, 5)
+      .map((u, i) => ({ ...u, rank: i + 1 }))
+    setWeekLeaderboard(sorted)
+  }
 
   async function loadFestival(userId) {
-    // Find the active festival
-    const { data: fest } = await supabase
-      .from('festivals').select('*').eq('is_active', true).single()
+    let fest = null
+
+    // Try active festival first
+    const { data: activeFest } = await supabase
+      .from('festivals').select('*').eq('is_active', true).maybeSingle()
+    if (activeFest) {
+      fest = activeFest
+    } else {
+      // Look for upcoming within 30 days
+      const todayStr = new Date().toISOString().split('T')[0]
+      const in30 = new Date()
+      in30.setDate(in30.getDate() + 30)
+      const in30Str = in30.toISOString().split('T')[0]
+      const { data: upcoming } = await supabase
+        .from('festivals').select('*')
+        .gte('start_date', todayStr)
+        .lte('start_date', in30Str)
+        .order('start_date', { ascending: true })
+        .limit(1)
+        .maybeSingle()
+      fest = upcoming || null
+    }
     if (!fest) return
     setFestival(fest)
 
-    // Check if user has entered
     const { data: entry } = await supabase
-      .from('festival_entries').select('*').eq('festival_id', fest.id).eq('user_id', userId).single()
+      .from('festival_entries').select('*')
+      .eq('festival_id', fest.id).eq('user_id', userId).maybeSingle()
     setFestivalEntry(entry || null)
 
-    // Sum user's festival scores
     if (entry) {
       const { data: days } = await supabase
         .from('festival_days').select('id').eq('festival_id', fest.id)
       if (!days?.length) return
-      const { data: races } = await supabase
-        .from('festival_races').select('id').in('festival_day_id', days.map(d => d.id))
-      if (!races?.length) return
-      const { data: scores } = await supabase
-        .from('festival_scores').select('total_points').eq('user_id', userId).in('festival_race_id', races.map(r => r.id))
-      const total = (scores?.reduce((s, r) => s + (r.total_points || 0), 0) ?? 0) + (entry.starting_points || 0)
+      const { data: festRaces } = await supabase
+        .from('festival_races').select('id')
+        .in('festival_day_id', days.map(d => d.id))
+      if (!festRaces?.length) return
+      const { data: fscores } = await supabase
+        .from('festival_scores').select('total_points')
+        .eq('user_id', userId)
+        .in('festival_race_id', festRaces.map(r => r.id))
+      const total = (fscores?.reduce((s, r) => s + (r.total_points || 0), 0) ?? 0) + (entry.starting_points || 0)
       setFestivalPoints(total)
     }
   }
@@ -217,318 +334,441 @@ export default function Dashboard() {
     setJoiningFestival(true)
     const { error } = await supabase.from('festival_entries').insert({
       festival_id: festival.id,
-      user_id: user.id,
+      user_id:     user.id,
       starting_points: 0,
     })
     setJoiningFestival(false)
     if (!error) await loadFestival(user.id)
   }
 
-  const handleSignOut = async () => {
-    await supabase.auth.signOut()
-    navigate('/auth')
+  async function loadMyGroup(userId) {
+    if (!userId) return
+    const { data } = await supabase
+      .from('group_members')
+      .select('group_id, groups(id, name)')
+      .eq('user_id', userId)
+      .limit(1)
+      .maybeSingle()
+    if (!data?.groups) return
+
+    const { count } = await supabase
+      .from('group_members')
+      .select('*', { count: 'exact', head: true })
+      .eq('group_id', data.group_id)
+
+    setMyGroup({ id: data.group_id, name: data.groups.name, memberCount: count || 0 })
   }
 
+  // ── Helpers ─────────────────────────────────────────────────────────────────
+
   const getGreeting = () => {
-    const hour = new Date().getHours()
-    if (hour < 12) return 'Good morning'
-    if (hour < 17) return 'Good afternoon'
+    const h = new Date().getHours()
+    if (h < 12) return 'Good morning'
+    if (h < 17) return 'Good afternoon'
     return 'Good evening'
   }
 
   const getFirstName = () => {
-    const fullName = user?.user_metadata?.full_name || user?.email || ''
-    return fullName.split(' ')[0] || 'there'
+    const full = user?.user_metadata?.full_name || user?.email || ''
+    return full.split(' ')[0] || 'there'
   }
 
-  // ── Live countdown to next Saturday 12:00 picks deadline ────
   const getCountdownStatus = () => {
-    const day  = now.getDay()   // 0 Sun … 6 Sat
+    const day  = now.getDay()
     const hour = now.getHours()
-
-    // Calculate next Saturday midnight
     const daysUntilSat = day === 6 ? 0 : (6 - day)
     const nextSat = new Date(now)
     nextSat.setDate(now.getDate() + daysUntilSat)
-    nextSat.setHours(12, 0, 0, 0) // 12:00 deadline
-
-    // If it's Saturday after 12pm — show LIVE
-    if (day === 6 && hour >= 12) {
-      return { mode: 'live' }
-    }
-
-    const msLeft = nextSat - now
-    const totalSecs = Math.floor(msLeft / 1000)
+    nextSat.setHours(12, 0, 0, 0)
+    if (day === 6 && hour >= 12) return { mode: 'live' }
+    const totalSecs = Math.floor((nextSat - now) / 1000)
     const days  = Math.floor(totalSecs / 86400)
     const hours = Math.floor((totalSecs % 86400) / 3600)
     const mins  = Math.floor((totalSecs % 3600) / 60)
     const secs  = totalSecs % 60
-
-    // More than 6 days away — just show the date
     if (days >= 6) {
       const dateStr = nextSat.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
       return { mode: 'date', label: `Race day ${dateStr}` }
     }
-
-    // Within 6 days — show countdown
     let label
     if (days > 0)       label = `${days}d ${hours}h ${mins}m`
     else if (hours > 0) label = `${hours}h ${mins}m ${secs}s`
     else                label = `${mins}m ${secs}s`
-
     return { mode: 'countdown', label, sublabel: 'to picks deadline' }
   }
 
+  const fmtDate = (ds) => {
+    if (!ds) return ''
+    try {
+      const d = new Date(ds + 'T12:00:00')
+      return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })
+    } catch { return ds }
+  }
+
+  // ── Loading screen ───────────────────────────────────────────────────────────
+
   if (loading) {
     return (
-      <div style={styles.loadingPage}>
-        <div style={styles.loadingDot} />
+      <div style={s.loadingPage}>
+        <div style={s.loadingDot} />
       </div>
     )
   }
 
-  const countdown = getCountdownStatus()
+  // ── Computed values ──────────────────────────────────────────────────────────
 
-  const myLeaderboardRank = leaderboard.find(r => r.isMe)?.rank ?? null
+  const countdown         = getCountdownStatus()
+  const myRank            = leaderboard.find(r => r.isMe)?.rank ?? null
+  const isRaceDay         = now.getDay() === 5 || now.getDay() === 6 // Fri or Sat
+  const festIsLive        = festival?.is_active === true
+  const festStartDate     = festival ? new Date(festival.start_date + 'T00:00:00') : null
+  const festDaysUntil     = festStartDate ? Math.ceil((festStartDate - now) / 86400000) : null
 
-  const statCards = [
-    {
-      label: 'My Points',
-      value: seasonPoints !== null ? String(seasonPoints) : '—',
-      sub:   'this season',
-      icon:  '⭐',
-    },
-    {
-      label: 'League Rank',
-      value: myLeaderboardRank ? `#${myLeaderboardRank}` : '—',
-      sub:   leaderboard.length ? `out of ${leaderboard.length} players` : 'this season',
-      icon:  '🏆',
-    },
-    {
-      label: 'Picks Made',
-      value: weekPicksCount !== null ? String(weekPicksCount) : '—',
-      sub:   'this week',
-      icon:  '🎯',
-    },
-    {
-      label: 'Win Rate',
-      value: '—%',
-      sub:   'all time',
-      icon:  '📈',
-    },
-  ]
+  // Countdown blocks
+  const getNextSat = () => {
+    const d = new Date(now)
+    const day = d.getDay()
+    const skip = day === 6 ? (now.getHours() >= 12 ? 7 : 0) : (6 - day)
+    d.setDate(d.getDate() + skip)
+    d.setHours(12, 0, 0, 0)
+    return d
+  }
+  const nextSatDt    = getNextSat()
+  const msToSat      = Math.max(0, nextSatDt - now)
+  const secsToSat    = Math.floor(msToSat / 1000)
+  const cdDays       = Math.floor(secsToSat / 86400)
+  const cdHours      = Math.floor((secsToSat % 86400) / 3600)
+  const cdMins       = Math.floor((secsToSat % 3600) / 60)
+  const nextSatLabel = nextSatDt.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'long' })
+
+  const shownLeaderboard = leaderboardTab === 'season' ? leaderboard : weekLeaderboard
+
+  // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
-    <div style={styles.page}>
+    <div style={s.page}>
 
-      {/* ── Top Nav ── */}
-      <nav style={styles.nav}>
-        <div style={styles.navInner}>
-          <a href="/" style={styles.navLogo}>Silks League</a>
-
-          <div style={styles.navLinks} className="app-nav-links">
-            <a href="/dashboard" style={{ ...styles.navLink, ...styles.navLinkActive }}>Dashboard</a>
-            <a href="/picks"     style={styles.navLink}>My Picks</a>
-            <a href="/league"    style={styles.navLink}>League</a>
-            <a href="/races"     style={styles.navLink}>Races</a>
-            <a href="/results"   style={styles.navLink}>Results</a>
-            <a href="/groups"    style={styles.navLink}>Groups</a>
-            {/* Festival link — shown when a festival is active */}
+      {/* ── Top nav ── */}
+      <nav style={s.nav}>
+        <div style={s.navInner}>
+          <a href="/" style={s.navLogo}>Silks League</a>
+          <div style={s.navLinks} className="app-nav-links">
+            <a href="/dashboard" style={{ ...s.navLink, ...s.navLinkActive }}>Dashboard</a>
+            <a href="/picks"     style={s.navLink}>My Picks</a>
+            <a href="/league"    style={s.navLink}>League</a>
+            <a href="/races"     style={s.navLink}>Races</a>
+            <a href="/results"   style={s.navLink}>Results</a>
+            <a href="/groups"    style={s.navLink}>Groups</a>
             {festival && (
-              <a href="/festival-picks" style={{ ...styles.navLink, color: '#c9a84c' }}>🏇 Festival</a>
+              <a href="/festival-picks" style={{ ...s.navLink, color: '#c9a84c' }}>🏇 Festival</a>
             )}
-            {/* Admin link — only shown to admin users */}
             {isAdmin && (
-              <a href="/admin" style={{ ...styles.navLink, color: '#c9a84c' }}>Admin</a>
+              <a href="/admin" style={{ ...s.navLink, color: '#c9a84c' }}>Admin</a>
             )}
           </div>
-
-          {/* Avatar + dropdown */}
-          <div style={styles.navRight}>
+          <div style={s.navRight}>
             <ProfileDropdown user={user} isAdmin={isAdmin} />
           </div>
         </div>
       </nav>
 
-      {/* ── Main content ── */}
-      <main style={styles.main} className="app-main-pad">
+      {/* ── Main ── */}
+      <main style={s.main} className="app-main-pad">
 
-        {/* Welcome header */}
-        <section style={styles.welcomeRow}>
+        {/* Greeting */}
+        <section style={s.welcomeRow}>
           <div>
-            <h1 style={styles.welcomeHeading}>
-              {getGreeting()}, {getFirstName()}.
-            </h1>
-            <p style={styles.welcomeSub}>Here's what's happening in the league today.</p>
+            <h1 style={s.welcomeHeading}>{getGreeting()}, {getFirstName()}.</h1>
+            <p style={s.welcomeSub}>Here's what's happening in the league today.</p>
           </div>
           {countdown.mode === 'live' && (
-            <div style={styles.livePill}>
-              <span style={styles.liveDot} />
-              LIVE
-            </div>
+            <div style={s.livePill}><span style={s.liveDot} />LIVE</div>
           )}
           {countdown.mode === 'date' && (
-            <div style={styles.statusPill}>
-              {countdown.label}
-            </div>
+            <div style={s.statusPill}>{countdown.label}</div>
           )}
           {countdown.mode === 'countdown' && (
-            <div style={styles.countdownPill}>
-              <span style={styles.countdownValue}>{countdown.label}</span>
-              <span style={styles.countdownSublabel}>{countdown.sublabel}</span>
+            <div style={s.countdownPill}>
+              <span style={s.countdownValue}>{countdown.label}</span>
+              <span style={s.countdownSublabel}>{countdown.sublabel}</span>
             </div>
           )}
         </section>
-
-        {/* Stat cards */}
-        <section style={styles.statsGrid} className="app-grid-4">
-          {statCards.map((card) => (
-            <div key={card.label} style={styles.statCard}>
-              <div style={styles.statIcon}>{card.icon}</div>
-              <div style={styles.statValue}>{card.value}</div>
-              <div style={styles.statLabel}>{card.label}</div>
-              <div style={styles.statSub}>{card.sub}</div>
-            </div>
-          ))}
-        </section>
-
 
         {/* Festival banner */}
         {festival && (
-          <section style={{ background: festival.banner_colour || '#1a6b3a', borderRadius: '12px', padding: '1.25rem 1.5rem', border: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
-            <div>
-              <div style={{ fontSize: '0.65rem', fontWeight: '700', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.6)', marginBottom: '0.25rem' }}>Festival Tournament · Active</div>
-              <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.6rem', color: '#fff', letterSpacing: '0.04em', lineHeight: 1 }}>{festival.display_name || festival.name}</div>
-              <div style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.65)', marginTop: '0.2rem' }}>{festival.start_date} → {festival.end_date}</div>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', flexWrap: 'wrap' }}>
-              {festivalEntry ? (
-                <>
-                  <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '2rem', color: '#fff', lineHeight: 1 }}>{festivalPoints ?? '—'}</div>
-                    <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>pts</div>
+          <section style={s.festBanner}>
+            <div style={s.festShimmer} />
+            <div style={s.festInner}>
+              <div style={s.festLeft}>
+                <div style={s.festLabel}>
+                  {festIsLive
+                    ? '👑 Festival Tournament · Live Now'
+                    : `👑 Festival Tournament · Starting in ${festDaysUntil} day${festDaysUntil !== 1 ? 's' : ''}`}
+                </div>
+                <div style={s.festName}>{festival.display_name || festival.name}</div>
+                <div style={s.festDates}>{fmtDate(festival.start_date)} — {fmtDate(festival.end_date)}</div>
+              </div>
+              <div style={s.festRight}>
+                {festIsLive && festivalEntry && (
+                  <div style={s.festPts}>
+                    <div style={s.festPtsVal}>{festivalPoints ?? '—'}</div>
+                    <div style={s.festPtsLbl}>pts</div>
                   </div>
-                  <button style={{ background: 'rgba(255,255,255,0.15)', border: '1.5px solid rgba(255,255,255,0.4)', color: '#fff', borderRadius: '8px', padding: '0.55rem 1.1rem', fontFamily: "'DM Sans', sans-serif", fontWeight: '600', fontSize: '0.875rem', cursor: 'pointer', whiteSpace: 'nowrap' }}
-                    onClick={() => navigate('/festival-picks')}>Make Picks →</button>
-                </>
-              ) : (
-                <button style={{ background: '#fff', color: festival.banner_colour || '#1a6b3a', border: 'none', borderRadius: '8px', padding: '0.6rem 1.3rem', fontFamily: "'DM Sans', sans-serif", fontWeight: '700', fontSize: '0.9rem', cursor: 'pointer', whiteSpace: 'nowrap' }}
-                  onClick={joinFestival} disabled={joiningFestival}>
-                  {joiningFestival ? 'Joining…' : 'Join Festival →'}
+                )}
+                {festIsLive && !festivalEntry && (
+                  <button style={s.festJoinBtn} onClick={joinFestival} disabled={joiningFestival}>
+                    {joiningFestival ? 'Joining…' : 'Join Tournament'}
+                  </button>
+                )}
+                <button
+                  style={s.festViewBtn}
+                  onClick={() => navigate(festIsLive ? '/festival-picks' : '/festival-leaderboard')}>
+                  {festIsLive ? 'Make Picks →' : 'View Festival →'}
                 </button>
-              )}
+              </div>
             </div>
           </section>
         )}
 
-        {/* Two-column layout */}
-        <section style={styles.twoCol} className="app-grid-2">
-
-          {/* This Week's Races */}
-          <div style={styles.card}>
-            <div style={styles.cardHeader}>
-              <span style={styles.cardTitle}>This Week's Races</span>
-              <span style={styles.cardBadge}>{races.length} / 7 races</span>
-            </div>
-            <div style={styles.raceList}>
-              {races.length === 0 ? (
-                <div style={{ color: '#5a8a5a', fontSize: '0.85rem', padding: '0.5rem 0' }}>
-                  No races set up yet — check back soon.
-                </div>
-              ) : (
-                races.map(r => (
-                  <div key={r.id} style={styles.raceRow}>
-                    <div style={styles.raceTime}>{r.time}</div>
-                    <div style={styles.raceInfo}>
-                      <div style={styles.raceCourse}>{r.course}</div>
-                      <div style={styles.raceName}>{r.race}</div>
-                    </div>
-                    <div style={styles.raceRunners}>{r.runners} runner{r.runners !== 1 ? 's' : ''}</div>
-                    <button style={styles.pickBtn} onClick={() => navigate('/picks')}>Pick →</button>
-                  </div>
-                ))
-              )}
+        {/* Stat pills */}
+        <section style={s.pillsRow}>
+          <div style={s.pill}>
+            <span style={s.pillIcon}>⭐</span>
+            <div>
+              <div style={s.pillValue}>{seasonPoints !== null ? seasonPoints : '—'}</div>
+              <div style={s.pillLabel}>My Points this season</div>
             </div>
           </div>
-
-          {/* Live Leaderboard */}
-          <div style={styles.card}>
-            <div style={styles.cardHeader}>
-              <span style={styles.cardTitle}>Live Leaderboard</span>
-              {currentWeekNum && <span style={styles.cardBadge}>Week {currentWeekNum}</span>}
+          <div style={s.pill}>
+            <span style={s.pillIcon}>🏆</span>
+            <div>
+              <div style={s.pillValue}>
+                {myRank ? `#${myRank}` : '—'}
+                {myRank && leaderboard.length > 0 && (
+                  <span style={s.pillValueSub}> / {leaderboard.length}</span>
+                )}
+              </div>
+              <div style={s.pillLabel}>League Rank</div>
             </div>
-            <div style={styles.leaderList}>
-              {leaderboard.length === 0 ? (
-                <div style={{ color: '#5a8a5a', fontSize: '0.85rem', padding: '0.5rem 0' }}>
-                  No scores yet — results will appear here once races are submitted.
-                </div>
-              ) : (
-                leaderboard.map((row) => (
-                  <div
-                    key={row.rank}
-                    style={{ ...styles.leaderRow, ...(row.isMe ? styles.leaderRowMe : {}) }}
-                  >
-                    <div style={styles.leaderRank}>
-                      {row.rank === 1 ? '🥇' : row.rank === 2 ? '🥈' : row.rank === 3 ? '🥉' : `#${row.rank}`}
-                    </div>
-                    <div style={{ ...styles.leaderName, cursor: 'pointer', textDecoration: 'underline dotted', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
-                      onClick={() => navigate(`/player-picks/${row.userId}`)}>
-                      {row.name}
-                      {row.midSeason && <span style={{ fontSize: '0.6rem', fontWeight: '700', letterSpacing: '0.06em', color: '#5a8a5a', background: 'rgba(90,138,90,0.12)', padding: '0.1rem 0.4rem', borderRadius: '3px', whiteSpace: 'nowrap' }}>mid-season</span>}
-                    </div>
-                    <div style={styles.leaderPoints}>{row.points} pts</div>
-                  </div>
-                ))
-              )}
-            </div>
-            <button style={styles.viewAllBtn} onClick={() => navigate('/league')}>Full leaderboard →</button>
           </div>
         </section>
 
-        {/* Bottom strip */}
-        <section style={styles.bottomStrip} className="app-grid-2">
-          <div style={styles.bottomCard}>
-            <div style={styles.bottomCardIcon}>👥</div>
-            <div style={styles.bottomCardBody}>
-              <div style={styles.bottomCardTitle}>My Group</div>
-              <div style={styles.bottomCardSub}>The Somerset Silks · 6 members</div>
+        {/* Main two-column grid */}
+        <section style={s.twoCol} className="app-grid-2">
+
+          {/* Smart race card */}
+          <div style={s.card}>
+            <div style={s.cardHeader}>
+              <span style={s.cardTitle}>
+                {isRaceDay ? "THIS WEEK'S RACES" : 'LAST WEEK'}
+              </span>
+              <span style={s.cardBadge}>
+                {isRaceDay
+                  ? `${races.length} race${races.length !== 1 ? 's' : ''}`
+                  : 'Performance'}
+              </span>
             </div>
-            <button style={styles.bottomCardBtn}>View group →</button>
+
+            {/* State A — Race day (Fri / Sat) */}
+            {isRaceDay && (
+              <div style={s.raceList}>
+                {races.length === 0
+                  ? <div style={s.emptyMsg}>No races set up yet — check back soon.</div>
+                  : races.map(r => {
+                      const picked = thisWeekPicks[r.id]
+                      return (
+                        <div key={r.id} style={s.raceRow}>
+                          <div style={s.raceTime}>{r.time || '—'}</div>
+                          <div style={s.raceInfo}>
+                            <div style={s.raceCourse}>{r.course}</div>
+                            <div style={s.raceName}>{r.race || 'Race'}</div>
+                          </div>
+                          {picked
+                            ? <div style={s.pickedBadge}>✓ Picked</div>
+                            : <button style={s.pickBtn} onClick={() => navigate('/picks')}>Pick →</button>
+                          }
+                        </div>
+                      )
+                    })
+                }
+              </div>
+            )}
+
+            {/* State B — Mid-week */}
+            {!isRaceDay && (
+              <div style={s.raceList}>
+                {lastWeekData.length === 0
+                  ? <div style={s.emptyMsg}>No results available for last week yet.</div>
+                  : lastWeekData.map(({ race, pick, score }) => {
+                      const pos = score?.position_achieved
+                      const pts = score?.total_points ?? null
+                      const posBadge = pos === 1 ? s.posBadgeGreen : (pos === 2 || pos === 3) ? s.posBadgeGold : s.posBadgeGrey
+                      const ptsPill  = pos === 1 ? s.ptsPillGreen  : (pos === 2 || pos === 3) ? s.ptsPillGold  : s.ptsPillGrey
+                      const posLabel = pos === 1 ? '1st' : pos === 2 ? '2nd' : pos === 3 ? '3rd' : pos ? `${pos}th` : '—'
+                      return (
+                        <div key={race.id} style={s.raceRow}>
+                          <div style={s.raceTime}>{race.race_time || '—'}</div>
+                          <div style={s.raceInfo}>
+                            <div style={s.raceCourse}>{race.venue}</div>
+                            {pick
+                              ? (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginTop: '0.1rem' }}>
+                                  {pick.silkColour && (
+                                    <span style={{ width: '9px', height: '9px', borderRadius: '2px', background: pick.silkColour, display: 'inline-block', flexShrink: 0, border: '1px solid rgba(255,255,255,0.25)' }} />
+                                  )}
+                                  <span style={s.raceName}>{pick.horseName}</span>
+                                </div>
+                              )
+                              : <div style={s.raceName}>No pick</div>
+                            }
+                          </div>
+                          <div style={posBadge}>{posLabel}</div>
+                          {pts !== null && (
+                            <div style={ptsPill}>{pts > 0 ? `+${pts}` : pts} pts</div>
+                          )}
+                        </div>
+                      )
+                    })
+                }
+              </div>
+            )}
           </div>
-          <div style={styles.bottomCard}>
-            <div style={styles.bottomCardIcon}>📅</div>
-            <div style={styles.bottomCardBody}>
-              <div style={styles.bottomCardTitle}>Next Race Day</div>
-              <div style={styles.bottomCardSub}>Picks close Saturday at 12pm</div>
+
+          {/* Leaderboard with tab toggle */}
+          <div style={s.card}>
+            <div style={s.cardHeader}>
+              <span style={s.cardTitle}>Leaderboard</span>
+              <div style={s.tabRow}>
+                <button
+                  style={{ ...s.tab, ...(leaderboardTab === 'week' ? s.tabActive : {}) }}
+                  onClick={() => setLeaderboardTab('week')}>
+                  This Week
+                </button>
+                <button
+                  style={{ ...s.tab, ...(leaderboardTab === 'season' ? s.tabActive : {}) }}
+                  onClick={() => setLeaderboardTab('season')}>
+                  Season
+                </button>
+              </div>
             </div>
-            <button style={styles.bottomCardBtn} onClick={() => navigate('/picks')}>Make picks →</button>
+            <div style={s.leaderList}>
+              {shownLeaderboard.length === 0
+                ? <div style={s.emptyMsg}>No scores yet — results appear here once submitted.</div>
+                : shownLeaderboard.map(row => (
+                    <div key={row.rank} style={{ ...s.leaderRow, ...(row.isMe ? s.leaderRowMe : {}) }}>
+                      <div style={s.leaderRank}>
+                        {row.rank === 1 ? '🥇' : row.rank === 2 ? '🥈' : row.rank === 3 ? '🥉' : `#${row.rank}`}
+                      </div>
+                      <div
+                        style={{ ...s.leaderName, cursor: 'pointer', textDecorationLine: 'underline', textDecorationStyle: 'dotted', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+                        onClick={() => navigate(`/player-picks/${row.userId}`)}>
+                        {row.name}
+                        {row.midSeason && leaderboardTab === 'season' && (
+                          <span style={{ fontSize: '0.58rem', fontWeight: '700', letterSpacing: '0.06em', color: '#5a8a5a', background: 'rgba(90,138,90,0.12)', padding: '0.1rem 0.4rem', borderRadius: '3px', whiteSpace: 'nowrap' }}>mid-season</span>
+                        )}
+                      </div>
+                      <div style={s.leaderPoints}>{row.points} pts</div>
+                    </div>
+                  ))
+              }
+            </div>
+            <button style={s.viewAllBtn} onClick={() => navigate('/league')}>Full leaderboard →</button>
           </div>
         </section>
+
+        {/* Bottom row */}
+        <section style={s.twoCol} className="app-grid-2">
+
+          {/* Next race day countdown blocks */}
+          <div style={s.card}>
+            <div style={s.cardHeader}>
+              <span style={s.cardTitle}>NEXT RACE DAY</span>
+              <span style={s.cardBadge}>{nextSatLabel}</span>
+            </div>
+            {msToSat === 0
+              ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#4ade80', fontSize: '0.9rem', fontWeight: '600', padding: '0.75rem 0' }}>
+                  <span style={s.liveDot} />Races are live — good luck!
+                </div>
+              )
+              : (
+                <div style={s.cdRow}>
+                  <div style={s.cdBlock}>
+                    <div style={s.cdNum}>{String(cdDays).padStart(2, '0')}</div>
+                    <div style={s.cdUnit}>DAYS</div>
+                  </div>
+                  <div style={s.cdSep}>:</div>
+                  <div style={s.cdBlock}>
+                    <div style={s.cdNum}>{String(cdHours).padStart(2, '0')}</div>
+                    <div style={s.cdUnit}>HRS</div>
+                  </div>
+                  <div style={s.cdSep}>:</div>
+                  <div style={s.cdBlock}>
+                    <div style={s.cdNum}>{String(cdMins).padStart(2, '0')}</div>
+                    <div style={s.cdUnit}>MIN</div>
+                  </div>
+                </div>
+              )
+            }
+            <button style={s.goldBtn} onClick={() => navigate('/picks')}>MAKE PICKS →</button>
+          </div>
+
+          {/* My Group */}
+          <div style={s.card}>
+            <div style={s.cardHeader}>
+              <span style={s.cardTitle}>MY GROUP</span>
+            </div>
+            {myGroup
+              ? (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '0.5rem 0' }}>
+                    <div style={{ fontSize: '2rem', flexShrink: 0 }}>👥</div>
+                    <div>
+                      <div style={{ fontSize: '1rem', fontWeight: '700', color: '#e8f0e8' }}>{myGroup.name}</div>
+                      <div style={{ fontSize: '0.78rem', color: '#5a8a5a', marginTop: '0.15rem' }}>
+                        {myGroup.memberCount} member{myGroup.memberCount !== 1 ? 's' : ''}
+                      </div>
+                    </div>
+                  </div>
+                  <button style={s.goldBtn} onClick={() => navigate('/groups')}>VIEW GROUP →</button>
+                </>
+              )
+              : (
+                <>
+                  <div style={s.emptyMsg}>You haven't joined a group yet.</div>
+                  <button style={s.goldBtn} onClick={() => navigate('/groups')}>BROWSE GROUPS →</button>
+                </>
+              )
+            }
+          </div>
+        </section>
+
       </main>
 
       {/* ── Mobile bottom bar ── */}
-      <nav style={styles.mobileBar} className="app-mobile-bar">
-        <a href="/dashboard" style={{ ...styles.mobileBarItem, ...styles.mobileBarItemActive }}>
-          <span>🏠</span><span style={styles.mobileBarLabel}>Home</span>
+      <nav style={s.mobileBar} className="app-mobile-bar">
+        <a href="/dashboard" style={{ ...s.mobileItem, ...s.mobileItemActive }}>
+          <span>🏠</span><span style={s.mobileLabel}>Home</span>
         </a>
-        <a href="/picks" style={styles.mobileBarItem}>
-          <span>🎯</span><span style={styles.mobileBarLabel}>Picks</span>
+        <a href="/picks" style={s.mobileItem}>
+          <span>🎯</span><span style={s.mobileLabel}>Picks</span>
         </a>
-        <a href="/league" style={styles.mobileBarItem}>
-          <span>🏆</span><span style={styles.mobileBarLabel}>League</span>
+        <a href="/league" style={s.mobileItem}>
+          <span>🏆</span><span style={s.mobileLabel}>League</span>
         </a>
-        <a href="/races" style={styles.mobileBarItem}>
-          <span>🐴</span><span style={styles.mobileBarLabel}>Races</span>
+        <a href="/races" style={s.mobileItem}>
+          <span>🐴</span><span style={s.mobileLabel}>Races</span>
         </a>
-        <a href="/results" style={styles.mobileBarItem}>
-          <span>📊</span><span style={styles.mobileBarLabel}>Results</span>
+        <a href="/results" style={s.mobileItem}>
+          <span>📊</span><span style={s.mobileLabel}>Results</span>
         </a>
-        <a href="/groups" style={styles.mobileBarItem}>
-          <span>👥</span><span style={styles.mobileBarLabel}>Groups</span>
+        <a href="/groups" style={s.mobileItem}>
+          <span>👥</span><span style={s.mobileLabel}>Groups</span>
         </a>
         {festival && (
-          <a href="/festival-picks" style={{ ...styles.mobileBarItem, color: '#c9a84c' }}>
-            <span>🏇</span><span style={styles.mobileBarLabel}>Festival</span>
+          <a href="/festival-picks" style={{ ...s.mobileItem, color: '#c9a84c' }}>
+            <span>🏇</span><span style={s.mobileLabel}>Festival</span>
           </a>
         )}
       </nav>
@@ -537,7 +777,9 @@ export default function Dashboard() {
   )
 }
 
-const styles = {
+// ── Styles ────────────────────────────────────────────────────────────────────
+
+const s = {
   page: {
     minHeight: '100vh', background: '#0a1a08',
     fontFamily: "'DM Sans', sans-serif", color: '#e8f0e8', paddingBottom: '5rem',
@@ -546,165 +788,108 @@ const styles = {
     minHeight: '100vh', background: '#0a1a08',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
   },
-  loadingDot: {
-    width: '12px', height: '12px', borderRadius: '50%', background: '#c9a84c',
-  },
-  nav: {
-    background: '#0d1f0d', borderBottom: '1px solid rgba(201,168,76,0.15)',
-    position: 'sticky', top: 0, zIndex: 100,
-  },
-  navInner: {
-    maxWidth: '1100px', margin: '0 auto', padding: '0 1.5rem',
-    height: '60px', display: 'flex', alignItems: 'center', gap: '2rem',
-  },
-  navLogo: {
-    fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.3rem',
-    color: '#c9a84c', letterSpacing: '0.1em', textDecoration: 'none', flexShrink: 0,
-  },
+  loadingDot: { width: '12px', height: '12px', borderRadius: '50%', background: '#c9a84c' },
+
+  // Nav
+  nav: { background: '#0d1f0d', borderBottom: '1px solid rgba(201,168,76,0.15)', position: 'sticky', top: 0, zIndex: 100 },
+  navInner: { maxWidth: '1100px', margin: '0 auto', padding: '0 1.5rem', height: '60px', display: 'flex', alignItems: 'center', gap: '2rem' },
+  navLogo: { fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.3rem', color: '#c9a84c', letterSpacing: '0.1em', textDecoration: 'none', flexShrink: 0 },
   navLinks: { display: 'flex', gap: '0.25rem', flex: 1 },
-  navLink: {
-    padding: '0.4rem 0.85rem', borderRadius: '6px', fontSize: '0.875rem',
-    fontWeight: '500', color: '#5a8a5a', textDecoration: 'none',
-  },
+  navLink: { padding: '0.4rem 0.85rem', borderRadius: '6px', fontSize: '0.875rem', fontWeight: '500', color: '#5a8a5a', textDecoration: 'none' },
   navLinkActive: { color: '#e8f0e8', background: 'rgba(201,168,76,0.1)' },
   navRight: { marginLeft: 'auto', position: 'relative' },
-  avatar: {
-    width: '36px', height: '36px', borderRadius: '50%', background: '#c9a84c',
-    color: '#0a1a08', fontWeight: '700', fontSize: '0.9rem',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    cursor: 'pointer', userSelect: 'none',
-  },
-  dropdownMenu: {
-    position: 'absolute', top: 'calc(100% + 0.5rem)', right: 0,
-    background: '#0d1f0d', border: '1px solid rgba(201,168,76,0.2)',
-    borderRadius: '10px', padding: '0.5rem 0', minWidth: '200px',
-    boxShadow: '0 16px 48px rgba(0,0,0,0.5)', zIndex: 200,
-  },
-  dropdownEmail: { padding: '0.5rem 1rem 0.75rem', fontSize: '0.78rem', color: '#5a8a5a' },
-  dropdownDivider: { border: 'none', borderTop: '1px solid rgba(201,168,76,0.1)', margin: '0.25rem 0' },
-  dropdownItem: {
-    display: 'block', width: '100%', padding: '0.55rem 1rem', textAlign: 'left',
-    background: 'none', border: 'none', color: '#e8f0e8', fontSize: '0.875rem',
-    cursor: 'pointer', fontFamily: "'DM Sans', sans-serif",
-  },
-  dropdownSignOut: { color: '#f87171' },
-  main: {
-    maxWidth: '1100px', margin: '0 auto', padding: '2rem 1.5rem',
-    display: 'flex', flexDirection: 'column', gap: '1.75rem',
-  },
-  welcomeRow: {
-    display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
-    flexWrap: 'wrap', gap: '1rem',
-  },
-  welcomeHeading: {
-    fontFamily: "'Bebas Neue', sans-serif", fontSize: '2.6rem',
-    color: '#e8f0e8', letterSpacing: '0.03em', margin: 0, lineHeight: 1,
-  },
+
+  // Main
+  main: { maxWidth: '1100px', margin: '0 auto', padding: '2rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '1.75rem' },
+
+  // Greeting
+  welcomeRow: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' },
+  welcomeHeading: { fontFamily: "'Bebas Neue', sans-serif", fontSize: '2.6rem', color: '#e8f0e8', letterSpacing: '0.03em', margin: 0, lineHeight: 1 },
   welcomeSub: { marginTop: '0.4rem', fontSize: '0.9rem', color: '#5a8a5a' },
-  statusPill: {
-    padding: '0.4rem 1rem', borderRadius: '999px', fontSize: '0.8rem',
-    fontWeight: '600', letterSpacing: '0.03em', flexShrink: 0,
-    alignSelf: 'flex-start', marginTop: '0.25rem',
-    background: 'rgba(201,168,76,0.12)', color: '#c9a84c',
+  statusPill: { padding: '0.4rem 1rem', borderRadius: '999px', fontSize: '0.8rem', fontWeight: '600', letterSpacing: '0.03em', flexShrink: 0, alignSelf: 'flex-start', marginTop: '0.25rem', background: 'rgba(201,168,76,0.12)', color: '#c9a84c' },
+  countdownPill: { background: 'rgba(201,168,76,0.1)', border: '1px solid rgba(201,168,76,0.25)', borderRadius: '10px', padding: '0.5rem 1.1rem', display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0, alignSelf: 'flex-start', marginTop: '0.1rem', minWidth: '110px' },
+  countdownValue: { fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.5rem', color: '#c9a84c', letterSpacing: '0.06em', lineHeight: 1 },
+  countdownSublabel: { fontSize: '0.62rem', color: '#5a8a5a', textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: '0.15rem' },
+  livePill: { display: 'flex', alignItems: 'center', gap: '0.45rem', background: 'rgba(74,222,128,0.12)', border: '1px solid rgba(74,222,128,0.3)', borderRadius: '999px', padding: '0.4rem 1rem', color: '#4ade80', fontWeight: '700', fontSize: '0.85rem', letterSpacing: '0.1em', flexShrink: 0, alignSelf: 'flex-start', marginTop: '0.25rem' },
+  liveDot: { width: '8px', height: '8px', borderRadius: '50%', background: '#4ade80', boxShadow: '0 0 6px #4ade80', flexShrink: 0 },
+
+  // Festival banner
+  festBanner: {
+    position: 'relative',
+    background: "linear-gradient(to right, rgba(10,26,8,0.93) 0%, rgba(10,26,8,0.6) 55%, rgba(10,26,8,0.2) 100%), url('https://images.unsplash.com/photo-1597651482572-9957ddaacfab?w=1400&q=85&fit=crop&crop=center') center/cover no-repeat",
+    border: '1.5px solid #c9a84c',
+    borderRadius: '12px',
+    overflow: 'hidden',
+    minHeight: '110px',
   },
-  countdownPill: {
-    background: 'rgba(201,168,76,0.1)', border: '1px solid rgba(201,168,76,0.25)',
-    borderRadius: '10px', padding: '0.5rem 1.1rem',
-    display: 'flex', flexDirection: 'column', alignItems: 'center',
-    flexShrink: 0, alignSelf: 'flex-start', marginTop: '0.1rem', minWidth: '110px',
-  },
-  countdownValue: {
-    fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.5rem',
-    color: '#c9a84c', letterSpacing: '0.06em', lineHeight: 1,
-  },
-  countdownSublabel: {
-    fontSize: '0.62rem', color: '#5a8a5a',
-    textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: '0.15rem',
-  },
-  livePill: {
-    display: 'flex', alignItems: 'center', gap: '0.45rem',
-    background: 'rgba(74,222,128,0.12)', border: '1px solid rgba(74,222,128,0.3)',
-    borderRadius: '999px', padding: '0.4rem 1rem',
-    color: '#4ade80', fontWeight: '700', fontSize: '0.85rem',
-    letterSpacing: '0.1em', flexShrink: 0, alignSelf: 'flex-start', marginTop: '0.25rem',
-  },
-  liveDot: {
-    width: '8px', height: '8px', borderRadius: '50%',
-    background: '#4ade80', boxShadow: '0 0 6px #4ade80', flexShrink: 0,
-  },
-  statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem' },
-  statCard: {
-    background: '#162a1a', border: '1px solid #c9a84c', borderLeft: '4px solid #c9a84c',
-    borderRadius: '8px', padding: '1.25rem',
-    display: 'flex', flexDirection: 'column', gap: '0.3rem',
-  },
-  statIcon:  { fontSize: '1.3rem', marginBottom: '0.25rem' },
-  statValue: { fontFamily: "'Bebas Neue', sans-serif", fontSize: '2.2rem', color: '#c9a84c', letterSpacing: '0.03em', lineHeight: 1 },
-  statLabel: { fontSize: '0.8rem', fontWeight: '600', color: '#e8f0e8', letterSpacing: '0.03em', textTransform: 'uppercase' },
-  statSub:   { fontSize: '0.75rem', color: '#5a8a5a' },
+  festShimmer: { position: 'absolute', top: 0, left: 0, right: 0, height: '3px', background: 'linear-gradient(90deg, transparent 0%, #c9a84c 30%, #f5d98b 50%, #c9a84c 70%, transparent 100%)' },
+  festInner: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1.5rem 2rem', gap: '1.5rem', flexWrap: 'wrap' },
+  festLeft: { display: 'flex', flexDirection: 'column', gap: '0.2rem' },
+  festLabel: { fontSize: '0.7rem', fontWeight: '700', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#c9a84c' },
+  festName: { fontFamily: "'Bebas Neue', sans-serif", fontSize: '2rem', color: '#fff', letterSpacing: '0.05em', lineHeight: 1.1 },
+  festDates: { fontSize: '0.77rem', color: 'rgba(232,240,232,0.6)', marginTop: '0.1rem' },
+  festRight: { display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' },
+  festPts: { textAlign: 'center' },
+  festPtsVal: { fontFamily: "'Bebas Neue', sans-serif", fontSize: '2.4rem', color: '#c9a84c', lineHeight: 1 },
+  festPtsLbl: { fontSize: '0.63rem', color: 'rgba(201,168,76,0.7)', textTransform: 'uppercase', letterSpacing: '0.1em' },
+  festJoinBtn: { background: 'rgba(201,168,76,0.15)', border: '1.5px solid #c9a84c', color: '#c9a84c', borderRadius: '8px', padding: '0.55rem 1.2rem', fontFamily: "'DM Sans', sans-serif", fontWeight: '600', fontSize: '0.875rem', cursor: 'pointer', whiteSpace: 'nowrap' },
+  festViewBtn: { background: '#c9a84c', border: 'none', color: '#0a1a08', borderRadius: '8px', padding: '0.55rem 1.2rem', fontFamily: "'DM Sans', sans-serif", fontWeight: '700', fontSize: '0.875rem', cursor: 'pointer', whiteSpace: 'nowrap' },
+
+  // Stat pills
+  pillsRow: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' },
+  pill: { background: '#162a1a', border: '1px solid #c9a84c', borderLeft: '4px solid #c9a84c', borderRadius: '8px', padding: '1.1rem 1.5rem', display: 'flex', alignItems: 'center', gap: '1rem' },
+  pillIcon: { fontSize: '1.6rem', flexShrink: 0 },
+  pillValue: { fontFamily: "'Bebas Neue', sans-serif", fontSize: '2.2rem', color: '#c9a84c', letterSpacing: '0.03em', lineHeight: 1 },
+  pillValueSub: { fontFamily: "'DM Sans', sans-serif", fontSize: '1.1rem', color: '#5a8a5a', fontWeight: '400' },
+  pillLabel: { fontSize: '0.78rem', color: '#e8f0e8', fontWeight: '500', marginTop: '0.2rem' },
+
+  // Cards
   twoCol: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' },
-  card: {
-    background: '#162a1a', border: '1px solid #c9a84c', borderLeft: '4px solid #c9a84c',
-    borderRadius: '8px', padding: '1.5rem',
-    display: 'flex', flexDirection: 'column', gap: '1rem',
-  },
-  cardHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
-  cardTitle:  { fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.2rem', color: '#e8f0e8', letterSpacing: '0.05em' },
-  cardBadge:  { background: 'rgba(201,168,76,0.12)', color: '#c9a84c', fontSize: '0.75rem', fontWeight: '600', padding: '0.2rem 0.6rem', borderRadius: '999px' },
-  raceList:   { display: 'flex', flexDirection: 'column', gap: '0.75rem' },
-  raceRow: {
-    display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem',
-    background: 'rgba(201,168,76,0.04)', borderRadius: '6px', border: '1px solid rgba(201,168,76,0.2)',
-  },
-  raceTime:    { fontFamily: "'Bebas Neue', sans-serif", fontSize: '1rem', color: '#c9a84c', letterSpacing: '0.05em', minWidth: '40px' },
-  raceInfo:    { flex: 1 },
-  raceCourse:  { fontSize: '0.875rem', fontWeight: '600', color: '#e8f0e8' },
-  raceName:    { fontSize: '0.75rem', color: '#5a8a5a', marginTop: '0.1rem' },
-  raceRunners: { fontSize: '0.75rem', color: '#5a8a5a', whiteSpace: 'nowrap' },
-  pickBtn: {
-    background: '#c9a84c', color: '#0a1a08', border: 'none', borderRadius: '6px',
-    padding: '0.35rem 0.7rem', fontSize: '0.78rem', fontWeight: '600',
-    cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", whiteSpace: 'nowrap',
-  },
-  viewAllBtn: {
-    background: 'none', border: '1px solid rgba(201,168,76,0.2)', color: '#c9a84c',
-    borderRadius: '8px', padding: '0.6rem 1rem', fontSize: '0.85rem', fontWeight: '600',
-    cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", width: '100%', textAlign: 'center',
-  },
-  leaderList: { display: 'flex', flexDirection: 'column', gap: '0.5rem' },
-  leaderRow: {
-    display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.65rem 0.75rem',
-    borderRadius: '6px', background: 'rgba(201,168,76,0.04)', border: '1px solid rgba(201,168,76,0.2)',
-  },
-  leaderRowMe: { background: 'rgba(201,168,76,0.12)', border: '1px solid rgba(201,168,76,0.4)' },
-  leaderRank:   { fontSize: '1rem', minWidth: '28px', textAlign: 'center' },
-  leaderName:   { flex: 1, fontSize: '0.875rem', fontWeight: '500', color: '#e8f0e8' },
-  leaderPoints: { fontSize: '0.875rem', fontWeight: '600', color: '#c9a84c' },
-  leaderChange: { fontSize: '0.75rem', color: '#5a8a5a', minWidth: '16px', textAlign: 'center' },
-  bottomStrip: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' },
-  bottomCard: {
-    background: '#162a1a', border: '1px solid #c9a84c', borderLeft: '4px solid #c9a84c',
-    borderRadius: '8px', padding: '1.25rem 1.5rem',
-    display: 'flex', alignItems: 'center', gap: '1rem',
-  },
-  bottomCardIcon: { fontSize: '1.8rem', flexShrink: 0 },
-  bottomCardBody: { flex: 1 },
-  bottomCardTitle: { fontWeight: '600', fontSize: '0.95rem', color: '#e8f0e8' },
-  bottomCardSub:   { fontSize: '0.78rem', color: '#5a8a5a', marginTop: '0.15rem' },
-  bottomCardBtn: {
-    background: 'none', border: '1px solid rgba(201,168,76,0.25)', color: '#c9a84c',
-    borderRadius: '7px', padding: '0.45rem 0.85rem', fontSize: '0.8rem', fontWeight: '600',
-    cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", whiteSpace: 'nowrap', flexShrink: 0,
-  },
-  mobileBar: {
-    display: 'none', position: 'fixed', bottom: 0, left: 0, right: 0,
-    background: '#0d1f0d', borderTop: '1px solid rgba(201,168,76,0.15)',
-    padding: '0.5rem 0', zIndex: 100, justifyContent: 'space-around',
-  },
-  mobileBarItem: {
-    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.15rem',
-    color: '#5a8a5a', textDecoration: 'none', fontSize: '1.1rem', padding: '0.25rem 0.75rem',
-  },
-  mobileBarItemActive: { color: '#c9a84c' },
-  mobileBarLabel: { fontSize: '0.65rem', fontWeight: '500' },
+  card: { background: '#162a1a', border: '1px solid #c9a84c', borderLeft: '4px solid #c9a84c', borderRadius: '8px', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' },
+  cardHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' },
+  cardTitle: { fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.1rem', color: '#e8f0e8', letterSpacing: '0.08em' },
+  cardBadge: { background: 'rgba(201,168,76,0.12)', color: '#c9a84c', fontSize: '0.72rem', fontWeight: '600', padding: '0.2rem 0.6rem', borderRadius: '999px', whiteSpace: 'nowrap' },
+  emptyMsg: { color: '#5a8a5a', fontSize: '0.83rem', padding: '0.25rem 0' },
+
+  // Race rows
+  raceList: { display: 'flex', flexDirection: 'column', gap: '0.55rem' },
+  raceRow: { display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.6rem 0.75rem', background: 'rgba(201,168,76,0.04)', borderRadius: '6px', border: '1px solid rgba(201,168,76,0.14)' },
+  raceTime: { fontFamily: "'Bebas Neue', sans-serif", fontSize: '0.92rem', color: '#c9a84c', letterSpacing: '0.05em', minWidth: '36px' },
+  raceInfo: { flex: 1, minWidth: 0 },
+  raceCourse: { fontSize: '0.82rem', fontWeight: '600', color: '#e8f0e8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
+  raceName: { fontSize: '0.71rem', color: '#5a8a5a', marginTop: '0.08rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
+  pickedBadge: { background: 'rgba(74,222,128,0.1)', border: '1px solid rgba(74,222,128,0.3)', color: '#4ade80', borderRadius: '6px', padding: '0.28rem 0.55rem', fontSize: '0.73rem', fontWeight: '700', whiteSpace: 'nowrap', flexShrink: 0 },
+  pickBtn: { background: '#c9a84c', color: '#0a1a08', border: 'none', borderRadius: '6px', padding: '0.28rem 0.6rem', fontSize: '0.73rem', fontWeight: '700', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", whiteSpace: 'nowrap', flexShrink: 0 },
+  posBadgeGreen: { background: 'rgba(74,222,128,0.12)', border: '1px solid rgba(74,222,128,0.3)', color: '#4ade80', borderRadius: '5px', padding: '0.22rem 0.45rem', fontSize: '0.7rem', fontWeight: '700', flexShrink: 0, whiteSpace: 'nowrap' },
+  posBadgeGold:  { background: 'rgba(201,168,76,0.12)', border: '1px solid rgba(201,168,76,0.3)', color: '#c9a84c', borderRadius: '5px', padding: '0.22rem 0.45rem', fontSize: '0.7rem', fontWeight: '700', flexShrink: 0, whiteSpace: 'nowrap' },
+  posBadgeGrey:  { background: 'rgba(90,138,90,0.08)', border: '1px solid rgba(90,138,90,0.2)', color: '#5a8a5a', borderRadius: '5px', padding: '0.22rem 0.45rem', fontSize: '0.7rem', fontWeight: '700', flexShrink: 0, whiteSpace: 'nowrap' },
+  ptsPillGreen: { background: 'rgba(74,222,128,0.1)', color: '#4ade80', borderRadius: '4px', padding: '0.18rem 0.4rem', fontSize: '0.7rem', fontWeight: '700', flexShrink: 0, whiteSpace: 'nowrap' },
+  ptsPillGold:  { background: 'rgba(201,168,76,0.1)', color: '#c9a84c', borderRadius: '4px', padding: '0.18rem 0.4rem', fontSize: '0.7rem', fontWeight: '700', flexShrink: 0, whiteSpace: 'nowrap' },
+  ptsPillGrey:  { background: 'rgba(90,138,90,0.08)', color: '#5a8a5a', borderRadius: '4px', padding: '0.18rem 0.4rem', fontSize: '0.7rem', fontWeight: '700', flexShrink: 0, whiteSpace: 'nowrap' },
+
+  // Leaderboard tabs
+  tabRow: { display: 'flex', gap: '0.35rem' },
+  tab: { background: 'none', border: '1px solid rgba(201,168,76,0.2)', color: '#5a8a5a', borderRadius: '6px', padding: '0.28rem 0.65rem', fontSize: '0.73rem', fontWeight: '600', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" },
+  tabActive: { background: 'rgba(201,168,76,0.12)', border: '1px solid rgba(201,168,76,0.4)', color: '#c9a84c' },
+  leaderList: { display: 'flex', flexDirection: 'column', gap: '0.45rem' },
+  leaderRow: { display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.55rem 0.7rem', borderRadius: '6px', background: 'rgba(201,168,76,0.04)', border: '1px solid rgba(201,168,76,0.14)' },
+  leaderRowMe: { background: 'rgba(201,168,76,0.1)', border: '1px solid rgba(201,168,76,0.4)' },
+  leaderRank: { fontSize: '0.9rem', minWidth: '24px', textAlign: 'center' },
+  leaderName: { flex: 1, fontSize: '0.84rem', fontWeight: '500', color: '#e8f0e8' },
+  leaderPoints: { fontSize: '0.84rem', fontWeight: '600', color: '#c9a84c' },
+  viewAllBtn: { background: 'none', border: '1px solid rgba(201,168,76,0.2)', color: '#c9a84c', borderRadius: '8px', padding: '0.55rem 1rem', fontSize: '0.82rem', fontWeight: '600', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", width: '100%', textAlign: 'center', marginTop: 'auto' },
+
+  // Countdown blocks
+  cdRow: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', padding: '0.25rem 0' },
+  cdBlock: { background: 'rgba(201,168,76,0.08)', border: '1px solid rgba(201,168,76,0.22)', borderRadius: '8px', padding: '0.7rem 0.9rem', textAlign: 'center', minWidth: '60px' },
+  cdNum: { fontFamily: "'Bebas Neue', sans-serif", fontSize: '2.2rem', color: '#c9a84c', letterSpacing: '0.06em', lineHeight: 1 },
+  cdUnit: { fontSize: '0.58rem', fontWeight: '700', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#5a8a5a', marginTop: '0.2rem' },
+  cdSep: { fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.8rem', color: 'rgba(201,168,76,0.35)', lineHeight: 1, paddingBottom: '0.4rem' },
+  goldBtn: { background: '#c9a84c', border: 'none', color: '#0a1a08', borderRadius: '8px', padding: '0.65rem 1.25rem', fontFamily: "'Bebas Neue', sans-serif", fontSize: '1rem', letterSpacing: '0.08em', cursor: 'pointer', width: '100%', textAlign: 'center', marginTop: 'auto' },
+
+  // Mobile bar
+  mobileBar: { display: 'none', position: 'fixed', bottom: 0, left: 0, right: 0, background: '#0d1f0d', borderTop: '1px solid rgba(201,168,76,0.15)', padding: '0.5rem 0', zIndex: 100, justifyContent: 'space-around' },
+  mobileItem: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.15rem', color: '#5a8a5a', textDecoration: 'none', fontSize: '1.1rem', padding: '0.25rem 0.75rem' },
+  mobileItemActive: { color: '#c9a84c' },
+  mobileLabel: { fontSize: '0.65rem', fontWeight: '500' },
 }
