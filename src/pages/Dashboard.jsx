@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import ProfileDropdown from '../components/ProfileDropdown.jsx'
+import { Home, Target, Trophy, BarChart2, Users } from 'lucide-react'
 
 export default function Dashboard() {
   const navigate = useNavigate()
@@ -456,15 +457,8 @@ export default function Dashboard() {
             <a href="/dashboard" style={{ ...s.navLink, ...s.navLinkActive }}>Dashboard</a>
             <a href="/picks"     style={s.navLink}>My Picks</a>
             <a href="/league"    style={s.navLink}>League</a>
-            <a href="/races"     style={s.navLink}>Races</a>
             <a href="/results"   style={s.navLink}>Results</a>
             <a href="/groups"    style={s.navLink}>Groups</a>
-            {festival && (
-              <a href="/festival-picks" style={{ ...s.navLink, color: '#c9a84c' }}>🏇 Festival</a>
-            )}
-            {isAdmin && (
-              <a href="/admin" style={{ ...s.navLink, color: '#c9a84c' }}>Admin</a>
-            )}
           </div>
           <div style={s.navRight}>
             <ProfileDropdown user={user} isAdmin={isAdmin} />
@@ -749,28 +743,26 @@ export default function Dashboard() {
       {/* ── Mobile bottom bar ── */}
       <nav style={s.mobileBar} className="app-mobile-bar">
         <a href="/dashboard" style={{ ...s.mobileItem, ...s.mobileItemActive }}>
-          <span>🏠</span><span style={s.mobileLabel}>Home</span>
+          <Home size={22} strokeWidth={1.5} />
+          <span style={s.mobileLabel}>Home</span>
+          <span style={s.mobileDot} />
         </a>
         <a href="/picks" style={s.mobileItem}>
-          <span>🎯</span><span style={s.mobileLabel}>Picks</span>
+          <Target size={22} strokeWidth={1.5} />
+          <span style={s.mobileLabel}>Picks</span>
         </a>
         <a href="/league" style={s.mobileItem}>
-          <span>🏆</span><span style={s.mobileLabel}>League</span>
-        </a>
-        <a href="/races" style={s.mobileItem}>
-          <span>🐴</span><span style={s.mobileLabel}>Races</span>
+          <Trophy size={22} strokeWidth={1.5} />
+          <span style={s.mobileLabel}>League</span>
         </a>
         <a href="/results" style={s.mobileItem}>
-          <span>📊</span><span style={s.mobileLabel}>Results</span>
+          <BarChart2 size={22} strokeWidth={1.5} />
+          <span style={s.mobileLabel}>Results</span>
         </a>
         <a href="/groups" style={s.mobileItem}>
-          <span>👥</span><span style={s.mobileLabel}>Groups</span>
+          <Users size={22} strokeWidth={1.5} />
+          <span style={s.mobileLabel}>Groups</span>
         </a>
-        {festival && (
-          <a href="/festival-picks" style={{ ...s.mobileItem, color: '#c9a84c' }}>
-            <span>🏇</span><span style={s.mobileLabel}>Festival</span>
-          </a>
-        )}
       </nav>
 
     </div>
@@ -889,7 +881,8 @@ const s = {
 
   // Mobile bar
   mobileBar: { display: 'none', position: 'fixed', bottom: 0, left: 0, right: 0, background: '#0d1f0d', borderTop: '1px solid rgba(201,168,76,0.15)', padding: '0.5rem 0', zIndex: 100, justifyContent: 'space-around' },
-  mobileItem: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.15rem', color: '#5a8a5a', textDecoration: 'none', fontSize: '1.1rem', padding: '0.25rem 0.75rem' },
+  mobileItem: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', padding: '0.3rem 0', color: 'rgba(232,220,200,0.4)', textDecoration: 'none', flex: 1 },
   mobileItemActive: { color: '#c9a84c' },
-  mobileLabel: { fontSize: '0.65rem', fontWeight: '500' },
+  mobileLabel: { fontSize: '10px', fontWeight: '500' },
+  mobileDot: { width: '4px', height: '4px', borderRadius: '50%', background: '#c9a84c', marginTop: '1px' },
 }
