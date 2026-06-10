@@ -130,18 +130,29 @@ export default function Dashboard() {
 
     const [{ data: picksData }, { data: scoresData }] = await Promise.all([
       supabase.from('picks')
-        .select('race_id, runner_id, runners(horse_name, silk_colour)')
+        .select('race_id, runner_id')
         .eq('user_id', userId).in('race_id', raceIds),
       supabase.from('scores')
         .select('race_id, total_points, position_achieved')
         .eq('user_id', userId).in('race_id', raceIds),
     ])
 
+    // Fetch runner details separately (avoids FK join issues)
+    const runnerIds = [...new Set((picksData || []).map(p => p.runner_id).filter(Boolean))]
+    const runnerMap = {}
+    if (runnerIds.length) {
+      const { data: runnersData } = await supabase
+        .from('runners').select('id, horse_name, silk_colour')
+        .in('id', runnerIds)
+      runnersData?.forEach(r => { runnerMap[r.id] = r })
+    }
+
     const picksMap = {}
     picksData?.forEach(p => {
+      const runner = p.runner_id ? runnerMap[p.runner_id] : null
       picksMap[p.race_id] = {
-        horseName:  p.runners?.horse_name || '—',
-        silkColour: p.runners?.silk_colour || '#888',
+        horseName:  runner?.horse_name  || '—',
+        silkColour: runner?.silk_colour || '#888',
       }
     })
     const scoresMap = {}

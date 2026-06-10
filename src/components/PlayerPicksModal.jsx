@@ -261,22 +261,31 @@ export default function PlayerPicksModal({
                         <RunnerCard
                           runner={pick}
                           rightContent={
-                            !hasResults ? (
-                              <span style={{ fontSize: '0.75rem', color: '#5a8a5a' }}>Pending</span>
-                            ) : pl ? (
+                            // Pre-results: pass undefined so RunnerCard shows odds by default
+                            !hasResults ? undefined : (
+                              // Post-results: show odds (small) above position/pts
                               <div style={{ textAlign: 'right' }}>
-                                <div style={{ fontSize: '0.85rem', fontWeight: '700', color: pl.color }}>
-                                  {pl.medal && <span style={{ marginRight: '0.2rem' }}>{pl.medal}</span>}
-                                  {pl.text}
-                                </div>
-                                <div style={{ fontSize: '0.75rem', color: '#c9a84c', marginTop: '2px', fontWeight: '600' }}>
-                                  {score.total_points} pts
-                                </div>
-                              </div>
-                            ) : (
-                              <div style={{ textAlign: 'right' }}>
-                                <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#5a8a5a' }}>Unplaced</div>
-                                <div style={{ fontSize: '0.75rem', color: '#5a8a5a', marginTop: '2px' }}>0 pts</div>
+                                {pick.odds_fractional && (
+                                  <div style={{ fontSize: '0.7rem', color: 'rgba(201,168,76,0.55)', marginBottom: '4px', whiteSpace: 'nowrap' }}>
+                                    {pick.odds_fractional}
+                                  </div>
+                                )}
+                                {pl ? (
+                                  <>
+                                    <div style={{ fontSize: '0.85rem', fontWeight: '700', color: pl.color }}>
+                                      {pl.medal && <span style={{ marginRight: '0.2rem' }}>{pl.medal}</span>}
+                                      {pl.text}
+                                    </div>
+                                    <div style={{ fontSize: '0.75rem', color: '#c9a84c', marginTop: '2px', fontWeight: '600' }}>
+                                      {score.total_points} pts
+                                    </div>
+                                  </>
+                                ) : (
+                                  <>
+                                    <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#5a8a5a' }}>Unplaced</div>
+                                    <div style={{ fontSize: '0.75rem', color: '#5a8a5a', marginTop: '2px' }}>0 pts</div>
+                                  </>
+                                )}
                               </div>
                             )
                           }
