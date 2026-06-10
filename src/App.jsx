@@ -95,6 +95,7 @@ export default function App() {
             <a href="#points" className="nav-link">Points</a>
             <a href="#leaderboard" className="nav-link">Leaderboard</a>
             <a href="#groups" className="nav-link">Groups</a>
+            <a href="#festivals" className="nav-link">Festivals</a>
           </div>
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
             <button style={ghostBtn} onClick={goToLogin}>Log in</button>
@@ -307,6 +308,54 @@ export default function App() {
                 <div className="group-stat">
                   <span className="gs-val">12pm Sat</span>
                   <span className="gs-label">Picks deadline</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── FESTIVALS ── */}
+      <section className="section" id="festivals">
+        <div className="section-inner split">
+          <div className="split-text">
+            <div className="section-eyebrow">Racing festivals</div>
+            <h2 className="section-title">Cheltenham.<br />Royal Ascot.<br />The big ones.</h2>
+            <p className="split-body">
+              When the major festivals come around, Silks League runs special tournament games
+              alongside the regular weekly competition. Festival picks are completely separate —
+              their own leaderboard, their own scoring, their own bragging rights.
+            </p>
+            <p className="split-body">
+              Festival tournaments follow the same simple format: pick one horse per race,
+              score points for winners and placed horses, and see where you finish on the
+              festival leaderboard at the end of the meeting. Your weekly league score is
+              never affected.
+            </p>
+            <button className="btn-gold" onClick={goToSignup}>Join free</button>
+          </div>
+
+          <div className="groups-visual">
+            <div className="group-card">
+              <div className="group-card-header">
+                <span className="group-name">🏆 Royal Ascot 2025</span>
+                <span className="group-live">● Live</span>
+              </div>
+              <div className="group-code" style={{ color: '#8ab88a', fontSize: '0.8rem', marginTop: '0.25rem' }}>
+                5-day festival · Separate leaderboard
+              </div>
+              <div className="group-stats-row" style={{ marginTop: '1rem' }}>
+                <div className="group-stat">
+                  <span className="gs-val">Day 3</span>
+                  <span className="gs-label">Current day</span>
+                </div>
+                <div className="group-stat">
+                  <span className="gs-val">7</span>
+                  <span className="gs-label">Races today</span>
+                </div>
+                <div className="group-stat">
+                  <span className="gs-val">142 pts</span>
+                  <span className="gs-label">Top score</span>
                 </div>
               </div>
             </div>

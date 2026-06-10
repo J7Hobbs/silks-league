@@ -210,7 +210,7 @@ const m = {
   },
   bodyText: {
     fontSize: '14px', color: '#e8dcc8', lineHeight: 1.75, margin: 0,
-    fontFamily: 'Georgia, serif',
+    fontFamily: "'DM Sans', sans-serif",
   },
 
   // Scoring cards
