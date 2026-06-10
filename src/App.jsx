@@ -23,6 +23,12 @@ const STEPS = [
   },
   {
     num: '03',
+    title: 'Follow the results',
+    desc: 'Results update automatically each Saturday after the final race. See how your picks scored, check the leaderboard, and see who rose to the top.',
+    icon: '📊',
+  },
+  {
+    num: '04',
     title: 'Chase the championship',
     desc: 'Points stack up each week. Win the weekly prize, top your monthly group, or go all out for the annual champion title.',
     icon: '🏆',
@@ -138,7 +144,7 @@ export default function App() {
       <section className="section" id="how-it-works">
         <div className="section-inner">
           <div className="section-eyebrow">How it works</div>
-          <h2 className="section-title">Three steps to glory</h2>
+          <h2 className="section-title">Four steps to glory</h2>
           <div className="steps-grid">
             {STEPS.map((s) => (
               <div key={s.num} className="step-card">
