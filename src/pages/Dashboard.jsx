@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import ProfileDropdown from '../components/ProfileDropdown.jsx'
+import PlayerPicksModal from '../components/PlayerPicksModal.jsx'
 import { Home, Target, Trophy, BarChart2, Users } from 'lucide-react'
 
 export default function Dashboard() {
@@ -23,6 +24,7 @@ export default function Dashboard() {
   const [festivalPoints, setFestivalPoints]   = useState(null)
   const [joiningFestival, setJoiningFestival] = useState(false)
   const [myGroup, setMyGroup]                 = useState(null)
+  const [picksModal, setPicksModal]           = useState(null) // { userId, name, pts, rank }
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000)
@@ -656,7 +658,7 @@ export default function Dashboard() {
                       </div>
                       <div
                         style={{ ...s.leaderName, cursor: 'pointer', textDecorationLine: 'underline', textDecorationStyle: 'dotted', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
-                        onClick={() => navigate(`/player-picks/${row.userId}`)}>
+                        onClick={() => setPicksModal({ userId: row.userId, name: row.name, pts: row.points, rank: row.rank })}>
                         {row.name}
                         {row.midSeason && leaderboardTab === 'season' && (
                           <span style={{ fontSize: '0.58rem', fontWeight: '700', letterSpacing: '0.06em', color: '#5a8a5a', background: 'rgba(90,138,90,0.12)', padding: '0.1rem 0.4rem', borderRadius: '3px', whiteSpace: 'nowrap' }}>mid-season</span>
@@ -764,6 +766,18 @@ export default function Dashboard() {
           <span style={s.mobileLabel}>Groups</span>
         </a>
       </nav>
+
+      {/* ── Player picks modal ── */}
+      {picksModal && (
+        <PlayerPicksModal
+          userId={picksModal.userId}
+          viewerUserId={user?.id}
+          displayName={picksModal.name}
+          seasonPoints={picksModal.pts}
+          seasonRank={picksModal.rank}
+          onClose={() => setPicksModal(null)}
+        />
+      )}
 
     </div>
   )

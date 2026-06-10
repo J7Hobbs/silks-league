@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import RunnerCard from '../components/RunnerCard.jsx'
 import ProfileDropdown from '../components/ProfileDropdown.jsx'
+import PlayerPicksModal from '../components/PlayerPicksModal.jsx'
 import { Home, Target, Trophy, BarChart2, Users } from 'lucide-react'
 
 export default function Results() {
@@ -27,6 +28,8 @@ export default function Results() {
 
   // UI
   const [expandedRaces, setExpandedRaces] = useState(new Set())
+  const [weekStandings, setWeekStandings] = useState([])    // [{ userId, name, points, isMe }]
+  const [picksModal,    setPicksModal]    = useState(null)  // { userId, name, pts, rank }
 
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data: { user } }) => {
@@ -144,7 +147,7 @@ export default function Results() {
     scoresData?.forEach(s => { scoresMap[s.race_id] = s })
     setMyScores(scoresMap)
 
-    // Weekly position — compare my total against all users
+    // Weekly position + standings — compare all users
     const { data: allScores } = await supabase
       .from('scores').select('user_id, total_points').in('race_id', raceIds)
     if (allScores?.length) {
@@ -154,8 +157,25 @@ export default function Results() {
       const myPos = Object.values(byUser).filter(t => t > myTotal).length + 1
       setWeeklyPosition(myPos)
       setTotalPlayers(Object.keys(byUser).length)
+
+      // Build standings — fetch display names for all scorers
+      const allUserIds = Object.keys(byUser)
+      const { data: profData } = await supabase
+        .from('profiles').select('id, username, display_name, full_name').in('id', allUserIds)
+      const nameMap = {}
+      profData?.forEach(p => { nameMap[p.id] = p.username || p.display_name || p.full_name || null })
+      const standings = allUserIds
+        .map(uid => ({
+          userId:  uid,
+          name:    uid === userId ? 'You' : (nameMap[uid] || 'Player'),
+          points:  byUser[uid],
+          isMe:    uid === userId,
+        }))
+        .sort((a, b) => b.points - a.points || a.name.localeCompare(b.name))
+        .map((r, i) => ({ ...r, rank: i + 1 }))
+      setWeekStandings(standings)
     } else {
-      setWeeklyPosition(null); setTotalPlayers(0)
+      setWeeklyPosition(null); setTotalPlayers(0); setWeekStandings([])
     }
 
     // Auto-expand first race that has results
@@ -315,6 +335,30 @@ export default function Results() {
                     </div>
                   ))}
                 </section>
+
+                {/* ── This week's standings ── */}
+                {weekStandings.length > 0 && (
+                  <section style={st.standingsCard}>
+                    <div style={st.standingsTitle}>THIS WEEK'S STANDINGS</div>
+                    {weekStandings.map(row => (
+                      <div
+                        key={row.userId}
+                        style={{ ...st.standingRow, ...(row.isMe ? st.standingRowMe : {}) }}
+                      >
+                        <span style={st.standingRank}>
+                          {row.rank === 1 ? '🥇' : row.rank === 2 ? '🥈' : row.rank === 3 ? '🥉' : `#${row.rank}`}
+                        </span>
+                        <span
+                          style={st.standingName}
+                          onClick={() => setPicksModal({ userId: row.userId, name: row.name, pts: row.points, rank: row.rank })}
+                        >
+                          {row.name}
+                        </span>
+                        <span style={st.standingPts}>{row.points} pts</span>
+                      </div>
+                    ))}
+                  </section>
+                )}
 
                 {/* ── Race cards ── */}
                 <section style={st.raceList}>
@@ -493,6 +537,18 @@ export default function Results() {
         </a>
       </nav>
 
+      {/* ── Player picks modal ── */}
+      {picksModal && (
+        <PlayerPicksModal
+          userId={picksModal.userId}
+          viewerUserId={user?.id}
+          displayName={picksModal.name}
+          seasonPoints={picksModal.pts}
+          seasonRank={picksModal.rank}
+          onClose={() => setPicksModal(null)}
+        />
+      )}
+
     </div>
   )
 }
@@ -595,6 +651,42 @@ const st = {
     background: '#162a1a', border: '1px solid #c9a84c', borderLeft: '4px solid #c9a84c',
     borderRadius: '8px', padding: '3rem 2rem', textAlign: 'center',
     color: '#5a8a5a', fontSize: '0.9rem',
+  },
+
+  // This week's standings
+  standingsCard: {
+    background: 'linear-gradient(180deg, #152e12 0%, #0a1a08 100%)',
+    border: '1px solid rgba(201,168,76,0.2)', borderLeft: '4px solid rgba(201,168,76,0.4)',
+    borderRadius: '8px', overflow: 'hidden',
+  },
+  standingsTitle: {
+    fontSize: '0.65rem', fontWeight: '800', letterSpacing: '0.1em',
+    textTransform: 'uppercase', color: '#5a8a5a',
+    padding: '0.7rem 1.25rem 0.55rem',
+    borderBottom: '1px solid rgba(201,168,76,0.08)',
+  },
+  standingRow: {
+    display: 'flex', alignItems: 'center', gap: '0.75rem',
+    padding: '0.65rem 1.25rem',
+    borderBottom: '1px solid rgba(201,168,76,0.06)',
+  },
+  standingRowMe: {
+    background: 'rgba(201,168,76,0.07)',
+    borderLeft: '3px solid #c9a84c',
+    paddingLeft: 'calc(1.25rem - 3px)',
+  },
+  standingRank: {
+    minWidth: '32px', fontSize: '0.88rem', textAlign: 'center',
+    color: '#5a8a5a',
+  },
+  standingName: {
+    flex: 1, fontSize: '0.9rem', fontWeight: '500', color: '#e8f0e8',
+    cursor: 'pointer', textDecoration: 'underline dotted',
+    textUnderlineOffset: '2px',
+  },
+  standingPts: {
+    fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.1rem',
+    color: '#c9a84c', letterSpacing: '0.03em',
   },
 
   // Summary strip

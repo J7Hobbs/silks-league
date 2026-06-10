@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import ProfileDropdown from '../components/ProfileDropdown.jsx'
+import PlayerPicksModal from '../components/PlayerPicksModal.jsx'
 import { Home, Target, Trophy, BarChart2, Users } from 'lucide-react'
 
 export default function League() {
@@ -15,6 +16,7 @@ export default function League() {
   const [season, setSeason]     = useState(null)
   const [currentWeek, setCurrentWeek] = useState(null)
   const [activeTab, setActiveTab] = useState('season') // 'season' | 'week'
+  const [picksModal, setPicksModal] = useState(null)   // { userId, name, pts, rank }
 
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data: { user } }) => {
@@ -310,7 +312,12 @@ export default function League() {
                   <div style={st.nameCell}>
                     <span
                       style={{ ...st.playerName, cursor: 'pointer', textDecoration: 'underline dotted' }}
-                      onClick={() => navigate(`/player-picks/${row.user_id}`)}
+                      onClick={() => setPicksModal({
+                        userId: row.user_id,
+                        name:   row.name,
+                        pts:    activeTab === 'season' ? row.seasonTotal : row.weekPoints,
+                        rank:   row.rank,
+                      })}
                     >{row.name}</span>
                     {row.isMe && <span style={st.youBadge}>You</span>}
                   </div>
@@ -369,6 +376,18 @@ export default function League() {
           <span style={st.mobileBarLabel}>Groups</span>
         </a>
       </nav>
+
+      {/* ── Player picks modal ── */}
+      {picksModal && (
+        <PlayerPicksModal
+          userId={picksModal.userId}
+          viewerUserId={user?.id}
+          displayName={picksModal.name}
+          seasonPoints={picksModal.pts}
+          seasonRank={picksModal.rank}
+          onClose={() => setPicksModal(null)}
+        />
+      )}
 
     </div>
   )
