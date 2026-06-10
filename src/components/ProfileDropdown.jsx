@@ -6,12 +6,14 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import HowItWorksModal from './HowItWorksModal.jsx'
 
 export default function ProfileDropdown({ user, isAdmin }) {
   const navigate = useNavigate()
   const ref      = useRef(null)
-  const [open,    setOpen]    = useState(false)
-  const [profile, setProfile] = useState(null)
+  const [open,         setOpen]         = useState(false)
+  const [profile,      setProfile]      = useState(null)
+  const [showHowItWorks, setShowHowItWorks] = useState(false)
 
   useEffect(() => {
     if (!user?.id) return
@@ -50,6 +52,12 @@ export default function ProfileDropdown({ user, isAdmin }) {
 
           <div style={ds.divider} />
 
+          <button style={ds.item} onClick={() => { setOpen(false); setShowHowItWorks(true) }}>
+            How it works
+          </button>
+
+          <div style={ds.divider} />
+
           <button style={ds.item} onClick={() => { setOpen(false); navigate('/account') }}>
             Account details
           </button>
@@ -71,6 +79,7 @@ export default function ProfileDropdown({ user, isAdmin }) {
           </button>
         </div>
       )}
+      <HowItWorksModal open={showHowItWorks} onClose={() => setShowHowItWorks(false)} />
     </div>
   )
 }

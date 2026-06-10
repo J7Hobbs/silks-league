@@ -596,7 +596,7 @@ const st = {
     fontSize: '0.875rem', fontWeight: '500', zIndex: 9999,
     fontFamily: "'DM Sans', sans-serif", boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
   },
-  toastSuccess: { background: '#0d1f0d', border: '1px solid rgba(74,222,128,0.4)', color: '#4ade80' },
+  toastSuccess: { background: '#0d1f0d', border: '1px solid rgba(201,168,76,0.4)', color: '#c9a84c' },
   toastError:   { background: '#0d1f0d', border: '1px solid rgba(239,68,68,0.4)',  color: '#f87171' },
 
   // Main
@@ -628,7 +628,7 @@ const st = {
 
   // Deadline banner
   deadlineBanner: {
-    background: '#162a1a', border: '1px solid #c9a84c', borderLeft: '4px solid #c9a84c',
+    background: 'linear-gradient(180deg, #152e12 0%, #0a1a08 100%)', border: '1px solid #c9a84c', borderLeft: '4px solid #c9a84c',
     borderRadius: '8px', padding: '1rem 1.25rem',
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
     gap: '1rem', flexWrap: 'wrap',
@@ -660,7 +660,7 @@ const st = {
 
   // Progress card
   progressCard: {
-    background: '#162a1a', border: '1px solid #c9a84c', borderLeft: '4px solid #c9a84c',
+    background: 'linear-gradient(180deg, #152e12 0%, #0a1a08 100%)', border: '1px solid #c9a84c', borderLeft: '4px solid #c9a84c',
     borderRadius: '8px', padding: '1.25rem 1.5rem',
     display: 'flex', flexDirection: 'column', gap: '0.85rem',
   },
@@ -691,21 +691,21 @@ const st = {
     color: '#5a8a5a',
   },
   pipDone: {
-    background: 'rgba(74,222,128,0.1)',
-    border: '1px solid rgba(74,222,128,0.35)',
-    color: '#4ade80',
+    background: 'rgba(201,168,76,0.1)',
+    border: '1px solid rgba(201,168,76,0.35)',
+    color: '#c9a84c',
   },
 
   // Race list
   raceList: { display: 'flex', flexDirection: 'column', gap: '0.6rem' },
 
   raceOuter: {
-    background: '#162a1a',
-    border: '1px solid #c9a84c', borderLeft: '4px solid #c9a84c',
+    background: 'linear-gradient(180deg, #152e12 0%, #0a1a08 100%)',
+    border: '1px solid rgba(201,168,76,0.25)', borderLeft: '4px solid rgba(201,168,76,0.25)',
     borderRadius: '8px', overflow: 'hidden',
     transition: 'border-color 0.2s',
   },
-  raceOuterPicked: { borderColor: '#4ade80', borderLeftColor: '#4ade80' },
+  raceOuterPicked: { borderColor: '#c9a84c', borderLeftColor: '#c9a84c' },
 
   raceSummaryRow: {
     display: 'flex', alignItems: 'center', gap: '0.85rem',
@@ -741,8 +741,8 @@ const st = {
     flexShrink: 0,
   },
   pickedBadge: {
-    background: 'rgba(74,222,128,0.1)', border: '1px solid rgba(74,222,128,0.3)',
-    color: '#4ade80', fontSize: '0.75rem', fontWeight: '600',
+    background: 'rgba(201,168,76,0.15)', border: '1.5px solid #c9a84c',
+    color: '#c9a84c', fontSize: '0.75rem', fontWeight: '600',
     padding: '0.2rem 0.6rem', borderRadius: '999px', whiteSpace: 'nowrap',
     maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis',
   },
@@ -763,29 +763,29 @@ const st = {
   // Runner grid
   runnerGrid: { display: 'flex', flexDirection: 'column', gap: '8px' },
 
-  // Runner card — white card with gold border
+  // Runner card — dark card with subtle gold border
   runnerCard: {
     width: '100%', padding: '10px 12px 10px 10px',
     borderRadius: '10px',
-    border: '2px solid #c9a84c',
-    background: '#ffffff',
+    border: '1.5px solid rgba(201,168,76,0.3)',
+    background: 'linear-gradient(180deg, #152e12 0%, #0a1a08 100%)',
     cursor: 'pointer', textAlign: 'left',
     fontFamily: "'DM Sans', sans-serif",
     transition: 'all 0.15s',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
     display: 'flex', alignItems: 'center', gap: '10px',
     outline: 'none',
   },
   runnerCardSelected: {
-    background: '#fffdf5',
-    border: '2.5px solid #c9a84c',
+    background: 'rgba(201,168,76,0.08)',
+    border: '1.5px solid #c9a84c',
     boxShadow: '0 3px 14px rgba(201,168,76,0.18)',
   },
   runnerCardLocked: { opacity: 0.7, cursor: 'default' },
   runnerCardWithdrawn: {
     opacity: 0.55, cursor: 'not-allowed',
-    border: '2px solid rgba(239,68,68,0.3)',
-    background: '#fff8f8',
+    border: '1.5px solid rgba(239,68,68,0.3)',
+    background: 'linear-gradient(180deg, #1f1008 0%, #0a1a08 100%)',
   },
 
   // Save row

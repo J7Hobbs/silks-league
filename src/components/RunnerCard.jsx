@@ -76,7 +76,7 @@ export default function RunnerCard({
         }}>
           <span style={{
             fontSize: '15px', fontWeight: '700',
-            color: isWD ? '#9ca3af' : '#0d1a08',
+            color: isWD ? '#9ca3af' : selected ? '#c9a84c' : '#e8f0e8',
             textDecoration: isWD ? 'line-through' : 'none',
             lineHeight: 1.2,
           }}>
@@ -92,7 +92,7 @@ export default function RunnerCard({
 
         {/* Jockey / Trainer */}
         {(runner.jockey || runner.trainer) && (
-          <div style={{ fontSize: '9px', color: '#666', marginTop: '3px', lineHeight: 1.4 }}>
+          <div style={{ fontSize: '9px', color: '#5a8a5a', marginTop: '3px', lineHeight: 1.4 }}>
             {[runner.jockey && `J: ${runner.jockey}`, runner.trainer && `T: ${runner.trainer}`]
               .filter(Boolean).join('  ·  ')}
           </div>
@@ -100,7 +100,7 @@ export default function RunnerCard({
 
         {/* Form string */}
         {!isWD && runner.form_string && (
-          <div style={{ fontSize: '9px', color: '#999', marginTop: '2px' }}>
+          <div style={{ fontSize: '9px', color: '#5a8a5a', marginTop: '2px' }}>
             Form: {runner.form_string}
           </div>
         )}
@@ -126,7 +126,7 @@ export default function RunnerCard({
           {showCircle && (
             <div style={{
               width: '22px', height: '22px', borderRadius: '50%',
-              border: `2px solid ${isWD ? 'rgba(239,68,68,0.3)' : '#c9a84c'}`,
+              border: `2px solid ${isWD ? 'rgba(239,68,68,0.3)' : selected ? '#c9a84c' : 'rgba(201,168,76,0.3)'}`,
               background: selected && !isWD ? '#c9a84c' : 'transparent',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               flexShrink: 0,
@@ -147,20 +147,20 @@ export const card = {
     display: 'flex', alignItems: 'center', gap: '10px',
     padding: '10px 12px 10px 10px',
     borderRadius: '10px',
-    border: '2px solid #c9a84c',
-    background: '#ffffff',
+    border: '1.5px solid rgba(201,168,76,0.3)',
+    background: 'linear-gradient(180deg, #152e12 0%, #0a1a08 100%)',
     fontFamily: "'DM Sans', sans-serif",
     transition: 'all 0.15s',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
     outline: 'none',
     width: '100%',
     boxSizing: 'border-box',
   },
   selected: {
-    background: '#fffdf5',
-    border: '2.5px solid #c9a84c',
+    background: 'rgba(201,168,76,0.08)',
+    border: '1.5px solid #c9a84c',
     boxShadow: '0 3px 14px rgba(201,168,76,0.18)',
   },
   disabled:  { opacity: 0.7 },
-  withdrawn: { opacity: 0.55, border: '2px solid rgba(239,68,68,0.3)', background: '#fff8f8' },
+  withdrawn: { opacity: 0.55, border: '1.5px solid rgba(239,68,68,0.3)', background: 'linear-gradient(180deg, #1f1008 0%, #0a1a08 100%)' },
 }

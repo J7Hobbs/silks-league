@@ -30,7 +30,7 @@ const STEPS = [
   {
     num: '04',
     title: 'Chase the championship',
-    desc: 'Points stack up each week. Win the weekly prize, top your quarterly group, or go all out for the annual champion title.',
+    desc: 'Points stack up each week. Win the weekly prize, top your monthly group, or go all out for the annual champion title.',
     icon: '🏆',
   },
 ]
@@ -170,9 +170,9 @@ export default function App() {
             </p>
             <p className="split-body">
               With 7 races and a maximum of 280 points on offer each week, every pick matters.
-              The season runs across four quarters — Q1 (Jan–Mar), Q2 (Apr–Jun),
-              Q3 (Jul–Sep) and Q4 (Oct–Dec) — 13 Saturdays each. Compete for the weekly
-              prize, your quarterly title, or go all out for the annual championship.
+              Silks League runs on monthly seasons — each calendar month is a fresh start, with
+              4–5 Saturdays per month. Compete for the weekly prize, the monthly title,
+              or go all out for the annual championship.
             </p>
           </div>
           <div className="points-stack">
