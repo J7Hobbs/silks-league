@@ -549,38 +549,73 @@ export default function Dashboard() {
         </section>
 
         {/* Next race day countdown */}
-        <style>{`@media(min-width:768px){.next-race-card{max-width:520px;margin:0 auto}}`}</style>
-        <div className="next-race-card" style={s.card}>
-          <div style={s.cardHeader}>
-            <span style={s.cardTitle}>NEXT RACE DAY</span>
-            <span style={s.cardBadge}>{nextSatLabel}</span>
-          </div>
-          {msToSat === 0
-            ? (
+        <style>{`@media(min-width:768px){.nrd-mb{display:none !important}.nrd-dt{display:flex !important}}`}</style>
+        <div style={s.card}>
+
+          {/* ── Mobile layout — completely unchanged ── */}
+          <div className="nrd-mb" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div style={s.cardHeader}>
+              <span style={s.cardTitle}>NEXT RACE DAY</span>
+              <span style={s.cardBadge}>{nextSatLabel}</span>
+            </div>
+            {msToSat === 0 ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#4ade80', fontSize: '0.9rem', fontWeight: '600', padding: '0.75rem 0' }}>
                 <span style={s.liveDot} />Races are live — good luck!
               </div>
-            )
-            : (
+            ) : (
               <div style={s.cdRow}>
-                <div style={s.cdBlock}>
-                  <div style={s.cdNum}>{String(cdDays).padStart(2, '0')}</div>
-                  <div style={s.cdUnit}>DAYS</div>
-                </div>
+                <div style={s.cdBlock}><div style={s.cdNum}>{String(cdDays).padStart(2, '0')}</div><div style={s.cdUnit}>DAYS</div></div>
                 <div style={s.cdSep}>:</div>
-                <div style={s.cdBlock}>
-                  <div style={s.cdNum}>{String(cdHours).padStart(2, '0')}</div>
-                  <div style={s.cdUnit}>HRS</div>
-                </div>
+                <div style={s.cdBlock}><div style={s.cdNum}>{String(cdHours).padStart(2, '0')}</div><div style={s.cdUnit}>HRS</div></div>
                 <div style={s.cdSep}>:</div>
-                <div style={s.cdBlock}>
-                  <div style={s.cdNum}>{String(cdMins).padStart(2, '0')}</div>
-                  <div style={s.cdUnit}>MIN</div>
-                </div>
+                <div style={s.cdBlock}><div style={s.cdNum}>{String(cdMins).padStart(2, '0')}</div><div style={s.cdUnit}>MIN</div></div>
               </div>
-            )
-          }
-          <button style={s.goldBtn} onClick={() => navigate('/picks')}>MAKE PICKS →</button>
+            )}
+            <button style={s.goldBtn} onClick={() => navigate('/picks')}>MAKE PICKS →</button>
+          </div>
+
+          {/* ── Desktop layout — horizontal three-column row ── */}
+          <div className="nrd-dt" style={{ display: 'none', alignItems: 'center', width: '100%', gap: '1.5rem' }}>
+
+            {/* Left third — label + date + deadline */}
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: '10px', fontWeight: '700', letterSpacing: '2px', color: '#c9a84c', textTransform: 'uppercase', marginBottom: '0.4rem' }}>
+                NEXT RACE DAY
+              </div>
+              <div style={{ fontSize: '16px', fontWeight: '700', color: '#e8f0e8', marginBottom: '0.25rem' }}>
+                {nextSatDt.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
+              </div>
+              <div style={{ fontSize: '11px', color: 'rgba(232,240,232,0.35)' }}>
+                Picks close at 12pm
+              </div>
+            </div>
+
+            {/* Centre third — countdown blocks */}
+            <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
+              {msToSat === 0 ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#4ade80', fontSize: '0.9rem', fontWeight: '600' }}>
+                  <span style={s.liveDot} />Races are live!
+                </div>
+              ) : (
+                <div style={s.cdRow}>
+                  <div style={s.cdBlock}><div style={s.cdNum}>{String(cdDays).padStart(2, '0')}</div><div style={s.cdUnit}>DAYS</div></div>
+                  <div style={s.cdSep}>:</div>
+                  <div style={s.cdBlock}><div style={s.cdNum}>{String(cdHours).padStart(2, '0')}</div><div style={s.cdUnit}>HRS</div></div>
+                  <div style={s.cdSep}>:</div>
+                  <div style={s.cdBlock}><div style={s.cdNum}>{String(cdMins).padStart(2, '0')}</div><div style={s.cdUnit}>MIN</div></div>
+                </div>
+              )}
+            </div>
+
+            {/* Right third — button */}
+            <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end' }}>
+              <button style={{ ...s.goldBtn, width: '100%', maxWidth: '180px' }} onClick={() => navigate('/picks')}>
+                MAKE PICKS →
+              </button>
+            </div>
+
+          </div>
+
         </div>
 
         {/* Main two-column grid */}
