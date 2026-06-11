@@ -126,7 +126,7 @@ export default function Groups() {
       // Fetch names
       const groupProfileIds = [...new Set([...memberIds, ...(userId ? [userId] : [])])]
       const { data: profiles } = await supabase
-        .from('profiles').select('id, username, display_name, full_name').in('id', groupProfileIds)
+        .rpc('get_user_names', { user_ids: groupProfileIds })
       const nameMap = {}
       profiles?.forEach(p => { nameMap[p.id] = p.username || p.display_name || p.full_name || null })
 

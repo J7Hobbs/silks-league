@@ -224,9 +224,7 @@ export default function Dashboard() {
 
     const profileIds = [...new Set([...Object.keys(byUser), myUserId])]
     const { data: profiles } = await supabase
-      .from('profiles')
-      .select('id, username, display_name, full_name, season_starting_points')
-      .in('id', profileIds)
+      .rpc('get_user_names', { user_ids: profileIds })
     profiles?.forEach(p => {
       if (byUser[p.id]) {
         byUser[p.id].name           = p.username || p.display_name || p.full_name || null
@@ -279,7 +277,7 @@ export default function Dashboard() {
 
     const weekProfileIds = [...new Set([...Object.keys(byUser), myUserId])]
     const { data: profiles } = await supabase
-      .from('profiles').select('id, username, display_name, full_name').in('id', weekProfileIds)
+      .rpc('get_user_names', { user_ids: weekProfileIds })
     const nameMap = {}
     profiles?.forEach(p => { nameMap[p.id] = p.username || p.display_name || p.full_name || null })
 

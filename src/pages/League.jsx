@@ -105,7 +105,7 @@ export default function League() {
     const scores = allScores.length ? allScores : (ownScores || [])
     const allUserIds = [...new Set([...scores.map(sc => sc.user_id), myUserId])]
     const { data: profData } = await supabase
-      .from('profiles').select('id, username, full_name, display_name').in('id', allUserIds)
+      .rpc('get_user_names', { user_ids: allUserIds })
     const nameMap = {}
     profData?.forEach(p => { nameMap[p.id] = p.username || p.display_name || p.full_name || null })
 
@@ -232,7 +232,7 @@ export default function League() {
 
     const festProfileIds = [...new Set([...entryUserIds, myUserId])]
     const { data: profiles } = await supabase
-      .from('profiles').select('id, username, display_name, full_name').in('id', festProfileIds)
+      .rpc('get_user_names', { user_ids: festProfileIds })
     const nameMap = {}
     profiles?.forEach(p => { nameMap[p.id] = p.username || p.display_name || p.full_name || null })
 
@@ -268,7 +268,7 @@ export default function League() {
 
     const groupProfileIds = [...new Set([...memberIds, myUserId])]
     const { data: profiles } = await supabase
-      .from('profiles').select('id, username, display_name, full_name').in('id', groupProfileIds)
+      .rpc('get_user_names', { user_ids: groupProfileIds })
     const nameMap = {}
     profiles?.forEach(p => { nameMap[p.id] = p.username || p.display_name || p.full_name || null })
 

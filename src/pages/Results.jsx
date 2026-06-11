@@ -154,7 +154,7 @@ export default function Results() {
 
       const allUserIds = [...new Set([...Object.keys(byUser), userId])]
       const { data: profData } = await supabase
-        .from('profiles').select('id, username, display_name, full_name').in('id', allUserIds)
+        .rpc('get_user_names', { user_ids: allUserIds })
       const nameMap = {}
       profData?.forEach(p => { nameMap[p.id] = p.username || p.display_name || p.full_name || null })
       const standings = Object.keys(byUser)
