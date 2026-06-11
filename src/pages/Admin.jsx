@@ -5,10 +5,16 @@
  *   UPDATE profiles SET is_admin = true WHERE id = '[user_uuid]';
  *
  * ── RUNNER COLUMNS (run once) ───────────────────────────────────
- *   ALTER TABLE runners ADD COLUMN IF NOT EXISTS silk_colour   text;
- *   ALTER TABLE runners ADD COLUMN IF NOT EXISTS horse_number  integer;
- *   ALTER TABLE runners ADD COLUMN IF NOT EXISTS jockey        text;
- *   ALTER TABLE runners ADD COLUMN IF NOT EXISTS trainer       text;
+ *   ALTER TABLE runners ADD COLUMN IF NOT EXISTS silk_colour            text;
+ *   ALTER TABLE runners ADD COLUMN IF NOT EXISTS horse_number           integer;
+ *   ALTER TABLE runners ADD COLUMN IF NOT EXISTS jockey                 text;
+ *   ALTER TABLE runners ADD COLUMN IF NOT EXISTS trainer                text;
+ *   ALTER TABLE runners ADD COLUMN IF NOT EXISTS silk_colour_secondary  text;
+ *   ALTER TABLE runners ADD COLUMN IF NOT EXISTS silk_pattern           text;
+ *
+ * ── RACE COLUMNS (run once) ─────────────────────────────────────
+ *   ALTER TABLE races ADD COLUMN IF NOT EXISTS class_type  text;
+ *   ALTER TABLE races ADD COLUMN IF NOT EXISTS distance    text;
  *
  * ── SCORES TABLE (run once) ─────────────────────────────────────
  *   -- Create the table if it doesn't exist:
@@ -169,11 +175,16 @@ export default function Admin() {
   const [editingRunner, setEditingRunner] = useState(null)     // runner_id being edited
   const [editRunnerForm, setEditRunnerForm] = useState(EMPTY_RUNNER)
 
-  // ── Bulk import ──
+  // ── Bulk import (runner-only, per race) ──
   const [bulkImportOpen,   setBulkImportOpen]   = useState(new Set())   // Set of raceIds
   const [bulkImportText,   setBulkImportText]   = useState({})          // { [raceId]: string }
   const [bulkImportResult, setBulkImportResult] = useState({})          // { [raceId]: { errors, warnings } }
 
+  // ── Combined import (race + runners together) ──
+  const [combinedImportOpen,   setCombinedImportOpen]   = useState(false)
+  const [combinedImportText,   setCombinedImportText]   = useState('')
+  const [combinedImportResult, setCombinedImportResult] = useState(null)  // { errors, warnings, success }
+  const [showFormatGuide,      setShowFormatGuide]      = useState(false)
 
   // ── Festivals ──
   const [festivals, setFestivals]                     = useState([])
@@ -663,6 +674,157 @@ export default function Admin() {
     const warnStr = warnings.length > 0 ? ` (${warnings.length} warning${warnings.length !== 1 ? 's' : ''} — check console)` : ''
     showToast('success', `${count} runner${count !== 1 ? 's' : ''} imported successfully${warnStr}`)
     if (warnings.length) console.warn('[Bulk Import] Warnings:', warnings)
+  }
+
+  // ── Combined import (race + runners) ────────────────────────
+  async function bulkImportCombined() {
+    if (!currentWeek) { showToast('error', 'No race week selected'); return }
+    const text = combinedImportText.trim()
+    if (!text) { showToast('error', 'Paste your race data first'); return }
+
+    // Split at first blank line to separate header from runners
+    const blankLineIdx = text.search(/\n\s*\n/)
+    if (blankLineIdx === -1) {
+      setCombinedImportResult({ errors: ['Missing blank line — separate race info from runners with a blank line'], warnings: [], success: null })
+      return
+    }
+    const headerSection = text.slice(0, blankLineIdx).trim()
+    const runnerSection = text.slice(blankLineIdx).trim()
+
+    // Parse header (key: value pairs)
+    const headerFields = {}
+    for (const line of headerSection.split('\n')) {
+      const colonIdx = line.indexOf(':')
+      if (colonIdx === -1) continue
+      const key = line.slice(0, colonIdx).trim().toLowerCase()
+      const val = line.slice(colonIdx + 1).trim()
+      headerFields[key] = val
+    }
+
+    const errors = []
+    const warnings = []
+
+    // Required header fields
+    if (!headerFields.venue)     errors.push('Missing field: venue')
+    if (!headerFields.time)      errors.push('Missing field: time')
+    if (!headerFields.race_name) errors.push('Missing field: race_name')
+
+    if (errors.length) { setCombinedImportResult({ errors, warnings, success: null }); return }
+
+    // Validate time format (HH:MM)
+    if (!/^\d{1,2}:\d{2}$/.test(headerFields.time)) {
+      warnings.push(`Time "${headerFields.time}" looks unusual — expected format like 13:50`)
+    }
+
+    // Check race slot availability
+    const usedNums = new Set(races.map(r => r.race_number))
+    const nextRaceNum = [1,2,3,4,5,6,7].find(n => !usedNums.has(n))
+    if (!nextRaceNum) {
+      setCombinedImportResult({ errors: ['All 7 race slots are already filled for this week'], warnings, success: null })
+      return
+    }
+
+    // Parse runners
+    const runnerLines = runnerSection.split('\n').map(l => l.trim()).filter(l => l.length > 0)
+    if (!runnerLines.length) {
+      setCombinedImportResult({ errors: ['No runners found — add runner lines after the blank line'], warnings, success: null })
+      return
+    }
+
+    const expectedRunners = headerFields.runners ? parseInt(headerFields.runners) : null
+    const toInsert = []
+
+    for (let i = 0; i < runnerLines.length; i++) {
+      const line    = runnerLines[i]
+      const lineNum = i + 1
+      const parts   = line.split(',').map(p => p.trim())
+
+      if (parts.length < 6) {
+        errors.push(`Line ${lineNum} skipped — incorrect format (need at least 6 fields, got ${parts.length})`)
+        continue
+      }
+
+      const [numStr, name, jockey, trainer, oddsStr, primaryHex, secondaryHex, pattern] = parts
+
+      if (!name) { errors.push(`Line ${lineNum} skipped — horse name is empty`); continue }
+
+      // Odds
+      let oddsDecimal = null
+      const oddsNorm = oddsStr?.trim().toLowerCase()
+      if (oddsNorm && oddsNorm !== 'tba' && oddsNorm !== '') {
+        oddsDecimal = parseFractionalOdds(oddsStr)
+        if (!oddsDecimal) warnings.push(`Line ${lineNum}: odds "${oddsStr}" not recognised — imported with no odds`)
+      }
+
+      // Primary silk hex
+      const hexOk       = /^#[0-9a-fA-F]{6}$/.test(primaryHex)
+      const silkColour  = hexOk ? primaryHex : (primaryHex && primaryHex.toLowerCase() !== 'tba' ? '#1a3a10' : null)
+      if (primaryHex && !hexOk && primaryHex.toLowerCase() !== 'tba') {
+        warnings.push(`Line ${lineNum}: primary colour "${primaryHex}" not a valid hex — defaulted to #1a3a10`)
+      }
+
+      // Secondary silk hex
+      const sec2Ok              = secondaryHex && /^#[0-9a-fA-F]{6}$/.test(secondaryHex)
+      const silkColourSecondary = sec2Ok ? secondaryHex : null
+
+      const horseNum = parseInt(numStr)
+      toInsert.push({
+        horse_number:          !isNaN(horseNum) ? horseNum : null,
+        horse_name:            name,
+        jockey:                (jockey && jockey.toLowerCase() !== 'tba') ? jockey : 'TBA',
+        trainer:               (trainer && trainer.toLowerCase() !== 'tba') ? trainer : null,
+        odds_fractional:       (oddsStr && oddsStr.toLowerCase() !== 'tba') ? oddsStr : null,
+        odds_decimal:          oddsDecimal,
+        silk_colour:           silkColour,
+        silk_colour_secondary: silkColourSecondary,
+        silk_pattern:          pattern?.trim() || null,
+      })
+    }
+
+    if (errors.length) { setCombinedImportResult({ errors, warnings, success: null }); return }
+    if (!toInsert.length) { setCombinedImportResult({ errors: ['No valid runners to import'], warnings, success: null }); return }
+
+    if (expectedRunners && toInsert.length !== expectedRunners) {
+      warnings.push(`Expected ${expectedRunners} runners but parsed ${toInsert.length}`)
+    }
+
+    setLoading(true)
+
+    // ── Create the race record
+    const racePayload = {
+      race_week_id: currentWeek.id,
+      race_number:  nextRaceNum,
+      venue:        headerFields.venue,
+      race_name:    headerFields.race_name,
+      race_time:    headerFields.time,
+    }
+    // Optional columns (require migration — see header comments)
+    if (headerFields.class)    racePayload.class_type = headerFields.class
+    if (headerFields.distance) racePayload.distance   = headerFields.distance
+
+    const { data: newRace, error: raceErr } = await supabase.from('races').insert(racePayload).select().single()
+    if (raceErr) {
+      setLoading(false)
+      setCombinedImportResult({ errors: [`Failed to create race: ${raceErr.message}`], warnings, success: null })
+      return
+    }
+
+    // ── Insert runners
+    const runnersPayload = toInsert.map(r => ({ ...r, race_id: newRace.id }))
+    const { error: runnerErr } = await supabase.from('runners').insert(runnersPayload)
+    if (runnerErr) {
+      await supabase.from('races').delete().eq('id', newRace.id)   // rollback
+      setLoading(false)
+      setCombinedImportResult({ errors: [`Runners failed — race was not saved: ${runnerErr.message}`], warnings, success: null })
+      return
+    }
+
+    await loadRaces(currentWeek.id)
+    setLoading(false)
+
+    const successMsg = `Race created: ${headerFields.venue} ${headerFields.time} — ${toInsert.length} runner${toInsert.length !== 1 ? 's' : ''} imported`
+    setCombinedImportResult({ errors: [], warnings, success: successMsg })
+    setCombinedImportText('')
   }
 
   // ── Results CRUD ─────────────────────────────────────────────
@@ -1669,6 +1831,108 @@ export default function Admin() {
                   </div>
                 )}
 
+                {/* ── Combined import (race + runners) ── */}
+                {!isCurrentPastWeek && (
+                  <div style={{ marginBottom: '0.25rem' }}>
+                    {/* Toggle button */}
+                    <button
+                      style={{
+                        background: combinedImportOpen ? 'rgba(201,168,76,0.12)' : 'rgba(201,168,76,0.07)',
+                        border: `1px solid ${combinedImportOpen ? '#c9a84c' : 'rgba(201,168,76,0.3)'}`,
+                        borderRadius: '8px', padding: '0.6rem 1.1rem', cursor: 'pointer',
+                        fontFamily: "'DM Sans', sans-serif", fontSize: '0.85rem', fontWeight: '600',
+                        color: combinedImportOpen ? '#c9a84c' : '#a08040', display: 'flex', alignItems: 'center', gap: '0.5rem',
+                      }}
+                      onClick={() => { setCombinedImportOpen(o => !o); setCombinedImportResult(null) }}
+                    >
+                      <span style={{ fontSize: '1rem' }}>⬇</span>
+                      {combinedImportOpen ? 'Close Import' : 'Import Race + Runners'}
+                    </button>
+
+                    {/* Panel */}
+                    {combinedImportOpen && (
+                      <div style={{ background: 'rgba(201,168,76,0.04)', border: '1px solid rgba(201,168,76,0.25)', borderRadius: '10px', padding: '1.25rem', marginTop: '0.75rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
+                          <div style={{ fontSize: '0.72rem', fontWeight: '700', color: '#c9a84c', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+                            Import Race + Runners
+                          </div>
+                          <button
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#5a8a5a', fontSize: '0.8rem', fontFamily: "'DM Sans', sans-serif", padding: 0 }}
+                            onClick={() => setShowFormatGuide(g => !g)}
+                          >
+                            {showFormatGuide ? '▲ Hide format guide' : '▼ Show format guide'}
+                          </button>
+                        </div>
+
+                        {/* Format guide */}
+                        {showFormatGuide && (
+                          <div style={{ background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(201,168,76,0.12)', borderRadius: '7px', padding: '0.9rem 1rem', marginBottom: '0.85rem', fontSize: '0.75rem', lineHeight: 1.7, color: '#7aaa7a' }}>
+                            <div style={{ color: '#c9a84c', fontWeight: '700', marginBottom: '0.4rem', fontSize: '0.7rem', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Format</div>
+                            <div style={{ color: '#e8f0e8', marginBottom: '0.25rem' }}>Top section — one field per line:</div>
+                            <code style={{ display: 'block', fontFamily: 'monospace', color: '#7aaa7a', marginBottom: '0.6rem', whiteSpace: 'pre' }}>{`venue: York
+time: 13:50
+race_name: The Acomb Stakes
+class: 2
+distance: 7f
+runners: 6`}</code>
+                            <div style={{ color: '#e8f0e8', marginBottom: '0.25rem' }}>Blank line, then runners (one per line):</div>
+                            <code style={{ display: 'block', fontFamily: 'monospace', color: '#7aaa7a', marginBottom: '0.6rem', whiteSpace: 'pre' }}>{`number, name, jockey, trainer, odds, primary_hex, secondary_hex, pattern`}</code>
+                            <code style={{ display: 'block', fontFamily: 'monospace', color: '#4a7a4a', fontSize: '0.7rem', whiteSpace: 'pre' }}>{`1, Secret Force, T. Queally, Charlie Appleby, 9/4, #1a3a10, #e8f0e8, chevrons
+2, Majestic Dawn, F. Dettori, J. Gosden, 3/1, #3a1a00, #c9a84c, plain`}</code>
+                            <div style={{ color: '#5a8a5a', marginTop: '0.5rem', fontSize: '0.7rem' }}>
+                              class, distance, secondary_hex, pattern are optional. Use TBA for unknown jockey or odds.
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Textarea */}
+                        <textarea
+                          style={{
+                            width: '100%', boxSizing: 'border-box',
+                            background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(201,168,76,0.2)',
+                            borderRadius: '6px', padding: '0.85rem', color: '#e8f0e8',
+                            fontFamily: 'monospace', fontSize: '0.8rem', lineHeight: 1.7,
+                            resize: 'vertical', minHeight: '300px', outline: 'none',
+                          }}
+                          placeholder={`venue: York\ntime: 13:50\nrace_name: The Acomb Stakes\nrunners: 6\n\n1, Secret Force, T. Queally, Charlie Appleby, 9/4, #1a3a10, #e8f0e8, chevrons\n2, Majestic Dawn, F. Dettori, J. Gosden, 3/1, #3a1a00, #c9a84c, plain`}
+                          value={combinedImportText}
+                          onChange={e => { setCombinedImportText(e.target.value); setCombinedImportResult(null) }}
+                        />
+
+                        {/* Result messages */}
+                        {combinedImportResult && (
+                          <div style={{ marginTop: '0.7rem', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                            {combinedImportResult.success && (
+                              <div style={{ fontSize: '0.82rem', color: '#4ade80', background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.25)', borderRadius: '6px', padding: '0.5rem 0.75rem', fontWeight: '600' }}>
+                                ✓ {combinedImportResult.success}
+                              </div>
+                            )}
+                            {combinedImportResult.errors.map((msg, i) => (
+                              <div key={i} style={{ fontSize: '0.78rem', color: '#f87171', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '5px', padding: '0.4rem 0.65rem' }}>
+                                ✕ {msg}
+                              </div>
+                            ))}
+                            {combinedImportResult.warnings.map((msg, i) => (
+                              <div key={i} style={{ fontSize: '0.78rem', color: '#fbbf24', background: 'rgba(251,191,36,0.07)', border: '1px solid rgba(251,191,36,0.2)', borderRadius: '5px', padding: '0.4rem 0.65rem' }}>
+                                ⚠ {msg}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.9rem', alignItems: 'center' }}>
+                          <button style={st.btnGold} onClick={bulkImportCombined} disabled={loading}>
+                            {loading ? 'Importing…' : 'Import Race + Runners'}
+                          </button>
+                          <button style={st.btnGhost} onClick={() => { setCombinedImportOpen(false); setCombinedImportResult(null); setCombinedImportText('') }}>
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Race cards */}
                 {[1,2,3,4,5,6,7].map(raceNum => {
                   const race        = races.find(r => r.race_number === raceNum)
@@ -1775,10 +2039,10 @@ export default function Admin() {
                             <div style={st.runnersLabel}>Runners ({raceRunners.length})</div>
                             <button
                               type="button"
-                              style={{ ...st.btnSmallGhost, fontSize: '0.72rem', padding: '0.25rem 0.6rem', borderColor: bulkImportOpen.has(race.id) ? '#c9a84c' : undefined, color: bulkImportOpen.has(race.id) ? '#c9a84c' : undefined }}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", fontSize: '0.72rem', color: bulkImportOpen.has(race.id) ? '#c9a84c' : '#4a6a4a', textDecoration: 'underline', padding: 0 }}
                               onClick={() => toggleBulkImport(race.id)}
                             >
-                              {bulkImportOpen.has(race.id) ? '✕ Close Import' : '⬇ Bulk Import'}
+                              {bulkImportOpen.has(race.id) ? '✕ close runner-only import' : 'runner-only import'}
                             </button>
                           </div>
 
