@@ -214,15 +214,27 @@ export default function Admin() {
   // (no extra state needed — withdrawal state lives on runners.is_withdrawn in DB)
 
   // ── Results ──
-  const [raceResults, setRaceResults]     = useState({})
-  const [resultForms, setResultForms]     = useState({})
+  const [raceResults, setRaceResults]         = useState({})
+  const [resultForms, setResultForms]         = useState({})
   const [unlockedResults, setUnlockedResults] = useState(new Set())
+
+  // ── Results accordion (all weeks) ──
+  const [allResultWeeks,     setAllResultWeeks]     = useState([])   // [{ week, races }]
+  const [expandedResultWeeks, setExpandedResultWeeks] = useState(new Set())
+  const [resultWeeksLoaded,  setResultWeeksLoaded]  = useState(false)
 
   // ── Leaderboard ──
   const [leaderboard, setLeaderboard] = useState([])
 
   // ── Init ────────────────────────────────────────────────────
   useEffect(() => { init() }, [])
+
+  // Load all-weeks results accordion when tab is opened for the first time
+  useEffect(() => {
+    if (activeTab === 'results' && !resultWeeksLoaded && activeSeason) {
+      loadAllResultWeeks()
+    }
+  }, [activeTab, activeSeason, resultWeeksLoaded])
 
   async function init() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -290,6 +302,36 @@ export default function Admin() {
   async function loadResults(raceId) {
     const { data } = await supabase.from('results').select('*').eq('race_id', raceId).order('position')
     setRaceResults(prev => ({ ...prev, [raceId]: data?.length ? data : [] }))
+  }
+
+  async function loadAllResultWeeks() {
+    if (!activeSeason) return
+    setLoading(true)
+    const { data: weeks } = await supabase
+      .from('race_weeks').select('*')
+      .eq('season_id', activeSeason.id)
+      .order('saturday_date', { ascending: false })
+    const allW = weeks || []
+
+    // Default-expand the active week
+    const activeWId = getActiveWeekId(allW)
+    setExpandedResultWeeks(new Set(activeWId ? [activeWId] : []))
+
+    const weeksWithRaces = []
+    for (const week of allW) {
+      const { data: raceData } = await supabase
+        .from('races').select('*').eq('race_week_id', week.id).order('race_number')
+      const raceList = raceData || []
+      weeksWithRaces.push({ week, races: raceList })
+      for (const race of raceList) {
+        await loadRunners(race.id)
+        await loadResults(race.id)
+      }
+    }
+
+    setAllResultWeeks(weeksWithRaces)
+    setResultWeeksLoaded(true)
+    setLoading(false)
   }
 
   async function loadLeaderboard() {
@@ -2279,120 +2321,198 @@ runners: 6`}</code>
         )}
 
         {/* ══════════════ RESULTS ══════════════ */}
-        {activeTab === 'results' && (
-          <div style={st.section}>
-            <div style={st.sectionHeader}>
-              <h2 style={st.sectionTitle}>Enter Results</h2>
-              {currentWeek && <span style={st.weekLabel}>Week {currentWeek.week_number} · {currentWeek.saturday_date}</span>}
-              <button
-                style={{ ...st.btnSmall, marginLeft: 'auto', background: 'rgba(201,168,76,0.15)', border: '1px solid rgba(201,168,76,0.4)' }}
-                onClick={recalculateAllScores}
-                disabled={loading}
-                title="Re-scores all races that already have results entered — use this if scores are missing"
-              >
-                ⟳ Recalculate All Scores
-              </button>
-            </div>
+        {activeTab === 'results' && (() => {
+          const todayStr     = new Date().toISOString().split('T')[0]
+          const activeWId    = getActiveWeekId(allResultWeeks.map(w => w.week))
 
-            {!currentWeek && <div style={st.warningCard}>No race week — go to "This Week" first.</div>}
-            {currentWeek && races.length === 0 && <div style={st.warningCard}>No races set up — add races in "This Week" first.</div>}
+          function weekStatus(week, raceList) {
+            if (week.id === activeWId) return 'ACTIVE'
+            if (!raceList.length) return 'PENDING'
+            const allDone = raceList.every(r => (raceResults[r.id] || []).length > 0)
+            return allDone ? 'COMPLETED' : 'PENDING'
+          }
 
-            {races.map(race => {
-              const raceRunners  = runners[race.id] || []
-              const existingRes  = raceResults[race.id] || []
-              const isSubmitted  = existingRes.length > 0
-              const isUnlocked   = unlockedResults.has(race.id)
-              const form         = resultForms[race.id] || {}
+          function toggleResultWeek(weekId) {
+            setExpandedResultWeeks(prev => {
+              const s = new Set(prev)
+              if (s.has(weekId)) s.delete(weekId); else s.add(weekId)
+              return s
+            })
+          }
 
-              return (
-                <div key={race.id} style={{ ...st.raceCard, ...(isSubmitted && !isUnlocked ? st.raceCardDone : {}) }}>
-                  <div style={st.raceCardHead}>
-                    <span style={st.raceCardNum}>Race {race.race_number}</span>
-                    <span style={st.raceCardMeta}>
-                      <strong style={{ color: '#e8f0e8' }}>{race.race_time}</strong>
-                      {' · '}<span style={{ color: '#c9a84c' }}>{race.venue}</span>
-                      {' · '}<span style={{ color: '#5a8a5a' }}>{race.race_name}</span>
-                    </span>
-                    {isSubmitted && !isUnlocked && (
-                      <button style={{ ...st.btnSmallGhost, marginLeft: 'auto' }} onClick={() => unlockResults(race)}>
-                        ✎ Edit Results
-                      </button>
-                    )}
-                    {isSubmitted && !isUnlocked && <span style={st.badgeDone}>✓ Results in</span>}
-                    {isUnlocked && <span style={{ ...st.badgeDone, background: 'rgba(251,191,36,0.12)', color: '#fbbf24', marginLeft: 'auto' }}>Editing…</span>}
-                  </div>
-
-                  {/* Show locked results */}
-                  {isSubmitted && !isUnlocked && (
-                    <div style={st.raceCardBody}>
-                      {existingRes.map(r => (
-                        <div key={r.id} style={st.resultRow}>
-                          <span style={{ ...st.posBadge, background: r.position === 1 ? '#c9a84c' : r.position === 2 ? '#9ca3af' : '#b87333' }}>
-                            {r.position === 1 ? '1st' : r.position === 2 ? '2nd' : '3rd'}
-                          </span>
-                          <span style={{ color: '#e8f0e8', fontWeight: '500' }}>{r.horse_name}</span>
-                          {r.starting_price_display && (
-                            <span style={{ color: '#c9a84c', marginLeft: 'auto', fontSize: '0.85rem' }}>
-                              Opening: {r.starting_price_display}
-                            </span>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Entry / edit form */}
-                  {(!isSubmitted || isUnlocked) && (
-                    <div style={st.raceCardBody}>
-                      {raceRunners.length === 0 ? (
-                        <p style={{ color: '#5a8a5a', fontSize: '0.85rem', margin: 0 }}>
-                          Add runners in "This Week" first.
-                        </p>
-                      ) : (
-                        <>
-                          {isUnlocked && (
-                            <div style={{ fontSize: '0.8rem', color: '#fbbf24', marginBottom: '0.75rem', padding: '0.5rem 0.75rem', background: 'rgba(251,191,36,0.08)', borderRadius: '6px', border: '1px solid rgba(251,191,36,0.2)' }}>
-                              Editing results — existing scores will be recalculated on save.
-                            </div>
-                          )}
-                          {[1,2,3].map(pos => {
-                            const hKey  = `horse${pos}`
-                            const label = pos === 1 ? '1st' : pos === 2 ? '2nd' : '3rd'
-                            const bg    = pos === 1 ? '#c9a84c' : pos === 2 ? '#9ca3af' : '#b87333'
-                            return (
-                              <div key={pos} style={st.resultInputRow}>
-                                <span style={{ ...st.posBadge, background: bg, minWidth: '44px' }}>{label}</span>
-                                <select style={{ ...st.input, flex: 1 }} value={form[hKey] || ''}
-                                  onChange={e => setResultForms(p => ({ ...p, [race.id]: { ...p[race.id], [hKey]: e.target.value } }))}>
-                                  <option value="">Select horse…</option>
-                                  {raceRunners.map(r => (
-                                    <option key={r.id} value={r.horse_name}>
-                                      {r.horse_name}{r.odds_fractional ? ` (${r.odds_fractional})` : ''}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-                            )
-                          })}
-                          <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
-                            <button style={st.btnGold}
-                              onClick={() => submitResults(race, isUnlocked)}
-                              disabled={loading}>
-                              {loading ? 'Saving…' : isUnlocked ? 'Update Results & Recalculate' : 'Submit Results & Calculate Scores'}
-                            </button>
-                            {isUnlocked && (
-                              <button style={st.btnGhost} onClick={() => lockResults(race.id)}>Cancel</button>
-                            )}
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  )}
+          return (
+            <div style={st.section}>
+              <div style={st.sectionHeader}>
+                <h2 style={st.sectionTitle}>Enter Results</h2>
+                <div style={{ display: 'flex', gap: '0.65rem', alignItems: 'center', marginLeft: 'auto' }}>
+                  <button
+                    style={{ ...st.btnSmallGhost }}
+                    onClick={() => { setResultWeeksLoaded(false) }}
+                    disabled={loading}
+                    title="Reload all weeks"
+                  >
+                    ↻ Refresh
+                  </button>
+                  <button
+                    style={{ ...st.btnSmall, background: 'rgba(201,168,76,0.15)', border: '1px solid rgba(201,168,76,0.4)' }}
+                    onClick={recalculateAllScores}
+                    disabled={loading}
+                    title="Re-scores all races that already have results entered — use this if scores are missing"
+                  >
+                    ⟳ Recalculate All Scores
+                  </button>
                 </div>
-              )
-            })}
-          </div>
-        )}
+              </div>
+
+              {!activeSeason && <div style={st.warningCard}>No active season.</div>}
+              {activeSeason && loading && allResultWeeks.length === 0 && (
+                <div style={{ color: '#5a8a5a', fontSize: '0.85rem', padding: '1rem 0' }}>Loading weeks…</div>
+              )}
+              {activeSeason && !loading && allResultWeeks.length === 0 && (
+                <div style={st.warningCard}>No race weeks found — create one in "This Week" first.</div>
+              )}
+
+              {allResultWeeks.map(({ week, races: weekRaces }) => {
+                const isExpanded = expandedResultWeeks.has(week.id)
+                const status     = weekStatus(week, weekRaces)
+
+                const statusStyle = status === 'ACTIVE'
+                  ? { background: 'rgba(201,168,76,0.15)', border: '1px solid #c9a84c', color: '#c9a84c' }
+                  : status === 'COMPLETED'
+                  ? { background: 'rgba(74,222,128,0.1)', border: '1px solid rgba(74,222,128,0.35)', color: '#4ade80' }
+                  : { background: 'rgba(90,138,90,0.08)', border: '1px solid rgba(90,138,90,0.2)', color: '#3a5a3a' }
+
+                return (
+                  <div key={week.id} style={{ background: 'linear-gradient(180deg, #152e12 0%, #0a1a08 100%)', border: '1px solid rgba(201,168,76,0.2)', borderRadius: '10px', overflow: 'hidden', marginBottom: '0.5rem' }}>
+
+                    {/* Week header */}
+                    <div
+                      onClick={() => toggleResultWeek(week.id)}
+                      style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '16px 20px', cursor: 'pointer', userSelect: 'none' }}
+                    >
+                      <span style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.05rem', color: '#e8f0e8', letterSpacing: '0.06em', flex: 1 }}>
+                        Week {week.week_number} · {week.saturday_date}
+                      </span>
+                      <span style={{ fontSize: '0.67rem', fontWeight: '700', letterSpacing: '0.08em', textTransform: 'uppercase', padding: '0.2rem 0.6rem', borderRadius: '6px', whiteSpace: 'nowrap', ...statusStyle }}>
+                        {status}
+                      </span>
+                      {isExpanded
+                        ? <ChevronUp   size={16} color="#c9a84c" style={{ flexShrink: 0 }} />
+                        : <ChevronDown size={16} color="#c9a84c" style={{ flexShrink: 0 }} />
+                      }
+                    </div>
+
+                    {/* Collapsible body */}
+                    <div style={{ maxHeight: isExpanded ? '12000px' : '0', overflow: 'hidden', transition: 'max-height 200ms ease' }}>
+                      <div style={{ padding: '0 0.75rem 0.75rem' }}>
+
+                        {weekRaces.length === 0 && (
+                          <div style={{ ...st.warningCard, margin: '0 0 0.5rem' }}>No races set up for this week.</div>
+                        )}
+
+                        {weekRaces.map(race => {
+                          const raceRunners = runners[race.id] || []
+                          const existingRes = raceResults[race.id] || []
+                          const isSubmitted = existingRes.length > 0
+                          const isUnlocked  = unlockedResults.has(race.id)
+                          const form        = resultForms[race.id] || {}
+
+                          return (
+                            <div key={race.id} style={{ ...st.raceCard, ...(isSubmitted && !isUnlocked ? st.raceCardDone : {}), marginBottom: '0.5rem' }}>
+                              <div style={st.raceCardHead}>
+                                <span style={st.raceCardNum}>Race {race.race_number}</span>
+                                <span style={st.raceCardMeta}>
+                                  <strong style={{ color: '#e8f0e8' }}>{race.race_time}</strong>
+                                  {' · '}<span style={{ color: '#c9a84c' }}>{race.venue}</span>
+                                  {' · '}<span style={{ color: '#5a8a5a' }}>{race.race_name}</span>
+                                </span>
+                                {isSubmitted && !isUnlocked && (
+                                  <button style={{ ...st.btnSmallGhost, marginLeft: 'auto' }} onClick={() => unlockResults(race)}>
+                                    ✎ Edit Results
+                                  </button>
+                                )}
+                                {isSubmitted && !isUnlocked && <span style={st.badgeDone}>✓ Results in</span>}
+                                {isUnlocked && <span style={{ ...st.badgeDone, background: 'rgba(251,191,36,0.12)', color: '#fbbf24', marginLeft: 'auto' }}>Editing…</span>}
+                              </div>
+
+                              {/* Show locked results */}
+                              {isSubmitted && !isUnlocked && (
+                                <div style={st.raceCardBody}>
+                                  {existingRes.map(r => (
+                                    <div key={r.id} style={st.resultRow}>
+                                      <span style={{ ...st.posBadge, background: r.position === 1 ? '#c9a84c' : r.position === 2 ? '#9ca3af' : '#b87333' }}>
+                                        {r.position === 1 ? '1st' : r.position === 2 ? '2nd' : '3rd'}
+                                      </span>
+                                      <span style={{ color: '#e8f0e8', fontWeight: '500' }}>{r.horse_name}</span>
+                                      {r.starting_price_display && (
+                                        <span style={{ color: '#c9a84c', marginLeft: 'auto', fontSize: '0.85rem' }}>
+                                          Opening: {r.starting_price_display}
+                                        </span>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              {/* Entry / edit form */}
+                              {(!isSubmitted || isUnlocked) && (
+                                <div style={st.raceCardBody}>
+                                  {raceRunners.length === 0 ? (
+                                    <p style={{ color: '#5a8a5a', fontSize: '0.85rem', margin: 0 }}>
+                                      Add runners in "This Week" first.
+                                    </p>
+                                  ) : (
+                                    <>
+                                      {isUnlocked && (
+                                        <div style={{ fontSize: '0.8rem', color: '#fbbf24', marginBottom: '0.75rem', padding: '0.5rem 0.75rem', background: 'rgba(251,191,36,0.08)', borderRadius: '6px', border: '1px solid rgba(251,191,36,0.2)' }}>
+                                          Editing results — existing scores will be recalculated on save.
+                                        </div>
+                                      )}
+                                      {[1,2,3].map(pos => {
+                                        const hKey  = `horse${pos}`
+                                        const label = pos === 1 ? '1st' : pos === 2 ? '2nd' : '3rd'
+                                        const bg    = pos === 1 ? '#c9a84c' : pos === 2 ? '#9ca3af' : '#b87333'
+                                        return (
+                                          <div key={pos} style={st.resultInputRow}>
+                                            <span style={{ ...st.posBadge, background: bg, minWidth: '44px' }}>{label}</span>
+                                            <select style={{ ...st.input, flex: 1 }} value={form[hKey] || ''}
+                                              onChange={e => setResultForms(p => ({ ...p, [race.id]: { ...p[race.id], [hKey]: e.target.value } }))}>
+                                              <option value="">Select horse…</option>
+                                              {raceRunners.map(r => (
+                                                <option key={r.id} value={r.horse_name}>
+                                                  {r.horse_name}{r.odds_fractional ? ` (${r.odds_fractional})` : ''}
+                                                </option>
+                                              ))}
+                                            </select>
+                                          </div>
+                                        )
+                                      })}
+                                      <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
+                                        <button style={st.btnGold}
+                                          onClick={() => submitResults(race, isUnlocked)}
+                                          disabled={loading}>
+                                          {loading ? 'Saving…' : isUnlocked ? 'Update Results & Recalculate' : 'Submit Results & Calculate Scores'}
+                                        </button>
+                                        {isUnlocked && (
+                                          <button style={st.btnGhost} onClick={() => lockResults(race.id)}>Cancel</button>
+                                        )}
+                                      </div>
+                                    </>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+
+                  </div>
+                )
+              })}
+            </div>
+          )
+        })()}
 
         {/* ══════════════ LEADERBOARD ══════════════ */}
         {activeTab === 'leaderboard' && (
