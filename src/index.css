@@ -820,7 +820,7 @@ img { max-width: 100%; display: block; }
 }
 
 /* ── 2-column grid → 1-column on mobile ── */
-@media (max-width: 640px) {
+@media (max-width: 768px) {
   .app-grid-2 {
     grid-template-columns: 1fr !important;
   }

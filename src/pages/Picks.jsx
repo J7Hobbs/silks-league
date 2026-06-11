@@ -8,7 +8,18 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import ProfileDropdown from '../components/ProfileDropdown.jsx'
 import RunnerCard from '../components/RunnerCard.jsx'
-import { Home, Target, Trophy, BarChart2, Users } from 'lucide-react'
+import { Home, Target, Trophy, BarChart2 } from 'lucide-react'
+
+function fmtDeadlineDate(ds) {
+  if (!ds) return ''
+  const d = new Date(ds + 'T12:00:00')
+  const day = d.getDate()
+  const suffix = day === 1 || day === 21 || day === 31 ? 'st'
+               : day === 2 || day === 22 ? 'nd'
+               : day === 3 || day === 23 ? 'rd' : 'th'
+  const month = d.toLocaleDateString('en-GB', { month: 'long' })
+  return `${day}${suffix} ${month} ${d.getFullYear()}`
+}
 
 function formatCountdown(ms) {
   if (ms <= 0) return null
@@ -379,7 +390,7 @@ export default function Picks() {
                     <div>
                       <div style={st.lockedTitle}>Picks Locked</div>
                       <div style={st.lockedSub}>
-                        Locked at {deadline?.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} · {currentWeek.saturday_date}
+                        Locked at {deadline?.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} · Saturday {fmtDeadlineDate(currentWeek.saturday_date)}
                       </div>
                     </div>
                   </div>
@@ -390,7 +401,7 @@ export default function Picks() {
                       <div>
                         <div style={st.deadlineLabel}>Picks deadline</div>
                         <div style={st.deadlineTime}>
-                          {deadline?.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} on Saturday {currentWeek.saturday_date}
+                          {deadline?.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} on Saturday {fmtDeadlineDate(currentWeek.saturday_date)}
                         </div>
                       </div>
                     </div>
@@ -718,10 +729,6 @@ export default function Picks() {
         <a href="/results" style={st.mobileBarItem}>
           <BarChart2 size={22} strokeWidth={1.5} />
           <span style={st.mobileBarLabel}>Results</span>
-        </a>
-        <a href="/groups" style={st.mobileBarItem}>
-          <Users size={22} strokeWidth={1.5} />
-          <span style={st.mobileBarLabel}>Groups</span>
         </a>
       </nav>
 
