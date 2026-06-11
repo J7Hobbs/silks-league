@@ -201,14 +201,15 @@ export default function Dashboard() {
       allRaceIds = allRaces?.map(r => r.id) || []
     }
 
+    const profileEmbed = 'profiles(username, display_name, full_name, season_starting_points)'
     let scores = []
     if (allRaceIds.length) {
       const { data: allScores, error } = await supabase
-        .from('scores').select('user_id, total_points').in('race_id', allRaceIds)
+        .from('scores').select(`user_id, total_points, ${profileEmbed}`).in('race_id', allRaceIds)
       if (!error && allScores?.length) scores = allScores
     }
     if (!scores.length) {
-      const ownQ = supabase.from('scores').select('user_id, total_points').eq('user_id', myUserId)
+      const ownQ = supabase.from('scores').select(`user_id, total_points, ${profileEmbed}`).eq('user_id', myUserId)
       const { data: ownScores } = allRaceIds.length
         ? await ownQ.in('race_id', allRaceIds)
         : await ownQ
@@ -218,21 +219,17 @@ export default function Dashboard() {
 
     const byUser = {}
     scores.forEach(s => {
-      if (!byUser[s.user_id]) byUser[s.user_id] = { user_id: s.user_id, total: 0 }
-      byUser[s.user_id].total += (s.total_points || 0)
-    })
-
-    const profileIds = [...new Set([...Object.keys(byUser), myUserId])]
-    const { data: profiles } = await supabase
-      .from('profiles')
-      .select('id, username, display_name, full_name, season_starting_points')
-      .in('id', profileIds)
-    profiles?.forEach(p => {
-      if (byUser[p.id]) {
-        byUser[p.id].name          = p.username || p.display_name || p.full_name || null
-        byUser[p.id].startingPoints = p.season_starting_points || 0
-        byUser[p.id].total         += (p.season_starting_points || 0)
+      if (!byUser[s.user_id]) {
+        const prof = s.profiles
+        const sp   = prof?.season_starting_points || 0
+        byUser[s.user_id] = {
+          user_id:       s.user_id,
+          total:         sp,
+          name:          prof?.username || prof?.display_name || prof?.full_name || null,
+          startingPoints: sp,
+        }
       }
+      byUser[s.user_id].total += (s.total_points || 0)
     })
 
     const sorted = Object.values(byUser)
@@ -268,27 +265,28 @@ export default function Dashboard() {
     const raceIds = raceArr.map(r => r.id)
 
     const { data: scores } = await supabase
-      .from('scores').select('user_id, total_points').in('race_id', raceIds)
+      .from('scores')
+      .select('user_id, total_points, profiles(username, display_name, full_name)')
+      .in('race_id', raceIds)
     if (!scores?.length) return
 
     const byUser = {}
     scores.forEach(s => {
-      if (!byUser[s.user_id]) byUser[s.user_id] = 0
-      byUser[s.user_id] += (s.total_points || 0)
+      if (!byUser[s.user_id]) {
+        const prof = s.profiles
+        byUser[s.user_id] = {
+          pts:  0,
+          name: prof?.username || prof?.display_name || prof?.full_name || null,
+        }
+      }
+      byUser[s.user_id].pts += (s.total_points || 0)
     })
 
-    const weekProfileIds = [...new Set([...Object.keys(byUser), myUserId])]
-    const { data: profiles } = await supabase
-      .from('profiles').select('id, username, display_name, full_name')
-      .in('id', weekProfileIds)
-    const nameMap = {}
-    profiles?.forEach(p => { nameMap[p.id] = p.username || p.display_name || p.full_name || null })
-
     const sorted = Object.entries(byUser)
-      .map(([uid, pts]) => ({
+      .map(([uid, v]) => ({
         userId: uid,
-        points: pts,
-        name:   nameMap[uid] || 'Player',
+        points: v.pts,
+        name:   v.name || 'Player',
         isMe:   uid === myUserId,
       }))
       .sort((a, b) => b.points - a.points)

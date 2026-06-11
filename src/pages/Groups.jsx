@@ -112,23 +112,21 @@ export default function Groups() {
 
       const { data: scores } = await supabase
         .from('scores')
-        .select('user_id, total_points')
+        .select('user_id, total_points, profiles(username, display_name, full_name)')
         .in('race_id', raceIds)
         .in('user_id', memberIds)
 
-      // Aggregate totals
+      // Aggregate totals + build nameMap from embedded profiles
       const totals = {}
+      const nameMap = {}
       for (const uid of memberIds) totals[uid] = 0
       for (const s of (scores || [])) {
         totals[s.user_id] = (totals[s.user_id] || 0) + s.total_points
+        if (!nameMap[s.user_id] && s.profiles) {
+          const p = s.profiles
+          nameMap[s.user_id] = p.username || p.display_name || p.full_name || null
+        }
       }
-
-      // Fetch names — include current user's id so their name resolves even if not in memberIds
-      const groupProfileIds = [...new Set([...memberIds, ...(userId ? [userId] : [])])]
-      const { data: profiles } = await supabase
-        .from('profiles').select('id, username, display_name, full_name').in('id', groupProfileIds)
-      const nameMap = {}
-      profiles?.forEach(p => { nameMap[p.id] = p.username || p.display_name || p.full_name || null })
 
       const ranked = Object.entries(totals)
         .sort((a, b) => b[1] - a[1])

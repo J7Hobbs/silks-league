@@ -143,26 +143,31 @@ export default function Results() {
 
     // Weekly position + standings — compare all users
     const { data: allScores } = await supabase
-      .from('scores').select('user_id, total_points').in('race_id', raceIds)
+      .from('scores')
+      .select('user_id, total_points, profiles(username, display_name, full_name)')
+      .in('race_id', raceIds)
     if (allScores?.length) {
       const byUser = {}
-      allScores.forEach(s => { byUser[s.user_id] = (byUser[s.user_id] || 0) + (s.total_points || 0) })
-      const myTotal = byUser[userId] || 0
-      const myPos = Object.values(byUser).filter(t => t > myTotal).length + 1
+      allScores.forEach(s => {
+        if (!byUser[s.user_id]) {
+          const prof = s.profiles
+          byUser[s.user_id] = {
+            total: 0,
+            name: prof?.username || prof?.display_name || prof?.full_name || null,
+          }
+        }
+        byUser[s.user_id].total += (s.total_points || 0)
+      })
+      const myTotal = byUser[userId]?.total || 0
+      const myPos = Object.values(byUser).filter(v => v.total > myTotal).length + 1
       setWeeklyPosition(myPos)
       setTotalPlayers(Object.keys(byUser).length)
 
-      // Build standings — fetch display names for all scorers
-      const allUserIds = [...new Set([...Object.keys(byUser), userId])]
-      const { data: profData } = await supabase
-        .from('profiles').select('id, username, display_name, full_name').in('id', allUserIds)
-      const nameMap = {}
-      profData?.forEach(p => { nameMap[p.id] = p.username || p.display_name || p.full_name || null })
-      const standings = Object.keys(byUser)
-        .map(uid => ({
+      const standings = Object.entries(byUser)
+        .map(([uid, v]) => ({
           userId:  uid,
-          name:    nameMap[uid] || 'Player',
-          points:  byUser[uid],
+          name:    v.name || 'Player',
+          points:  v.total,
           isMe:    uid === userId,
         }))
         .sort((a, b) => b.points - a.points || a.name.localeCompare(b.name))
