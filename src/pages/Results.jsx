@@ -56,22 +56,16 @@ export default function Results() {
       .order('saturday_date', { ascending: false })
     if (!weeksData?.length) return
 
-    // Find most recent week that has at least one result (efficiently)
+    // Default to most recent week that has races (not just results)
     const allWeekIds = weeksData.map(w => w.id)
     const { data: allRaces } = await supabase
       .from('races').select('id, race_week_id').in('race_week_id', allWeekIds)
 
     let defaultIdx = 0
     if (allRaces?.length) {
-      const { data: anyResults } = await supabase
-        .from('results').select('race_id').in('race_id', allRaces.map(r => r.id))
-      if (anyResults?.length) {
-        const raceWeekMap = {}
-        allRaces.forEach(r => { raceWeekMap[r.id] = r.race_week_id })
-        const weeksWithResults = new Set(anyResults.map(r => raceWeekMap[r.race_id]))
-        for (let i = 0; i < weeksData.length; i++) {
-          if (weeksWithResults.has(weeksData[i].id)) { defaultIdx = i; break }
-        }
+      const weeksWithRaces = new Set(allRaces.map(r => r.race_week_id))
+      for (let i = 0; i < weeksData.length; i++) {
+        if (weeksWithRaces.has(weeksData[i].id)) { defaultIdx = i; break }
       }
     }
 
