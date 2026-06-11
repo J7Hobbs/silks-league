@@ -60,6 +60,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import RunnerCard from '../components/RunnerCard.jsx'
+import { ChevronDown, ChevronUp } from 'lucide-react'
 
 // ── Points calculation ───────────────────────────────────────
 function parseFractionalOdds(str) {
@@ -179,6 +180,9 @@ export default function Admin() {
   const [bulkImportOpen,   setBulkImportOpen]   = useState(new Set())   // Set of raceIds
   const [bulkImportText,   setBulkImportText]   = useState({})          // { [raceId]: string }
   const [bulkImportResult, setBulkImportResult] = useState({})          // { [raceId]: { errors, warnings } }
+
+  // ── Race card expand/collapse ──
+  const [expandedRaces, setExpandedRaces] = useState(new Set())
 
   // ── Combined import (race + runners together) ──
   const [combinedImportOpen,   setCombinedImportOpen]   = useState(false)
@@ -1937,39 +1941,47 @@ runners: 6`}</code>
                 {[1,2,3,4,5,6,7].map(raceNum => {
                   const race        = races.find(r => r.race_number === raceNum)
                   const raceRunners = race ? (runners[race.id] || []) : []
+                  const isExpanded  = expandedRaces.has(raceNum) || editingRace === race?.id || !!showRaceForm[raceNum]
+
+                  const toggleExpand = () => setExpandedRaces(prev => {
+                    const s = new Set(prev)
+                    if (s.has(raceNum)) s.delete(raceNum); else s.add(raceNum)
+                    return s
+                  })
 
                   return (
                     <div key={raceNum} style={st.raceCard}>
-                      {/* Card header */}
-                      <div style={st.raceCardHead}>
-                        {editingRace === race?.id ? (
-                          <span style={st.raceCardNum}>Race {raceNum}</span>
+
+                      {/* ── Always-visible header row ── */}
+                      <div
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.85rem 1.25rem', cursor: 'pointer', userSelect: 'none' }}
+                        onClick={toggleExpand}
+                      >
+                        <span style={st.raceCardNum}>Race {raceNum}</span>
+                        {race ? (
+                          <span style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.875rem', minWidth: 0, overflow: 'hidden' }}>
+                            <strong style={{ color: '#e8f0e8', whiteSpace: 'nowrap', fontWeight: '700' }}>{race.race_time}</strong>
+                            <span style={{ color: 'rgba(232,240,232,0.2)' }}>·</span>
+                            <span style={{ color: '#c9a84c', whiteSpace: 'nowrap' }}>{race.venue}</span>
+                            <span style={{ color: 'rgba(232,240,232,0.2)' }}>·</span>
+                            <span style={{ color: '#5a8a5a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{race.race_name}</span>
+                          </span>
                         ) : (
-                          <>
-                            <span style={st.raceCardNum}>Race {raceNum}</span>
-                            {race ? (
-                              <>
-                                <span style={st.raceCardMeta}>
-                                  <strong style={{ color: '#e8f0e8' }}>{race.race_time}</strong>
-                                  {' · '}<span style={{ color: '#c9a84c' }}>{race.venue}</span>
-                                  {' · '}<span style={{ color: '#5a8a5a' }}>{race.race_name}</span>
-                                </span>
-                                <div style={{ display: 'flex', gap: '0.4rem', marginLeft: 'auto' }}>
-                                  <button style={st.btnSmallGhost} onClick={() => startEditRace(race)}>Edit</button>
-                                  <button style={st.btnSmallDanger} onClick={() => deleteRace(race)}>Delete</button>
-                                </div>
-                              </>
-                            ) : (
-                              !isCurrentPastWeek && (
-                                <button style={st.btnSmall}
-                                  onClick={() => setShowRaceForm(p => ({ ...p, [raceNum]: !p[raceNum] }))}>
-                                  {showRaceForm[raceNum] ? 'Cancel' : '+ Add Race'}
-                                </button>
-                              )
-                            )}
-                          </>
+                          <span style={{ flex: 1, fontSize: '0.82rem', color: '#2a4a2a', fontStyle: 'italic' }}>empty</span>
                         )}
+                        {race && (
+                          <span style={{ fontSize: '0.75rem', color: '#3a5a3a', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                            {raceRunners.length} runner{raceRunners.length !== 1 ? 's' : ''}
+                          </span>
+                        )}
+                        {isExpanded
+                          ? <ChevronUp   size={16} color="#c9a84c" style={{ flexShrink: 0 }} />
+                          : <ChevronDown size={16} color="#c9a84c" style={{ flexShrink: 0 }} />
+                        }
                       </div>
+
+                      {/* ── Collapsible body ── */}
+                      <div style={{ maxHeight: isExpanded ? '4000px' : '0', overflow: 'hidden', transition: 'max-height 200ms ease' }}>
 
                       {/* Edit race form */}
                       {race && editingRace === race.id && (
@@ -2004,6 +2016,14 @@ runners: 6`}</code>
                         </div>
                       )}
 
+                      {/* Edit / Delete actions — race exists, not editing */}
+                      {race && editingRace !== race.id && !isCurrentPastWeek && (
+                        <div style={{ display: 'flex', gap: '0.4rem', padding: '0 1.25rem 0.6rem' }}>
+                          <button style={st.btnSmallGhost} onClick={e => { e.stopPropagation(); startEditRace(race) }}>Edit</button>
+                          <button style={st.btnSmallDanger} onClick={e => { e.stopPropagation(); deleteRace(race) }}>Delete</button>
+                        </div>
+                      )}
+
                       {/* New race form */}
                       {!race && showRaceForm[raceNum] && !isCurrentPastWeek && (
                         <div style={st.raceCardBody}>
@@ -2027,8 +2047,19 @@ runners: 6`}</code>
                                 onChange={e => setRaceForms(p => ({ ...p, [raceNum]: { ...p[raceNum], raceName: e.target.value } }))} />
                             </div>
                           </div>
-                          <button style={{ ...st.btnGold, marginTop: '0.85rem' }}
-                            onClick={() => saveRace(raceNum)} disabled={loading}>Save Race</button>
+                          <div style={{ display: 'flex', gap: '0.6rem', marginTop: '0.85rem' }}>
+                            <button style={st.btnGold} onClick={() => saveRace(raceNum)} disabled={loading}>Save Race</button>
+                            <button style={st.btnGhost} onClick={() => setShowRaceForm(p => ({ ...p, [raceNum]: false }))}>Cancel</button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Add race button — empty slot, not past week */}
+                      {!race && !showRaceForm[raceNum] && !isCurrentPastWeek && (
+                        <div style={{ padding: '0.1rem 1.25rem 0.9rem' }}>
+                          <button style={st.btnSmall} onClick={e => { e.stopPropagation(); setShowRaceForm(p => ({ ...p, [raceNum]: true })) }}>
+                            + Add Race
+                          </button>
                         </div>
                       )}
 
@@ -2040,7 +2071,7 @@ runners: 6`}</code>
                             <button
                               type="button"
                               style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", fontSize: '0.72rem', color: bulkImportOpen.has(race.id) ? '#c9a84c' : '#4a6a4a', textDecoration: 'underline', padding: 0 }}
-                              onClick={() => toggleBulkImport(race.id)}
+                              onClick={e => { e.stopPropagation(); toggleBulkImport(race.id) }}
                             >
                               {bulkImportOpen.has(race.id) ? '✕ close runner-only import' : 'runner-only import'}
                             </button>
@@ -2237,6 +2268,7 @@ runners: 6`}</code>
                           )}
                         </div>
                       )}
+                      </div>{/* end collapsible body */}
                     </div>
                   )
                 })}
@@ -2805,7 +2837,7 @@ const st = {
   tableRow:    { display: 'flex', gap: '1rem', padding: '0.85rem 1.25rem', borderTop: '1px solid rgba(201,168,76,0.15)', alignItems: 'center', fontSize: '0.875rem' },
   badgeGreen:  { background: 'rgba(74,222,128,0.1)', color: '#4ade80', fontSize: '0.7rem', fontWeight: '700', padding: '0.2rem 0.6rem', borderRadius: '999px', whiteSpace: 'nowrap' },
   badgeDone:   { background: 'rgba(74,222,128,0.1)', color: '#4ade80', fontSize: '0.7rem', fontWeight: '700', padding: '0.2rem 0.6rem', borderRadius: '999px', whiteSpace: 'nowrap' },
-  raceCard:    { background: '#162a1a', border: '1px solid #c9a84c', borderLeft: '4px solid #c9a84c', borderRadius: '8px', overflow: 'hidden' },
+  raceCard:    { background: 'linear-gradient(180deg, #152e12 0%, #0a1a08 100%)', border: '1px solid #c9a84c', borderLeft: '4px solid #c9a84c', borderRadius: '8px', overflow: 'hidden' },
   raceCardDone:{ borderColor: '#4ade80', borderLeftColor: '#4ade80' },
   raceCardHead:{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '0.85rem 1.25rem', background: 'rgba(0,0,0,0.15)', flexWrap: 'wrap' },
   raceCardNum: { fontFamily: "'Bebas Neue', sans-serif", fontSize: '1rem', color: '#c9a84c', letterSpacing: '0.08em', minWidth: '64px' },
