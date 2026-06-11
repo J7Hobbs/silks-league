@@ -219,9 +219,10 @@ export default function Admin() {
   const [unlockedResults, setUnlockedResults] = useState(new Set())
 
   // ── Results accordion (all weeks) ──
-  const [allResultWeeks,     setAllResultWeeks]     = useState([])   // [{ week, races }]
+  const [allResultWeeks,      setAllResultWeeks]      = useState([])   // [{ week, races }]
   const [expandedResultWeeks, setExpandedResultWeeks] = useState(new Set())
-  const [resultWeeksLoaded,  setResultWeeksLoaded]  = useState(false)
+  const [expandedResultRaces, setExpandedResultRaces] = useState(new Set())
+  const [resultWeeksLoaded,   setResultWeeksLoaded]   = useState(false)
 
   // ── Leaderboard ──
   const [leaderboard, setLeaderboard] = useState([])
@@ -2411,96 +2412,112 @@ runners: 6`}</code>
                         )}
 
                         {weekRaces.map(race => {
-                          const raceRunners = runners[race.id] || []
-                          const existingRes = raceResults[race.id] || []
-                          const isSubmitted = existingRes.length > 0
-                          const isUnlocked  = unlockedResults.has(race.id)
-                          const form        = resultForms[race.id] || {}
+                          const raceRunners   = runners[race.id] || []
+                          const existingRes   = raceResults[race.id] || []
+                          const isSubmitted   = existingRes.length > 0
+                          const isUnlocked    = unlockedResults.has(race.id)
+                          const form          = resultForms[race.id] || {}
+                          const isRaceExpanded = expandedResultRaces.has(race.id)
+
+                          const toggleRace = () => setExpandedResultRaces(prev => {
+                            const s = new Set(prev)
+                            if (s.has(race.id)) s.delete(race.id); else s.add(race.id)
+                            return s
+                          })
 
                           return (
                             <div key={race.id} style={{ ...st.raceCard, ...(isSubmitted && !isUnlocked ? st.raceCardDone : {}), marginBottom: '0.5rem' }}>
-                              <div style={st.raceCardHead}>
+                              <div style={{ ...st.raceCardHead, cursor: 'pointer', userSelect: 'none' }} onClick={toggleRace}>
                                 <span style={st.raceCardNum}>Race {race.race_number}</span>
                                 <span style={st.raceCardMeta}>
                                   <strong style={{ color: '#e8f0e8' }}>{race.race_time}</strong>
                                   {' · '}<span style={{ color: '#c9a84c' }}>{race.venue}</span>
                                   {' · '}<span style={{ color: '#5a8a5a' }}>{race.race_name}</span>
                                 </span>
-                                {isSubmitted && !isUnlocked && (
-                                  <button style={{ ...st.btnSmallGhost, marginLeft: 'auto' }} onClick={() => unlockResults(race)}>
-                                    ✎ Edit Results
-                                  </button>
-                                )}
-                                {isSubmitted && !isUnlocked && <span style={st.badgeDone}>✓ Results in</span>}
+                                {isSubmitted && !isUnlocked && <span style={{ ...st.badgeDone, marginLeft: 'auto' }}>✓ Results in</span>}
                                 {isUnlocked && <span style={{ ...st.badgeDone, background: 'rgba(251,191,36,0.12)', color: '#fbbf24', marginLeft: 'auto' }}>Editing…</span>}
+                                {isRaceExpanded
+                                  ? <ChevronUp   size={14} color="#c9a84c" style={{ flexShrink: 0 }} />
+                                  : <ChevronDown size={14} color="#c9a84c" style={{ flexShrink: 0 }} />
+                                }
                               </div>
 
-                              {/* Show locked results */}
-                              {isSubmitted && !isUnlocked && (
-                                <div style={st.raceCardBody}>
-                                  {existingRes.map(r => (
-                                    <div key={r.id} style={st.resultRow}>
-                                      <span style={{ ...st.posBadge, background: r.position === 1 ? '#c9a84c' : r.position === 2 ? '#9ca3af' : '#b87333' }}>
-                                        {r.position === 1 ? '1st' : r.position === 2 ? '2nd' : '3rd'}
-                                      </span>
-                                      <span style={{ color: '#e8f0e8', fontWeight: '500' }}>{r.horse_name}</span>
-                                      {r.starting_price_display && (
-                                        <span style={{ color: '#c9a84c', marginLeft: 'auto', fontSize: '0.85rem' }}>
-                                          Opening: {r.starting_price_display}
-                                        </span>
-                                      )}
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
+                              {/* Collapsible body */}
+                              <div style={{ maxHeight: isRaceExpanded ? '2000px' : '0', overflow: 'hidden', transition: 'max-height 200ms ease' }}>
 
-                              {/* Entry / edit form */}
-                              {(!isSubmitted || isUnlocked) && (
-                                <div style={st.raceCardBody}>
-                                  {raceRunners.length === 0 ? (
-                                    <p style={{ color: '#5a8a5a', fontSize: '0.85rem', margin: 0 }}>
-                                      Add runners in "This Week" first.
-                                    </p>
-                                  ) : (
-                                    <>
-                                      {isUnlocked && (
-                                        <div style={{ fontSize: '0.8rem', color: '#fbbf24', marginBottom: '0.75rem', padding: '0.5rem 0.75rem', background: 'rgba(251,191,36,0.08)', borderRadius: '6px', border: '1px solid rgba(251,191,36,0.2)' }}>
-                                          Editing results — existing scores will be recalculated on save.
-                                        </div>
-                                      )}
-                                      {[1,2,3].map(pos => {
-                                        const hKey  = `horse${pos}`
-                                        const label = pos === 1 ? '1st' : pos === 2 ? '2nd' : '3rd'
-                                        const bg    = pos === 1 ? '#c9a84c' : pos === 2 ? '#9ca3af' : '#b87333'
-                                        return (
-                                          <div key={pos} style={st.resultInputRow}>
-                                            <span style={{ ...st.posBadge, background: bg, minWidth: '44px' }}>{label}</span>
-                                            <select style={{ ...st.input, flex: 1 }} value={form[hKey] || ''}
-                                              onChange={e => setResultForms(p => ({ ...p, [race.id]: { ...p[race.id], [hKey]: e.target.value } }))}>
-                                              <option value="">Select horse…</option>
-                                              {raceRunners.map(r => (
-                                                <option key={r.id} value={r.horse_name}>
-                                                  {r.horse_name}{r.odds_fractional ? ` (${r.odds_fractional})` : ''}
-                                                </option>
-                                              ))}
-                                            </select>
-                                          </div>
-                                        )
-                                      })}
-                                      <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
-                                        <button style={st.btnGold}
-                                          onClick={() => submitResults(race, isUnlocked)}
-                                          disabled={loading}>
-                                          {loading ? 'Saving…' : isUnlocked ? 'Update Results & Recalculate' : 'Submit Results & Calculate Scores'}
-                                        </button>
-                                        {isUnlocked && (
-                                          <button style={st.btnGhost} onClick={() => lockResults(race.id)}>Cancel</button>
+                                {/* Show locked results */}
+                                {isSubmitted && !isUnlocked && (
+                                  <div style={st.raceCardBody}>
+                                    {existingRes.map(r => (
+                                      <div key={r.id} style={st.resultRow}>
+                                        <span style={{ ...st.posBadge, background: r.position === 1 ? '#c9a84c' : r.position === 2 ? '#9ca3af' : '#b87333' }}>
+                                          {r.position === 1 ? '1st' : r.position === 2 ? '2nd' : '3rd'}
+                                        </span>
+                                        <span style={{ color: '#e8f0e8', fontWeight: '500' }}>{r.horse_name}</span>
+                                        {r.starting_price_display && (
+                                          <span style={{ color: '#c9a84c', marginLeft: 'auto', fontSize: '0.85rem' }}>
+                                            Opening: {r.starting_price_display}
+                                          </span>
                                         )}
                                       </div>
-                                    </>
-                                  )}
-                                </div>
-                              )}
+                                    ))}
+                                    <div style={{ marginTop: '0.65rem' }}>
+                                      <button style={st.btnSmallGhost} onClick={e => { e.stopPropagation(); unlockResults(race) }}>
+                                        ✎ Edit Results
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Entry / edit form */}
+                                {(!isSubmitted || isUnlocked) && (
+                                  <div style={st.raceCardBody}>
+                                    {raceRunners.length === 0 ? (
+                                      <p style={{ color: '#5a8a5a', fontSize: '0.85rem', margin: 0 }}>
+                                        Add runners in "This Week" first.
+                                      </p>
+                                    ) : (
+                                      <>
+                                        {isUnlocked && (
+                                          <div style={{ fontSize: '0.8rem', color: '#fbbf24', marginBottom: '0.75rem', padding: '0.5rem 0.75rem', background: 'rgba(251,191,36,0.08)', borderRadius: '6px', border: '1px solid rgba(251,191,36,0.2)' }}>
+                                            Editing results — existing scores will be recalculated on save.
+                                          </div>
+                                        )}
+                                        {[1,2,3].map(pos => {
+                                          const hKey  = `horse${pos}`
+                                          const label = pos === 1 ? '1st' : pos === 2 ? '2nd' : '3rd'
+                                          const bg    = pos === 1 ? '#c9a84c' : pos === 2 ? '#9ca3af' : '#b87333'
+                                          return (
+                                            <div key={pos} style={st.resultInputRow}>
+                                              <span style={{ ...st.posBadge, background: bg, minWidth: '44px' }}>{label}</span>
+                                              <select style={{ ...st.input, flex: 1 }} value={form[hKey] || ''}
+                                                onChange={e => setResultForms(p => ({ ...p, [race.id]: { ...p[race.id], [hKey]: e.target.value } }))}>
+                                                <option value="">Select horse…</option>
+                                                {raceRunners.map(r => (
+                                                  <option key={r.id} value={r.horse_name}>
+                                                    {r.horse_name}{r.odds_fractional ? ` (${r.odds_fractional})` : ''}
+                                                  </option>
+                                                ))}
+                                              </select>
+                                            </div>
+                                          )
+                                        })}
+                                        <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
+                                          <button style={st.btnGold}
+                                            onClick={() => submitResults(race, isUnlocked)}
+                                            disabled={loading}>
+                                            {loading ? 'Saving…' : isUnlocked ? 'Update Results & Recalculate' : 'Submit Results & Calculate Scores'}
+                                          </button>
+                                          {isUnlocked && (
+                                            <button style={st.btnGhost} onClick={() => lockResults(race.id)}>Cancel</button>
+                                          )}
+                                        </div>
+                                      </>
+                                    )}
+                                  </div>
+                                )}
+
+                              </div>{/* end collapsible body */}
                             </div>
                           )
                         })}
