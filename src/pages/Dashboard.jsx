@@ -433,7 +433,7 @@ export default function Dashboard() {
 
   const countdown         = getCountdownStatus()
   const myRank            = leaderboard.find(r => r.isMe)?.rank ?? null
-  const isRaceDay         = now.getDay() === 5 || now.getDay() === 6 // Fri or Sat
+  const isRaceDay         = races.length > 0 // show this week whenever races are set up
   const festIsLive        = festival?.is_active === true
   const festStartDate     = festival ? new Date(festival.start_date + 'T00:00:00') : null
   const festDaysUntil     = festStartDate ? Math.ceil((festStartDate - now) / 86400000) : null
