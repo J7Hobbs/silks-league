@@ -227,7 +227,7 @@ export default function Dashboard() {
       .rpc('get_user_names', { user_ids: profileIds })
     profiles?.forEach(p => {
       if (byUser[p.id]) {
-        byUser[p.id].name           = p.username || p.display_name || p.full_name || null
+        byUser[p.id].name           = p.username || p.full_name || null
         byUser[p.id].startingPoints = p.season_starting_points || 0
         byUser[p.id].total         += (p.season_starting_points || 0)
       }
@@ -279,7 +279,7 @@ export default function Dashboard() {
     const { data: profiles } = await supabase
       .rpc('get_user_names', { user_ids: weekProfileIds })
     const nameMap = {}
-    profiles?.forEach(p => { nameMap[p.id] = p.username || p.display_name || p.full_name || null })
+    profiles?.forEach(p => { nameMap[p.id] = p.username || p.full_name || null })
 
     const sorted = Object.entries(byUser)
       .map(([uid, pts]) => ({

@@ -156,7 +156,7 @@ export default function Results() {
       const { data: profData } = await supabase
         .rpc('get_user_names', { user_ids: allUserIds })
       const nameMap = {}
-      profData?.forEach(p => { nameMap[p.id] = p.username || p.display_name || p.full_name || null })
+      profData?.forEach(p => { nameMap[p.id] = p.username || p.full_name || null })
       const standings = Object.keys(byUser)
         .map(uid => ({
           userId:  uid,

@@ -128,7 +128,7 @@ export default function Groups() {
       const { data: profiles } = await supabase
         .rpc('get_user_names', { user_ids: groupProfileIds })
       const nameMap = {}
-      profiles?.forEach(p => { nameMap[p.id] = p.username || p.display_name || p.full_name || null })
+      profiles?.forEach(p => { nameMap[p.id] = p.username || p.full_name || null })
 
       const ranked = Object.entries(totals)
         .sort((a, b) => b[1] - a[1])

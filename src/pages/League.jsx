@@ -107,7 +107,7 @@ export default function League() {
     const { data: profData } = await supabase
       .rpc('get_user_names', { user_ids: allUserIds })
     const nameMap = {}
-    profData?.forEach(p => { nameMap[p.id] = p.username || p.display_name || p.full_name || null })
+    profData?.forEach(p => { nameMap[p.id] = p.username || p.full_name || null })
 
     const seasonScores = allRaceIds.length
       ? scores.filter(sc => allRaceIds.includes(sc.race_id))
@@ -234,7 +234,7 @@ export default function League() {
     const { data: profiles } = await supabase
       .rpc('get_user_names', { user_ids: festProfileIds })
     const nameMap = {}
-    profiles?.forEach(p => { nameMap[p.id] = p.username || p.display_name || p.full_name || null })
+    profiles?.forEach(p => { nameMap[p.id] = p.username || p.full_name || null })
 
     return Object.entries(totals)
       .sort((a, b) => b[1] - a[1])
@@ -270,7 +270,7 @@ export default function League() {
     const { data: profiles } = await supabase
       .rpc('get_user_names', { user_ids: groupProfileIds })
     const nameMap = {}
-    profiles?.forEach(p => { nameMap[p.id] = p.username || p.display_name || p.full_name || null })
+    profiles?.forEach(p => { nameMap[p.id] = p.username || p.full_name || null })
 
     return Object.entries(totals)
       .sort((a, b) => b[1] - a[1])
