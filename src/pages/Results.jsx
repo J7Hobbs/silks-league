@@ -172,10 +172,6 @@ export default function Results() {
       setWeeklyPosition(null); setTotalPlayers(0); setWeekStandings([])
     }
 
-    // Auto-expand first race that has results
-    const firstResultRaceId = racesData.find(r => resultsMap[r.id]?.length > 0)?.id
-    if (firstResultRaceId) setExpandedRaces(new Set([firstResultRaceId]))
-
     setWeekLoading(false)
   }
 
