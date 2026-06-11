@@ -263,7 +263,6 @@ export default function Results() {
             <a href="/picks"     style={st.navLink}>My Picks</a>
             <a href="/league"    style={st.navLink}>League</a>
             <a href="/results"   style={{ ...st.navLink, ...st.navLinkActive }}>Results</a>
-            <a href="/groups"    style={st.navLink}>Groups</a>
           </div>
           <div style={st.navRight}>
             <ProfileDropdown user={user} isAdmin={isAdmin} />
@@ -530,10 +529,6 @@ export default function Results() {
           <BarChart2 size={22} strokeWidth={1.5} />
           <span style={st.mobileBarLabel}>Results</span>
           <span style={st.mobileDot} />
-        </a>
-        <a href="/groups" style={st.mobileBarItem}>
-          <Users size={22} strokeWidth={1.5} />
-          <span style={st.mobileBarLabel}>Groups</span>
         </a>
       </nav>
 

@@ -471,7 +471,6 @@ export default function Dashboard() {
             <a href="/picks"     style={s.navLink}>My Picks</a>
             <a href="/league"    style={s.navLink}>League</a>
             <a href="/results"   style={s.navLink}>Results</a>
-            <a href="/groups"    style={s.navLink}>Groups</a>
           </div>
           <div style={s.navRight}>
             <ProfileDropdown user={user} isAdmin={isAdmin} />
@@ -771,10 +770,6 @@ export default function Dashboard() {
         <a href="/results" style={s.mobileItem}>
           <BarChart2 size={22} strokeWidth={1.5} />
           <span style={s.mobileLabel}>Results</span>
-        </a>
-        <a href="/groups" style={s.mobileItem}>
-          <Users size={22} strokeWidth={1.5} />
-          <span style={s.mobileLabel}>Groups</span>
         </a>
       </nav>
 

@@ -388,7 +388,6 @@ export default function Profile() {
             <a href="/picks"     style={st.navLink}>My Picks</a>
             <a href="/league"    style={st.navLink}>League</a>
             <a href="/results"   style={st.navLink}>Results</a>
-            <a href="/groups"    style={st.navLink}>Groups</a>
           </div>
           <div style={st.navRight}>
             <ProfileDropdown user={user} isAdmin={isAdmin} />
@@ -657,10 +656,6 @@ export default function Profile() {
         <a href="/results" style={st.mobileBarItem}>
           <BarChart2 size={22} strokeWidth={1.5} />
           <span style={st.mobileBarLabel}>Results</span>
-        </a>
-        <a href="/groups" style={st.mobileBarItem}>
-          <Users size={22} strokeWidth={1.5} />
-          <span style={st.mobileBarLabel}>Groups</span>
         </a>
       </nav>
 

@@ -129,7 +129,6 @@ export default function Account() {
             <a href="/picks"     style={st.navLink}>My Picks</a>
             <a href="/league"    style={st.navLink}>League</a>
             <a href="/results"   style={st.navLink}>Results</a>
-            <a href="/groups"    style={st.navLink}>Groups</a>
           </div>
           <div style={st.navRight}>
             <ProfileDropdown user={user} isAdmin={isAdmin} />

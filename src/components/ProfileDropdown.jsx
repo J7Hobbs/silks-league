@@ -62,6 +62,10 @@ export default function ProfileDropdown({ user, isAdmin }) {
             Account details
           </button>
 
+          <button style={ds.item} onClick={() => { setOpen(false); navigate('/groups') }}>
+            My Groups
+          </button>
+
           {isAdmin && (
             <>
               <div style={ds.divider} />
