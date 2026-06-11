@@ -560,6 +560,40 @@ export default function Dashboard() {
           </div>
         </section>
 
+        {/* Next race day countdown */}
+        <div style={s.card}>
+          <div style={s.cardHeader}>
+            <span style={s.cardTitle}>NEXT RACE DAY</span>
+            <span style={s.cardBadge}>{nextSatLabel}</span>
+          </div>
+          {msToSat === 0
+            ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#4ade80', fontSize: '0.9rem', fontWeight: '600', padding: '0.75rem 0' }}>
+                <span style={s.liveDot} />Races are live — good luck!
+              </div>
+            )
+            : (
+              <div style={s.cdRow}>
+                <div style={s.cdBlock}>
+                  <div style={s.cdNum}>{String(cdDays).padStart(2, '0')}</div>
+                  <div style={s.cdUnit}>DAYS</div>
+                </div>
+                <div style={s.cdSep}>:</div>
+                <div style={s.cdBlock}>
+                  <div style={s.cdNum}>{String(cdHours).padStart(2, '0')}</div>
+                  <div style={s.cdUnit}>HRS</div>
+                </div>
+                <div style={s.cdSep}>:</div>
+                <div style={s.cdBlock}>
+                  <div style={s.cdNum}>{String(cdMins).padStart(2, '0')}</div>
+                  <div style={s.cdUnit}>MIN</div>
+                </div>
+              </div>
+            )
+          }
+          <button style={s.goldBtn} onClick={() => navigate('/picks')}>MAKE PICKS →</button>
+        </div>
+
         {/* Main two-column grid */}
         <section style={s.twoCol} className="app-grid-2">
 
@@ -683,72 +717,6 @@ export default function Dashboard() {
           </div>
         </section>
 
-        {/* Bottom row */}
-        <section style={s.twoCol} className="app-grid-2">
-
-          {/* Next race day countdown blocks */}
-          <div style={s.card}>
-            <div style={s.cardHeader}>
-              <span style={s.cardTitle}>NEXT RACE DAY</span>
-              <span style={s.cardBadge}>{nextSatLabel}</span>
-            </div>
-            {msToSat === 0
-              ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#4ade80', fontSize: '0.9rem', fontWeight: '600', padding: '0.75rem 0' }}>
-                  <span style={s.liveDot} />Races are live — good luck!
-                </div>
-              )
-              : (
-                <div style={s.cdRow}>
-                  <div style={s.cdBlock}>
-                    <div style={s.cdNum}>{String(cdDays).padStart(2, '0')}</div>
-                    <div style={s.cdUnit}>DAYS</div>
-                  </div>
-                  <div style={s.cdSep}>:</div>
-                  <div style={s.cdBlock}>
-                    <div style={s.cdNum}>{String(cdHours).padStart(2, '0')}</div>
-                    <div style={s.cdUnit}>HRS</div>
-                  </div>
-                  <div style={s.cdSep}>:</div>
-                  <div style={s.cdBlock}>
-                    <div style={s.cdNum}>{String(cdMins).padStart(2, '0')}</div>
-                    <div style={s.cdUnit}>MIN</div>
-                  </div>
-                </div>
-              )
-            }
-            <button style={s.goldBtn} onClick={() => navigate('/picks')}>MAKE PICKS →</button>
-          </div>
-
-          {/* My Group */}
-          <div style={s.card}>
-            <div style={s.cardHeader}>
-              <span style={s.cardTitle}>MY GROUP</span>
-            </div>
-            {myGroup
-              ? (
-                <>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '0.5rem 0' }}>
-                    <div style={{ fontSize: '2rem', flexShrink: 0 }}>👥</div>
-                    <div>
-                      <div style={{ fontSize: '1rem', fontWeight: '700', color: '#e8f0e8' }}>{myGroup.name}</div>
-                      <div style={{ fontSize: '0.78rem', color: '#5a8a5a', marginTop: '0.15rem' }}>
-                        {myGroup.memberCount} member{myGroup.memberCount !== 1 ? 's' : ''}
-                      </div>
-                    </div>
-                  </div>
-                  <button style={s.goldBtn} onClick={() => navigate('/groups')}>VIEW GROUP →</button>
-                </>
-              )
-              : (
-                <>
-                  <div style={s.emptyMsg}>You haven't joined a group yet.</div>
-                  <button style={s.goldBtn} onClick={() => navigate('/groups')}>BROWSE GROUPS →</button>
-                </>
-              )
-            }
-          </div>
-        </section>
 
       </main>
 
