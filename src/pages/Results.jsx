@@ -153,15 +153,15 @@ export default function Results() {
       setTotalPlayers(Object.keys(byUser).length)
 
       // Build standings — fetch display names for all scorers
-      const allUserIds = Object.keys(byUser)
+      const allUserIds = [...new Set([...Object.keys(byUser), userId])]
       const { data: profData } = await supabase
         .from('profiles').select('id, username, display_name, full_name').in('id', allUserIds)
       const nameMap = {}
       profData?.forEach(p => { nameMap[p.id] = p.username || p.display_name || p.full_name || null })
-      const standings = allUserIds
+      const standings = Object.keys(byUser)
         .map(uid => ({
           userId:  uid,
-          name:    uid === userId ? 'You' : (nameMap[uid] || 'Player'),
+          name:    nameMap[uid] || 'Player',
           points:  byUser[uid],
           isMe:    uid === userId,
         }))
@@ -338,10 +338,11 @@ export default function Results() {
                           {row.rank === 1 ? '🥇' : row.rank === 2 ? '🥈' : row.rank === 3 ? '🥉' : `#${row.rank}`}
                         </span>
                         <span
-                          style={st.standingName}
+                          style={{ ...st.standingName, display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
                           onClick={() => setPicksModal({ userId: row.userId, name: row.name, pts: row.points, rank: row.rank })}
                         >
                           {row.name}
+                          {row.isMe && <span style={st.youBadge}>You</span>}
                         </span>
                         <span style={st.standingPts}>{row.points} pts</span>
                       </div>
@@ -672,6 +673,11 @@ const st = {
   standingPts: {
     fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.1rem',
     color: '#c9a84c', letterSpacing: '0.03em',
+  },
+  youBadge: {
+    fontSize: '0.55rem', fontWeight: '700', letterSpacing: '0.08em', textTransform: 'uppercase',
+    color: '#0a1a08', background: '#c9a84c', padding: '0.1rem 0.35rem',
+    borderRadius: '3px', whiteSpace: 'nowrap', flexShrink: 0,
   },
 
   // Summary strip

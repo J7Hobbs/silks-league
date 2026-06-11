@@ -222,10 +222,11 @@ export default function Dashboard() {
       byUser[s.user_id].total += (s.total_points || 0)
     })
 
+    const profileIds = [...new Set([...Object.keys(byUser), myUserId])]
     const { data: profiles } = await supabase
       .from('profiles')
       .select('id, username, display_name, full_name, season_starting_points')
-      .in('id', Object.keys(byUser))
+      .in('id', profileIds)
     profiles?.forEach(p => {
       if (byUser[p.id]) {
         byUser[p.id].name          = p.username || p.display_name || p.full_name || null
@@ -240,7 +241,7 @@ export default function Dashboard() {
       .map((u, i) => ({
         rank:      i + 1,
         userId:    u.user_id,
-        name:      u.user_id === myUserId ? 'You' : (u.name || `Player ${i + 1}`),
+        name:      u.name || 'Player',
         points:    u.total,
         isMe:      u.user_id === myUserId,
         midSeason: (u.startingPoints || 0) > 0,
@@ -276,9 +277,10 @@ export default function Dashboard() {
       byUser[s.user_id] += (s.total_points || 0)
     })
 
+    const weekProfileIds = [...new Set([...Object.keys(byUser), myUserId])]
     const { data: profiles } = await supabase
       .from('profiles').select('id, username, display_name, full_name')
-      .in('id', Object.keys(byUser))
+      .in('id', weekProfileIds)
     const nameMap = {}
     profiles?.forEach(p => { nameMap[p.id] = p.username || p.display_name || p.full_name || null })
 
@@ -286,7 +288,7 @@ export default function Dashboard() {
       .map(([uid, pts]) => ({
         userId: uid,
         points: pts,
-        name:   uid === myUserId ? 'You' : (nameMap[uid] || 'Player'),
+        name:   nameMap[uid] || 'Player',
         isMe:   uid === myUserId,
       }))
       .sort((a, b) => b.points - a.points)
@@ -728,6 +730,7 @@ export default function Dashboard() {
                         style={{ ...s.leaderName, cursor: 'pointer', textDecorationLine: 'underline', textDecorationStyle: 'dotted', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
                         onClick={() => setPicksModal({ userId: row.userId, name: row.name, pts: row.points, rank: row.rank })}>
                         {row.name}
+                        {row.isMe && <span style={s.youBadge}>You</span>}
                         {row.midSeason && leaderboardTab === 'season' && (
                           <span style={{ fontSize: '0.58rem', fontWeight: '700', letterSpacing: '0.06em', color: '#5a8a5a', background: 'rgba(90,138,90,0.12)', padding: '0.1rem 0.4rem', borderRadius: '3px', whiteSpace: 'nowrap' }}>mid-season</span>
                         )}
@@ -882,6 +885,7 @@ const s = {
   leaderName: { flex: 1, fontSize: '0.84rem', fontWeight: '500', color: '#e8f0e8', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
   leaderPoints: { fontSize: '0.84rem', fontWeight: '600', color: '#c9a84c' },
   viewAllBtn: { background: 'none', border: '1px solid rgba(201,168,76,0.2)', color: '#c9a84c', borderRadius: '8px', padding: '0.55rem 1rem', fontSize: '0.82rem', fontWeight: '600', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", width: '100%', textAlign: 'center', marginTop: 'auto' },
+  youBadge: { fontSize: '0.55rem', fontWeight: '700', letterSpacing: '0.08em', textTransform: 'uppercase', color: '#0a1a08', background: '#c9a84c', padding: '0.1rem 0.35rem', borderRadius: '3px', whiteSpace: 'nowrap', textDecorationLine: 'none' },
 
   // Countdown blocks
   cdRow: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', padding: '0.25rem 0' },

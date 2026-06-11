@@ -103,7 +103,7 @@ export default function League() {
     }
 
     const scores = allScores.length ? allScores : (ownScores || [])
-    const allUserIds = [...new Set(scores.map(sc => sc.user_id))]
+    const allUserIds = [...new Set([...scores.map(sc => sc.user_id), myUserId])]
     const { data: profData } = await supabase
       .from('profiles').select('id, username, full_name, display_name').in('id', allUserIds)
     const nameMap = {}
@@ -113,12 +113,11 @@ export default function League() {
       ? scores.filter(sc => allRaceIds.includes(sc.race_id))
       : scores
     const byUser = {}
-    let playerCounter = 1
     seasonScores.forEach(sc => {
       if (!byUser[sc.user_id]) {
         byUser[sc.user_id] = {
           user_id: sc.user_id,
-          name: sc.user_id === myUserId ? 'You' : (nameMap[sc.user_id] || `Player ${playerCounter++}`),
+          name: nameMap[sc.user_id] || 'Player',
           isMe: sc.user_id === myUserId,
           seasonTotal: 0, weeksPlayed: new Set(), weekPoints: 0,
         }
@@ -133,7 +132,7 @@ export default function League() {
       const myWeekPoints  = ownScores.filter(sc => weekRaceIds.includes(sc.race_id))
         .reduce((s, sc) => s + (sc.total_points || 0), 0)
       byUser[myUserId] = {
-        user_id: myUserId, name: 'You', isMe: true,
+        user_id: myUserId, name: nameMap[myUserId] || 'Player', isMe: true,
         seasonTotal: mySeasonTotal, weeksPlayed: new Set(), weekPoints: myWeekPoints,
       }
       ownScores.forEach(sc => { const wId = raceWeekMap[sc.race_id]; if (wId) byUser[myUserId].weeksPlayed.add(wId) })
@@ -146,12 +145,11 @@ export default function League() {
     setSatRows(seasonSorted)
 
     const weekByUser = {}
-    let wCounter = 1
     scores.filter(sc => weekRaceIds.includes(sc.race_id)).forEach(sc => {
       if (!weekByUser[sc.user_id]) {
         weekByUser[sc.user_id] = {
           user_id: sc.user_id,
-          name: sc.user_id === myUserId ? 'You' : (nameMap[sc.user_id] || `Player ${wCounter++}`),
+          name: nameMap[sc.user_id] || 'Player',
           isMe: sc.user_id === myUserId, weekPoints: 0, racesScored: 0,
         }
       }
@@ -162,7 +160,7 @@ export default function League() {
       const myWeekScores = ownScores.filter(sc => weekRaceIds.includes(sc.race_id))
       if (myWeekScores.length) {
         weekByUser[myUserId] = {
-          user_id: myUserId, name: 'You', isMe: true,
+          user_id: myUserId, name: nameMap[myUserId] || 'Player', isMe: true,
           weekPoints: myWeekScores.reduce((s, sc) => s + (sc.total_points || 0), 0),
           racesScored: myWeekScores.length,
         }
@@ -232,8 +230,9 @@ export default function League() {
       if (totals[s.user_id] !== undefined) totals[s.user_id] += (s.total_points || 0)
     }
 
+    const festProfileIds = [...new Set([...entryUserIds, myUserId])]
     const { data: profiles } = await supabase
-      .from('profiles').select('id, username, display_name, full_name').in('id', entryUserIds)
+      .from('profiles').select('id, username, display_name, full_name').in('id', festProfileIds)
     const nameMap = {}
     profiles?.forEach(p => { nameMap[p.id] = p.username || p.display_name || p.full_name || null })
 
@@ -241,7 +240,7 @@ export default function League() {
       .sort((a, b) => b[1] - a[1])
       .map(([uid, pts], i) => ({
         rank: i + 1, userId: uid, points: pts,
-        name: uid === myUserId ? 'You' : (nameMap[uid] || 'Player'),
+        name: nameMap[uid] || 'Player',
         isMe: uid === myUserId,
       }))
   }
@@ -258,7 +257,7 @@ export default function League() {
     const { data: races } = await supabase
       .from('races').select('id').in('race_week_id', weekIds)
     const raceIds = (races || []).map(r => r.id)
-    if (!raceIds.length) return memberIds.map((uid, i) => ({ rank: i + 1, userId: uid, points: 0, name: uid === myUserId ? 'You' : 'Player', isMe: uid === myUserId }))
+    if (!raceIds.length) return memberIds.map((uid, i) => ({ rank: i + 1, userId: uid, points: 0, name: 'Player', isMe: uid === myUserId }))
 
     const { data: scores } = await supabase
       .from('scores').select('user_id, total_points')
@@ -267,8 +266,9 @@ export default function League() {
     for (const uid of memberIds) totals[uid] = 0
     for (const s of (scores || [])) totals[s.user_id] = (totals[s.user_id] || 0) + s.total_points
 
+    const groupProfileIds = [...new Set([...memberIds, myUserId])]
     const { data: profiles } = await supabase
-      .from('profiles').select('id, username, display_name, full_name').in('id', memberIds)
+      .from('profiles').select('id, username, display_name, full_name').in('id', groupProfileIds)
     const nameMap = {}
     profiles?.forEach(p => { nameMap[p.id] = p.username || p.display_name || p.full_name || null })
 
@@ -276,7 +276,7 @@ export default function League() {
       .sort((a, b) => b[1] - a[1])
       .map(([uid, pts], i) => ({
         rank: i + 1, userId: uid, points: pts,
-        name: uid === myUserId ? 'You' : (nameMap[uid] || 'Player'),
+        name: nameMap[uid] || 'Player',
         isMe: uid === myUserId,
       }))
   }
