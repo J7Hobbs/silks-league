@@ -86,31 +86,28 @@ export default function League() {
       }
     }
 
-    const scoreSelect = 'user_id, race_id, total_points, profiles(username, display_name, full_name)'
     const ownQuery = allRaceIds.length
-      ? supabase.from('scores').select(scoreSelect).eq('user_id', myUserId).in('race_id', allRaceIds)
-      : supabase.from('scores').select(scoreSelect).eq('user_id', myUserId)
+      ? supabase.from('scores').select('user_id, race_id, total_points').eq('user_id', myUserId).in('race_id', allRaceIds)
+      : supabase.from('scores').select('user_id, race_id, total_points').eq('user_id', myUserId)
     const { data: ownScores } = await ownQuery
 
     let allScores = []
     if (allRaceIds.length) {
       const { data: everyone, error: evErr } = await supabase
-        .from('scores').select(scoreSelect).in('race_id', allRaceIds)
+        .from('scores').select('user_id, race_id, total_points').in('race_id', allRaceIds)
       if (!evErr && everyone?.length) allScores = everyone
     } else {
       const { data: everyone, error: evErr } = await supabase
-        .from('scores').select(scoreSelect)
+        .from('scores').select('user_id, race_id, total_points')
       if (!evErr && everyone?.length) allScores = everyone
     }
 
     const scores = allScores.length ? allScores : (ownScores || [])
+    const allUserIds = [...new Set([...scores.map(sc => sc.user_id), myUserId])]
+    const { data: profData } = await supabase
+      .from('profiles').select('id, username, full_name, display_name').in('id', allUserIds)
     const nameMap = {}
-    scores.forEach(sc => {
-      if (!nameMap[sc.user_id] && sc.profiles) {
-        const p = sc.profiles
-        nameMap[sc.user_id] = p.username || p.display_name || p.full_name || null
-      }
-    })
+    profData?.forEach(p => { nameMap[p.id] = p.username || p.display_name || p.full_name || null })
 
     const seasonScores = allRaceIds.length
       ? scores.filter(sc => allRaceIds.includes(sc.race_id))
@@ -212,22 +209,13 @@ export default function League() {
       .from('festival_races').select('id').in('festival_day_id', days.map(d => d.id))
     const raceIds = (races || []).map(r => r.id)
 
-    // festival_entries.user_id → profiles(id) FK exists — inline join works
     let entriesQ = supabase.from('festival_entries')
-      .select('user_id, starting_points, profiles(username, display_name, full_name)').eq('festival_id', fest.id)
+      .select('user_id, starting_points').eq('festival_id', fest.id)
     if (memberIds?.length) entriesQ = entriesQ.in('user_id', memberIds)
     const { data: entries } = await entriesQ
     if (!entries?.length) return []
 
-    const nameMap = {}
-    const entryUserIds = entries.map(e => {
-      if (e.profiles) {
-        const p = e.profiles
-        nameMap[e.user_id] = p.username || p.display_name || p.full_name || null
-      }
-      return e.user_id
-    })
-
+    const entryUserIds = entries.map(e => e.user_id)
     let scoresData = []
     if (raceIds.length) {
       const { data: sc } = await supabase
@@ -241,6 +229,12 @@ export default function League() {
     for (const s of scoresData) {
       if (totals[s.user_id] !== undefined) totals[s.user_id] += (s.total_points || 0)
     }
+
+    const festProfileIds = [...new Set([...entryUserIds, myUserId])]
+    const { data: profiles } = await supabase
+      .from('profiles').select('id, username, display_name, full_name').in('id', festProfileIds)
+    const nameMap = {}
+    profiles?.forEach(p => { nameMap[p.id] = p.username || p.display_name || p.full_name || null })
 
     return Object.entries(totals)
       .sort((a, b) => b[1] - a[1])
@@ -266,19 +260,17 @@ export default function League() {
     if (!raceIds.length) return memberIds.map((uid, i) => ({ rank: i + 1, userId: uid, points: 0, name: 'Player', isMe: uid === myUserId }))
 
     const { data: scores } = await supabase
-      .from('scores')
-      .select('user_id, total_points, profiles(username, display_name, full_name)')
+      .from('scores').select('user_id, total_points')
       .in('race_id', raceIds).in('user_id', memberIds)
     const totals = {}
     for (const uid of memberIds) totals[uid] = 0
+    for (const s of (scores || [])) totals[s.user_id] = (totals[s.user_id] || 0) + s.total_points
+
+    const groupProfileIds = [...new Set([...memberIds, myUserId])]
+    const { data: profiles } = await supabase
+      .from('profiles').select('id, username, display_name, full_name').in('id', groupProfileIds)
     const nameMap = {}
-    for (const s of (scores || [])) {
-      totals[s.user_id] = (totals[s.user_id] || 0) + s.total_points
-      if (!nameMap[s.user_id] && s.profiles) {
-        const p = s.profiles
-        nameMap[s.user_id] = p.username || p.display_name || p.full_name || null
-      }
-    }
+    profiles?.forEach(p => { nameMap[p.id] = p.username || p.display_name || p.full_name || null })
 
     return Object.entries(totals)
       .sort((a, b) => b[1] - a[1])
