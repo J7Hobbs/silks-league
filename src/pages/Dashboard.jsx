@@ -548,38 +548,75 @@ export default function Dashboard() {
           </div>
         </section>
 
-        {/* Next race day countdown */}
-        <div style={s.card}>
-          <div style={s.cardHeader}>
-            <span style={s.cardTitle}>NEXT RACE DAY</span>
-            <span style={s.cardBadge}>{nextSatLabel}</span>
+        {/* Next race day + glance row */}
+        <style>{`@media(min-width:768px){.dash-cd-row{display:grid;grid-template-columns:1fr 1fr;gap:1rem}.dash-glance{display:flex !important}}`}</style>
+        <div className="dash-cd-row">
+
+          {/* Countdown card */}
+          <div style={s.card}>
+            <div style={s.cardHeader}>
+              <span style={s.cardTitle}>NEXT RACE DAY</span>
+              <span style={s.cardBadge}>{nextSatLabel}</span>
+            </div>
+            {msToSat === 0
+              ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#4ade80', fontSize: '0.9rem', fontWeight: '600', padding: '0.75rem 0' }}>
+                  <span style={s.liveDot} />Races are live — good luck!
+                </div>
+              )
+              : (
+                <div style={s.cdRow}>
+                  <div style={s.cdBlock}>
+                    <div style={s.cdNum}>{String(cdDays).padStart(2, '0')}</div>
+                    <div style={s.cdUnit}>DAYS</div>
+                  </div>
+                  <div style={s.cdSep}>:</div>
+                  <div style={s.cdBlock}>
+                    <div style={s.cdNum}>{String(cdHours).padStart(2, '0')}</div>
+                    <div style={s.cdUnit}>HRS</div>
+                  </div>
+                  <div style={s.cdSep}>:</div>
+                  <div style={s.cdBlock}>
+                    <div style={s.cdNum}>{String(cdMins).padStart(2, '0')}</div>
+                    <div style={s.cdUnit}>MIN</div>
+                  </div>
+                </div>
+              )
+            }
+            <button style={s.goldBtn} onClick={() => navigate('/picks')}>MAKE PICKS →</button>
           </div>
-          {msToSat === 0
-            ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#4ade80', fontSize: '0.9rem', fontWeight: '600', padding: '0.75rem 0' }}>
-                <span style={s.liveDot} />Races are live — good luck!
-              </div>
-            )
-            : (
-              <div style={s.cdRow}>
-                <div style={s.cdBlock}>
-                  <div style={s.cdNum}>{String(cdDays).padStart(2, '0')}</div>
-                  <div style={s.cdUnit}>DAYS</div>
+
+          {/* This Week at a Glance — desktop only */}
+          <div className="dash-glance" style={{ ...s.card, display: 'none', flexDirection: 'column', gap: '0' }}>
+            <div style={{ ...s.cardHeader, marginBottom: '0.25rem' }}>
+              <span style={s.cardTitle}>THIS WEEK'S RACES</span>
+              <span style={s.cardBadge}>{nextSatLabel}</span>
+            </div>
+            {races.length === 0
+              ? (
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(232,240,232,0.3)', fontSize: '0.82rem', fontStyle: 'italic', padding: '1.5rem 0' }}>
+                  Races announced Thursday
                 </div>
-                <div style={s.cdSep}>:</div>
-                <div style={s.cdBlock}>
-                  <div style={s.cdNum}>{String(cdHours).padStart(2, '0')}</div>
-                  <div style={s.cdUnit}>HRS</div>
+              )
+              : races.map((r, i) => (
+                <div
+                  key={r.id}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '0.75rem',
+                    padding: '0.55rem 0',
+                    borderTop: i === 0 ? '1px solid rgba(201,168,76,0.1)' : '1px solid rgba(201,168,76,0.07)',
+                  }}>
+                  <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.82rem', color: '#c9a84c', fontWeight: '600', minWidth: '42px', flexShrink: 0 }}>
+                    {r.time || '—'}
+                  </span>
+                  <span style={{ fontSize: '0.875rem', color: '#e8f0e8', fontWeight: '500' }}>
+                    {r.course}
+                  </span>
                 </div>
-                <div style={s.cdSep}>:</div>
-                <div style={s.cdBlock}>
-                  <div style={s.cdNum}>{String(cdMins).padStart(2, '0')}</div>
-                  <div style={s.cdUnit}>MIN</div>
-                </div>
-              </div>
-            )
-          }
-          <button style={s.goldBtn} onClick={() => navigate('/picks')}>MAKE PICKS →</button>
+              ))
+            }
+          </div>
+
         </div>
 
         {/* Main two-column grid */}
