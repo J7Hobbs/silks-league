@@ -487,18 +487,6 @@ export default function Dashboard() {
             <h1 style={s.welcomeHeading}>{getGreeting()}, {getFirstName()}.</h1>
             <p style={s.welcomeSub}>Here's what's happening in the league today.</p>
           </div>
-          {countdown.mode === 'live' && (
-            <div style={s.livePill}><span style={s.liveDot} />LIVE</div>
-          )}
-          {countdown.mode === 'date' && (
-            <div style={s.statusPill}>{countdown.label}</div>
-          )}
-          {countdown.mode === 'countdown' && (
-            <div style={s.countdownPill}>
-              <span style={s.countdownValue}>{countdown.label}</span>
-              <span style={s.countdownSublabel}>{countdown.sublabel}</span>
-            </div>
-          )}
         </section>
 
         {/* Festival banner */}
