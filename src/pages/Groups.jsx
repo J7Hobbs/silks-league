@@ -123,9 +123,10 @@ export default function Groups() {
         totals[s.user_id] = (totals[s.user_id] || 0) + s.total_points
       }
 
-      // Fetch names
+      // Fetch names — include current user's id so their name resolves even if not in memberIds
+      const groupProfileIds = [...new Set([...memberIds, ...(userId ? [userId] : [])])]
       const { data: profiles } = await supabase
-        .from('profiles').select('id, username, display_name, full_name').in('id', memberIds)
+        .from('profiles').select('id, username, display_name, full_name').in('id', groupProfileIds)
       const nameMap = {}
       profiles?.forEach(p => { nameMap[p.id] = p.username || p.display_name || p.full_name || null })
 
@@ -134,7 +135,7 @@ export default function Groups() {
         .map(([uid, pts], i) => ({
           rank: i + 1,
           userId: uid,
-          name: uid === userId ? 'You' : (nameMap[uid] || 'Player'),
+          name: nameMap[uid] || 'Player',
           points: pts,
           isMe: uid === userId,
         }))
@@ -478,8 +479,11 @@ export default function Groups() {
                     <div style={st.lbRank}>
                       {row.rank === 1 ? '🥇' : row.rank === 2 ? '🥈' : row.rank === 3 ? '🥉' : `#${row.rank}`}
                     </div>
-                    <div style={{ ...st.lbName, cursor: 'pointer', textDecoration: 'underline dotted' }}
-                      onClick={() => navigate(`/player-picks/${row.userId}`)}>{row.name}</div>
+                    <div style={{ ...st.lbName, cursor: 'pointer', textDecoration: 'underline dotted', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+                      onClick={() => navigate(`/player-picks/${row.userId}`)}>
+                      {row.name}
+                      {row.isMe && <span style={st.youBadge}>You</span>}
+                    </div>
                     <div style={st.lbPoints}>{row.points} pts</div>
                   </div>
                 ))}
@@ -606,6 +610,7 @@ const st = {
   lbRowMe:    { background: 'rgba(201,168,76,0.08)', border: '1px solid rgba(201,168,76,0.2)' },
   lbRank:     { fontSize: '1.1rem', minWidth: '32px', textAlign: 'center' },
   lbName:     { flex: 1, fontSize: '0.9rem', color: '#e8f0e8', fontWeight: '500' },
+  youBadge:   { fontSize: '0.55rem', fontWeight: '700', letterSpacing: '0.08em', textTransform: 'uppercase', color: '#0a1a08', background: '#c9a84c', padding: '0.1rem 0.35rem', borderRadius: '3px', whiteSpace: 'nowrap', flexShrink: 0 },
   lbPoints:   { fontSize: '0.875rem', color: '#c9a84c', fontWeight: '700', fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.05rem', letterSpacing: '0.04em' },
 
   // Mobile bar

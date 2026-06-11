@@ -41,13 +41,13 @@ export default function FestivalLeaderboard() {
       setGroups(myGroups?.map(m => m.groups).filter(Boolean) || [])
 
       // Build overall leaderboard
-      await buildOverallLeaderboard(fest, daysData || [], null)
+      await buildOverallLeaderboard(fest, daysData || [], null, userId)
     } finally {
       setLoading(false)
     }
   }
 
-  async function buildOverallLeaderboard(fest, allDays, groupId) {
+  async function buildOverallLeaderboard(fest, allDays, groupId, myUserId) {
     if (!allDays.length) { setLeaderboard([]); return }
 
     const raceIds = []
@@ -88,20 +88,20 @@ export default function FestivalLeaderboard() {
       if (byUser[s.user_id]) byUser[s.user_id].total += (s.total_points || 0)
     })
 
-    const userIds = Object.keys(byUser)
+    const userIds = [...new Set([...Object.keys(byUser), ...(myUserId ? [myUserId] : [])])]
     const { data: profiles } = await supabase
-      .from('profiles').select('id, username, full_name').in('id', userIds)
+      .from('profiles').select('id, username, display_name, full_name').in('id', userIds)
     const nameMap = {}
-    profiles?.forEach(p => { nameMap[p.id] = p.username || p.full_name || 'Player' })
+    profiles?.forEach(p => { nameMap[p.id] = p.username || p.display_name || p.full_name || null })
 
     const sorted = Object.entries(byUser)
-      .map(([uid, v]) => ({ userId: uid, name: nameMap[uid] || 'Player', total: v.total, startingPoints: v.startingPoints }))
+      .map(([uid, v]) => ({ userId: uid, name: nameMap[uid] || 'Player', total: v.total, startingPoints: v.startingPoints, isMe: uid === myUserId }))
       .sort((a, b) => b.total - a.total)
 
     setLeaderboard(sorted)
   }
 
-  async function buildDayLeaderboard(day, groupId) {
+  async function buildDayLeaderboard(day, groupId, myUserId) {
     const { data: races } = await supabase
       .from('festival_races').select('id').eq('festival_day_id', day.id)
     if (!races?.length) { setLeaderboard([]); return }
@@ -129,13 +129,14 @@ export default function FestivalLeaderboard() {
 
     if (!Object.keys(byUser).length) { setLeaderboard([]); return }
 
+    const dayUserIds = [...new Set([...Object.keys(byUser), ...(myUserId ? [myUserId] : [])])]
     const { data: profiles } = await supabase
-      .from('profiles').select('id, username, full_name').in('id', Object.keys(byUser))
+      .from('profiles').select('id, username, display_name, full_name').in('id', dayUserIds)
     const nameMap = {}
-    profiles?.forEach(p => { nameMap[p.id] = p.username || p.full_name || 'Player' })
+    profiles?.forEach(p => { nameMap[p.id] = p.username || p.display_name || p.full_name || null })
 
     const sorted = Object.entries(byUser)
-      .map(([uid, v]) => ({ userId: uid, name: nameMap[uid] || 'Player', total: v.total }))
+      .map(([uid, v]) => ({ userId: uid, name: nameMap[uid] || 'Player', total: v.total, isMe: uid === myUserId }))
       .sort((a, b) => b.total - a.total)
 
     setLeaderboard(sorted)
@@ -146,10 +147,10 @@ export default function FestivalLeaderboard() {
     setLeaderboard([])
     if (!festival) return
     if (viewId === 'overall') {
-      await buildOverallLeaderboard(festival, days, activeGroup)
+      await buildOverallLeaderboard(festival, days, activeGroup, user?.id)
     } else {
       const day = days.find(d => d.id === viewId)
-      if (day) await buildDayLeaderboard(day, activeGroup)
+      if (day) await buildDayLeaderboard(day, activeGroup, user?.id)
     }
   }
 
@@ -158,10 +159,10 @@ export default function FestivalLeaderboard() {
     setLeaderboard([])
     if (!festival) return
     if (activeView === 'overall') {
-      await buildOverallLeaderboard(festival, days, groupId)
+      await buildOverallLeaderboard(festival, days, groupId, user?.id)
     } else {
       const day = days.find(d => d.id === activeView)
-      if (day) await buildDayLeaderboard(day, groupId)
+      if (day) await buildDayLeaderboard(day, groupId, user?.id)
     }
   }
 
@@ -268,8 +269,9 @@ export default function FestivalLeaderboard() {
                     {i === 0 ? '👑' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
                   </span>
                   <span style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <span style={{ fontWeight: isMe ? '700' : '500', color: isMe ? '#c9a84c' : '#e8f0e8', fontSize: '0.875rem' }}>
-                      {isMe ? 'You' : row.name}
+                    <span style={{ fontWeight: isMe ? '700' : '500', color: isMe ? '#c9a84c' : '#e8f0e8', fontSize: '0.875rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+                      {row.name}
+                      {isMe && <span style={st.youBadge}>You</span>}
                     </span>
                     {(row.startingPoints || 0) > 0 && (
                       <span style={{ fontSize: '0.62rem', color: '#5a8a5a', background: 'rgba(90,138,90,0.1)', padding: '0.1rem 0.4rem', borderRadius: '3px' }}>mid-join</span>
@@ -305,4 +307,5 @@ const st = {
   tableCard:   { background: '#162a1a', border: '1px solid #c9a84c', borderLeft: '4px solid #c9a84c', borderRadius: '8px', overflow: 'hidden' },
   tableRow:    { display: 'flex', gap: '0.75rem', padding: '0.85rem 1.25rem', borderTop: '1px solid rgba(201,168,76,0.1)', alignItems: 'center' },
   tableRowMe:  { background: 'rgba(201,168,76,0.06)' },
+  youBadge:    { fontSize: '0.55rem', fontWeight: '700', letterSpacing: '0.08em', textTransform: 'uppercase', color: '#0a1a08', background: '#c9a84c', padding: '0.1rem 0.35rem', borderRadius: '3px', whiteSpace: 'nowrap', flexShrink: 0 },
 }
