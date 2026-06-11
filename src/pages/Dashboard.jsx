@@ -549,7 +549,7 @@ export default function Dashboard() {
         </section>
 
         {/* Next race day countdown */}
-        <style>{`@media(min-width:768px){.nrd-mb{display:none !important}.nrd-dt{display:flex !important}}`}</style>
+        <style>{`@media(min-width:768px){.nrd-mb{display:none !important}.nrd-dt{display:flex !important}}@media(max-width:767px){.dash-two-col{grid-template-columns:1fr!important;width:100%}.dash-two-col>*{min-width:0;width:100%}}`}</style>
         <div style={s.card}>
 
           {/* ── Mobile layout — completely unchanged ── */}
@@ -619,7 +619,7 @@ export default function Dashboard() {
         </div>
 
         {/* Main two-column grid */}
-        <section style={s.twoCol} className="app-grid-2">
+        <section style={s.twoCol} className="dash-two-col">
 
           {/* Smart race card */}
           <div style={s.card}>
@@ -879,7 +879,7 @@ const s = {
   leaderRow: { display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.55rem 0.7rem', borderRadius: '6px', background: 'rgba(201,168,76,0.04)', border: '1px solid rgba(201,168,76,0.14)' },
   leaderRowMe: { background: 'rgba(201,168,76,0.1)', border: '1px solid rgba(201,168,76,0.4)' },
   leaderRank: { fontSize: '0.9rem', minWidth: '24px', textAlign: 'center' },
-  leaderName: { flex: 1, fontSize: '0.84rem', fontWeight: '500', color: '#e8f0e8' },
+  leaderName: { flex: 1, fontSize: '0.84rem', fontWeight: '500', color: '#e8f0e8', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
   leaderPoints: { fontSize: '0.84rem', fontWeight: '600', color: '#c9a84c' },
   viewAllBtn: { background: 'none', border: '1px solid rgba(201,168,76,0.2)', color: '#c9a84c', borderRadius: '8px', padding: '0.55rem 1rem', fontSize: '0.82rem', fontWeight: '600', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", width: '100%', textAlign: 'center', marginTop: 'auto' },
 
