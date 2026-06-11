@@ -1060,8 +1060,31 @@ export default function Admin() {
       start_date: editFestivalForm.startDate,
       end_date: editFestivalForm.endDate,
     }).eq('id', id)
+    if (error) { setLoading(false); showToast('error', error.message); return }
+
+    // Recalculate each day's race_date/label/deadline from the new start date
+    // (does NOT delete days or touch any races/runners/results)
+    const { data: existingDays } = await supabase
+      .from('festival_days').select('id, day_number')
+      .eq('festival_id', id).order('day_number')
+
+    if (existingDays?.length) {
+      const DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
+      const newStart = new Date(editFestivalForm.startDate + 'T12:00:00')
+      for (const day of existingDays) {
+        const d = new Date(newStart)
+        d.setDate(newStart.getDate() + (day.day_number - 1))
+        const dateStr  = d.toISOString().split('T')[0]
+        const dayName  = DAY_NAMES[d.getDay()]
+        await supabase.from('festival_days').update({
+          race_date:      dateStr,
+          label:          `Day ${day.day_number} — ${dayName}`,
+          picks_deadline: dateStr + 'T11:30:00+00:00',
+        }).eq('id', day.id)
+      }
+    }
+
     setLoading(false)
-    if (error) { showToast('error', error.message); return }
     showToast('success', 'Festival updated')
     setEditingFestival(null)
     await loadFestivals()
@@ -2274,12 +2297,17 @@ export default function Admin() {
                     <>
                       <div style={{ background: '#0d1f0d', borderRadius: '8px', padding: '0.5rem 0.75rem', display: 'flex', gap: '0.35rem', flexWrap: 'wrap', border: '1px solid rgba(201,168,76,0.1)' }}>
                         {festivalDays.map(day => {
-                          const isSat = new Date(day.race_date + 'T12:00:00').getDay() === 6
+                          // Always derive date from festival start_date so it's never stale
+                          const DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
+                          const d = new Date(selectedFestival.start_date + 'T12:00:00')
+                          d.setDate(d.getDate() + (day.day_number - 1))
+                          const isSat = d.getDay() === 6
+                          const tabLabel = `Day ${day.day_number} — ${DAY_NAMES[d.getDay()]}`
                           return (
                             <button key={day.id}
                               style={{ ...st.tabBtn, padding: '0.45rem 0.85rem', fontSize: '0.78rem', borderBottom: '2px solid', borderBottomColor: day.id === selectedDay?.id ? '#c9a84c' : 'transparent', color: day.id === selectedDay?.id ? '#c9a84c' : '#5a8a5a' }}
                               onClick={() => selectFestivalDay(day)}>
-                              {day.label}
+                              {tabLabel}
                               {isSat && <span title="Saturday — regular race day also" style={{ marginLeft: '4px', color: '#c9a84c', fontSize: '0.7em' }}>⚠</span>}
                             </button>
                           )
@@ -2290,11 +2318,25 @@ export default function Admin() {
                       {selectedDay && (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <span style={{ fontSize: '0.85rem', color: '#5a8a5a' }}>{selectedDay.label} · {selectedDay.race_date} · Deadline: {selectedDay.picks_deadline ? new Date(selectedDay.picks_deadline).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : 'N/A'}</span>
+                            {(() => {
+                              const DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
+                              const d = new Date(selectedFestival.start_date + 'T12:00:00')
+                              d.setDate(d.getDate() + (selectedDay.day_number - 1))
+                              const dateStr = d.toISOString().split('T')[0]
+                              const dayName = DAY_NAMES[d.getDay()]
+                              const deadlineStr = selectedDay.picks_deadline
+                                ? new Date(selectedDay.picks_deadline).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+                                : 'N/A'
+                              return (
+                                <span style={{ fontSize: '0.85rem', color: '#5a8a5a' }}>
+                                  {`Day ${selectedDay.day_number} — ${dayName} · ${dateStr} · Deadline: ${deadlineStr}`}
+                                </span>
+                              )
+                            })()}
                           </div>
 
                           {/* Race cards */}
-                          {[1,2,3,4,5,6,7,8,9,10].map(raceNum => {
+                          {[1,2,3,4,5,6,7].map(raceNum => {
                             const race      = festivalRaces.find(r => r.race_number === raceNum)
                             const raceKey   = `${selectedDay.id}_${raceNum}`
                             const isOpen    = showFestivalRaceForm[raceKey]
