@@ -852,6 +852,14 @@ img { max-width: 100%; display: block; }
   .league-hide-mobile { display: none !important; }
 }
 
+/* ── League weekly breakdown: desktop table / mobile cards ── */
+.league-desktop-only { display: block; }
+.league-mobile-only  { display: none; }
+@media (max-width: 640px) {
+  .league-desktop-only { display: none !important; }
+  .league-mobile-only  { display: block !important; }
+}
+
 /* ── Landing page: hide nav links on mobile ── */
 @media (max-width: 768px) {
   .nav-links { display: none !important; }

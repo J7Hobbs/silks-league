@@ -19,11 +19,12 @@ export default function League() {
   const [loading, setLoading] = useState(true)
 
   // ── Saturday League ───────────────────────────────────────────
-  const [season,      setSeason]      = useState(null)
-  const [currentWeek, setCurrentWeek] = useState(null)
-  const [satRows,     setSatRows]     = useState([])
-  const [weekRows,    setWeekRows]    = useState([])
-  const [satSubTab,   setSatSubTab]   = useState('season')
+  const [season,         setSeason]         = useState(null)
+  const [currentWeek,    setCurrentWeek]    = useState(null)
+  const [satRows,        setSatRows]        = useState([])
+  const [weekRows,       setWeekRows]       = useState([])
+  const [satSubTab,      setSatSubTab]      = useState('season')
+  const [completedWeeks, setCompletedWeeks] = useState([])  // weeks with results, asc
 
   // ── Tab state ─────────────────────────────────────────────────
   const [mainTab,    setMainTab]    = useState('saturday')
@@ -32,11 +33,9 @@ export default function League() {
 
   // ── Festival leaderboards (lazy, keyed by fest.id) ────────────
   const [festData, setFestData] = useState({})
-  // shape: { [festId]: { rows: [], loading: bool, loaded: bool } }
 
   // ── Group data (lazy, keyed by group.id) ─────────────────────
   const [groupData, setGroupData] = useState({})
-  // shape: { [groupId]: { satRows, festRows: { [festId]: [] }, subTab, loading, loaded } }
 
   // ── Picks modal ───────────────────────────────────────────────
   const [picksModal, setPicksModal] = useState(null)
@@ -109,6 +108,17 @@ export default function League() {
     const nameMap = {}
     profData?.forEach(p => { nameMap[p.id] = p.username || p.full_name || null })
 
+    // ── Compute completed weeks (weeks with ≥1 score) ─────────
+    const weekHasScores = new Set()
+    scores.forEach(sc => {
+      const wId = raceWeekMap[sc.race_id]
+      if (wId) weekHasScores.add(wId)
+    })
+    const completedWeekList = (weeks || [])
+      .filter(w => weekHasScores.has(w.id))
+      .sort((a, b) => (a.week_number || 0) - (b.week_number || 0))
+    setCompletedWeeks(completedWeekList)
+
     const seasonScores = allRaceIds.length
       ? scores.filter(sc => allRaceIds.includes(sc.race_id))
       : scores
@@ -120,20 +130,34 @@ export default function League() {
           name: nameMap[sc.user_id] || 'Player',
           isMe: sc.user_id === myUserId,
           seasonTotal: 0, weeksPlayed: new Set(), weekPoints: 0,
+          weekPts: {},
         }
       }
       byUser[sc.user_id].seasonTotal += (sc.total_points || 0)
       const wId = raceWeekMap[sc.race_id]
-      if (wId) byUser[sc.user_id].weeksPlayed.add(wId)
+      if (wId) {
+        byUser[sc.user_id].weeksPlayed.add(wId)
+        if (weekHasScores.has(wId)) {
+          byUser[sc.user_id].weekPts[wId] = (byUser[sc.user_id].weekPts[wId] || 0) + (sc.total_points || 0)
+        }
+      }
       if (weekRaceIds.includes(sc.race_id)) byUser[sc.user_id].weekPoints += (sc.total_points || 0)
     })
     if (!byUser[myUserId] && ownScores?.length) {
       const mySeasonTotal = ownScores.reduce((s, sc) => s + (sc.total_points || 0), 0)
       const myWeekPoints  = ownScores.filter(sc => weekRaceIds.includes(sc.race_id))
         .reduce((s, sc) => s + (sc.total_points || 0), 0)
+      const myWkPts = {}
+      ownScores.forEach(sc => {
+        const wId = raceWeekMap[sc.race_id]
+        if (wId && weekHasScores.has(wId)) {
+          myWkPts[wId] = (myWkPts[wId] || 0) + (sc.total_points || 0)
+        }
+      })
       byUser[myUserId] = {
         user_id: myUserId, name: nameMap[myUserId] || 'Player', isMe: true,
         seasonTotal: mySeasonTotal, weeksPlayed: new Set(), weekPoints: myWeekPoints,
+        weekPts: myWkPts,
       }
       ownScores.forEach(sc => { const wId = raceWeekMap[sc.race_id]; if (wId) byUser[myUserId].weeksPlayed.add(wId) })
     }
@@ -141,7 +165,7 @@ export default function League() {
     const seasonSorted = Object.values(byUser)
       .sort((a, b) => b.seasonTotal - a.seasonTotal || a.name.localeCompare(b.name))
       .slice(0, 30)
-      .map((u, i) => ({ ...u, rank: i + 1, weeksPlayed: u.weeksPlayed.size }))
+      .map((u, i) => ({ ...u, rank: i + 1, weeksPlayed: u.weeksPlayed.size, weekPts: u.weekPts || {} }))
     setSatRows(seasonSorted)
 
     const weekByUser = {}
@@ -255,16 +279,30 @@ export default function League() {
     const weekIds = (weeks || []).map(w => w.id)
     if (!weekIds.length) return []
     const { data: races } = await supabase
-      .from('races').select('id').in('race_week_id', weekIds)
+      .from('races').select('id, race_week_id').in('race_week_id', weekIds)
     const raceIds = (races || []).map(r => r.id)
-    if (!raceIds.length) return memberIds.map((uid, i) => ({ rank: i + 1, userId: uid, points: 0, name: 'Player', isMe: uid === myUserId }))
+    const raceWeekMap = {}
+    races?.forEach(r => { raceWeekMap[r.id] = r.race_week_id })
+
+    if (!raceIds.length) return memberIds.map((uid, i) => ({
+      rank: i + 1, userId: uid, points: 0, weekPts: {}, name: 'Player', isMe: uid === myUserId,
+    }))
 
     const { data: scores } = await supabase
-      .from('scores').select('user_id, total_points')
+      .from('scores').select('user_id, race_id, total_points')
       .in('race_id', raceIds).in('user_id', memberIds)
+
     const totals = {}
-    for (const uid of memberIds) totals[uid] = 0
-    for (const s of (scores || [])) totals[s.user_id] = (totals[s.user_id] || 0) + s.total_points
+    const weekPtsMap = {}
+    for (const uid of memberIds) { totals[uid] = 0; weekPtsMap[uid] = {} }
+    for (const s of (scores || [])) {
+      totals[s.user_id] = (totals[s.user_id] || 0) + s.total_points
+      const wId = raceWeekMap[s.race_id]
+      if (wId) {
+        if (!weekPtsMap[s.user_id]) weekPtsMap[s.user_id] = {}
+        weekPtsMap[s.user_id][wId] = (weekPtsMap[s.user_id][wId] || 0) + s.total_points
+      }
+    }
 
     const groupProfileIds = [...new Set([...memberIds, myUserId])]
     const { data: profiles } = await supabase
@@ -276,6 +314,7 @@ export default function League() {
       .sort((a, b) => b[1] - a[1])
       .map(([uid, pts], i) => ({
         rank: i + 1, userId: uid, points: pts,
+        weekPts: weekPtsMap[uid] || {},
         name: nameMap[uid] || 'Player',
         isMe: uid === myUserId,
       }))
@@ -302,12 +341,10 @@ export default function League() {
     const group = myGroups.find(g => g.id === tabId)
     if (group && !groupData[tabId]?.loaded && !groupData[tabId]?.loading) {
       setGroupData(prev => ({ ...prev, [tabId]: { loading: true, loaded: false, subTab: 'saturday', satRows: [], festRows: {} } }))
-      // Get member IDs
       const { data: members } = await supabase
         .from('group_members').select('user_id').eq('group_id', group.id)
       const memberIds = (members || []).map(m => m.user_id)
 
-      // Load sat + all active festival rows in parallel
       const [gSatRows, ...festRowsArr] = await Promise.all([
         fetchGroupSatRows(memberIds, myUserId),
         ...festivals.map(f => fetchFestivalRows(f, memberIds, myUserId)),
@@ -354,13 +391,12 @@ export default function League() {
   const activeGroup = myGroups.find(g => g.id === mainTab)
   const currentGroupData = activeGroup ? groupData[activeGroup.id] : null
 
-  // Saturday display rows
-  const satDisplayRows = satSubTab === 'season' ? satRows : weekRows
-
   // Group display rows
   let groupDisplayRows = []
+  let isGroupSatSubTab = false
   if (currentGroupData?.loaded) {
     const gSubTab = currentGroupData.subTab
+    isGroupSatSubTab = gSubTab === 'saturday'
     if (gSubTab === 'saturday') {
       groupDisplayRows = currentGroupData.satRows || []
     } else {
@@ -401,14 +437,11 @@ export default function League() {
 
         {/* ── Outer scrollable tab bar ── */}
         <div style={st.outerTabBar}>
-          {/* Saturday League */}
           <button
             style={{ ...st.outerTab, ...(mainTab === 'saturday' ? st.outerTabActive : {}) }}
             onClick={() => handleMainTab('saturday')}>
             🏇 Saturday League
           </button>
-
-          {/* Festival tabs */}
           {festivals.map(fest => (
             <button
               key={fest.id}
@@ -417,8 +450,6 @@ export default function League() {
               👑 {fest.display_name || fest.name}
             </button>
           ))}
-
-          {/* Group tabs */}
           {myGroups.map(group => (
             <button
               key={group.id}
@@ -432,7 +463,6 @@ export default function League() {
         {/* ══════════════ SATURDAY LEAGUE TAB ══════════════ */}
         {isSatTab && (
           <>
-            {/* Season / This Week inner tabs */}
             <div style={st.innerTabRow}>
               <button
                 style={{ ...st.innerTab, ...(satSubTab === 'season' ? st.innerTabActive : {}) }}
@@ -446,24 +476,34 @@ export default function League() {
               </button>
             </div>
 
-            {/* Leaderboard card */}
-            <LeaderboardCard
-              rows={satDisplayRows}
-              mode={satSubTab}
-              onPlayerClick={row => setPicksModal({
-                userId: row.user_id,
-                name: row.name,
-                pts: satSubTab === 'season' ? row.seasonTotal : row.weekPoints,
-                rank: row.rank,
-              })}
-            />
+            {satSubTab === 'season' ? (
+              <LeaderboardTable
+                rows={satRows}
+                completedWeeks={completedWeeks}
+                onPlayerClick={row => setPicksModal({
+                  userId: row.user_id,
+                  name: row.name,
+                  pts: row.seasonTotal,
+                  rank: row.rank,
+                })}
+              />
+            ) : (
+              <WeekLeaderboardCard
+                rows={weekRows}
+                onPlayerClick={row => setPicksModal({
+                  userId: row.user_id,
+                  name: row.name,
+                  pts: row.weekPoints,
+                  rank: row.rank,
+                })}
+              />
+            )}
           </>
         )}
 
         {/* ══════════════ FESTIVAL TAB ══════════════ */}
         {activeFest && (
           <>
-            {/* Compact festival banner */}
             <div style={st.festBanner}>
               <div style={st.festBannerLeft}>
                 <div style={st.festBannerName}>
@@ -479,12 +519,12 @@ export default function League() {
               </div>
             </div>
 
-            {/* Leaderboard */}
             {festData[activeFest.id]?.loading ? (
               <div style={st.loadingInline}>Loading standings…</div>
             ) : (
-              <FestivalLeaderboardCard
+              <LeaderboardTable
                 rows={festData[activeFest.id]?.rows || []}
+                completedWeeks={[]}
                 onPlayerClick={row => setPicksModal({
                   userId: row.userId,
                   name: row.name,
@@ -499,15 +539,12 @@ export default function League() {
         {/* ══════════════ GROUP TAB ══════════════ */}
         {activeGroup && (
           <>
-            {/* Group header */}
             <div style={st.groupHeader}>
               <div style={st.groupHeaderLeft}>
                 <div style={st.groupName}>{activeGroup.name}</div>
                 <div style={st.groupMeta}>{activeGroup.memberCount} member{activeGroup.memberCount !== 1 ? 's' : ''}</div>
               </div>
-              <button
-                style={st.manageLink}
-                onClick={() => navigate('/groups')}>
+              <button style={st.manageLink} onClick={() => navigate('/groups')}>
                 Manage →
               </button>
             </div>
@@ -516,7 +553,6 @@ export default function League() {
               <div style={st.loadingInline}>Loading group standings…</div>
             ) : currentGroupData?.loaded ? (
               <>
-                {/* Group inner sub-tabs */}
                 <div style={st.innerTabRow}>
                   <button
                     style={{ ...st.innerTab, ...(currentGroupData.subTab === 'saturday' ? st.innerTabActive : {}) }}
@@ -539,9 +575,9 @@ export default function League() {
                   ))}
                 </div>
 
-                {/* Group leaderboard */}
-                <FestivalLeaderboardCard
+                <LeaderboardTable
                   rows={groupDisplayRows}
+                  completedWeeks={isGroupSatSubTab ? completedWeeks : []}
                   onPlayerClick={row => setPicksModal({
                     userId: row.userId,
                     name: row.name,
@@ -600,34 +636,140 @@ export default function League() {
   )
 }
 
-// ── Saturday leaderboard card ─────────────────────────────────
-function LeaderboardCard({ rows, mode, onPlayerClick }) {
-  if (!rows.length) {
+// ── Unified leaderboard table ─────────────────────────────────
+// Season standings (with per-week columns) + festival/group totals
+// Desktop: table with week columns; Mobile: card-per-player with week pills
+function LeaderboardTable({ rows, completedWeeks = [], onPlayerClick }) {
+  // Normalise Saturday rows (user_id / seasonTotal) vs festival/group rows (userId / points)
+  const norm = rows.map(r => ({
+    id:      r.user_id || r.userId,
+    rank:    r.rank,
+    name:    r.name,
+    isMe:    r.isMe,
+    total:   r.seasonTotal !== undefined ? r.seasonTotal : r.points,
+    weekPts: r.weekPts || {},
+    _raw:    r,
+  }))
+
+  if (!norm.length) {
     return (
       <div style={st.card}>
         <div style={st.empty}>No scores yet — check back after results are in.</div>
       </div>
     )
   }
-  const isSeason = mode === 'season'
+
   return (
     <div style={st.card}>
-      {/* Header row */}
+
+      {/* ── Desktop table (hidden on mobile via CSS) ── */}
+      <div className="league-desktop-only" style={{ overflowX: 'auto' }}>
+        {/* Header */}
+        <div style={st.tableHeader} className="league-row">
+          <span style={{ minWidth: '40px' }}>#</span>
+          <span style={{ flex: 1 }}>Player</span>
+          {completedWeeks.map(w => (
+            <span key={w.id} style={st.colRight} className="league-col-data">
+              Wk {w.week_number}
+            </span>
+          ))}
+          <span style={st.colRight} className="league-col-data">Total</span>
+        </div>
+        {/* Rows */}
+        {norm.map((row, idx) => (
+          <div
+            key={row.id}
+            className="league-row"
+            style={{ ...st.row, ...(row.isMe ? st.rowMe : {}), ...(idx < norm.length - 1 ? {} : st.rowLast) }}>
+            <div style={st.rankCell}>
+              {row.rank === 1 ? '🥇' : row.rank === 2 ? '🥈' : row.rank === 3 ? '🥉' : (
+                <span style={st.rankNum}>{row.rank}</span>
+              )}
+            </div>
+            <div style={st.nameCell}>
+              <span
+                style={{ ...st.playerName, ...(row.isMe ? st.playerNameMe : {}), cursor: 'pointer', textDecoration: 'underline dotted' }}
+                onClick={() => onPlayerClick(row._raw)}>
+                {row.name}
+              </span>
+              {row.isMe && <span style={st.youBadge}>You</span>}
+            </div>
+            {completedWeeks.map(w => (
+              <div key={w.id} style={st.dataCell} className="league-col-data">
+                {row.weekPts[w.id] !== undefined
+                  ? row.weekPts[w.id]
+                  : <span style={{ color: 'rgba(90,138,90,0.3)' }}>—</span>}
+              </div>
+            ))}
+            <div style={{ ...st.dataCell, ...st.totalCell }} className="league-col-data">
+              {row.total}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Mobile cards (hidden on desktop via CSS) ── */}
+      <div className="league-mobile-only">
+        {norm.map((row, idx) => (
+          <div
+            key={row.id}
+            style={{
+              ...st.mobileCard,
+              ...(row.isMe ? st.mobileCardMe : {}),
+              ...(idx < norm.length - 1 ? {} : { borderBottom: 'none' }),
+            }}>
+            <div style={st.mobileCardRank}>
+              {row.rank === 1 ? '🥇' : row.rank === 2 ? '🥈' : row.rank === 3 ? '🥉' : (
+                <span style={st.rankNum}>{row.rank}</span>
+              )}
+            </div>
+            <div style={st.mobileCardMid}>
+              <div style={st.mobileNameRow}>
+                <span
+                  style={{ ...st.playerName, ...(row.isMe ? st.playerNameMe : {}), cursor: 'pointer', textDecoration: 'underline dotted' }}
+                  onClick={() => onPlayerClick(row._raw)}>
+                  {row.name}
+                </span>
+                {row.isMe && <span style={st.youBadge}>You</span>}
+              </div>
+              {completedWeeks.length > 0 && (
+                <div style={st.mobilePillsRow}>
+                  {completedWeeks.map(w => (
+                    <span key={w.id} style={st.mobilePill}>
+                      Wk{w.week_number}&nbsp;
+                      <span style={st.mobilePillVal}>
+                        {row.weekPts[w.id] !== undefined ? row.weekPts[w.id] : '—'}
+                      </span>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div style={{ ...st.totalCell, fontSize: '1.4rem' }}>{row.total}</div>
+          </div>
+        ))}
+      </div>
+
+    </div>
+  )
+}
+
+// ── This Week leaderboard (Races + Points, no week columns) ───
+function WeekLeaderboardCard({ rows, onPlayerClick }) {
+  if (!rows.length) {
+    return (
+      <div style={st.card}>
+        <div style={st.empty}>No scores this week yet — check back after results are in.</div>
+      </div>
+    )
+  }
+  return (
+    <div style={st.card}>
       <div style={st.tableHeader} className="league-row">
         <span style={{ minWidth: '40px' }}>#</span>
         <span style={{ flex: 1 }}>Player</span>
-        {isSeason ? (
-          <>
-            <span style={st.colRight} className="league-col-data">Wks</span>
-            <span style={st.colRight} className="league-col-data league-hide-mobile">This Wk</span>
-            <span style={st.colRight} className="league-col-data">Total</span>
-          </>
-        ) : (
-          <>
-            <span style={st.colRight} className="league-col-data">Races</span>
-            <span style={st.colRight} className="league-col-data">Points</span>
-          </>
-        )}
+        <span style={st.colRight} className="league-col-data">Races</span>
+        <span style={st.colRight} className="league-col-data">Points</span>
       </div>
       {rows.map((row, idx) => (
         <div
@@ -647,61 +789,8 @@ function LeaderboardCard({ rows, mode, onPlayerClick }) {
             </span>
             {row.isMe && <span style={st.youBadge}>You</span>}
           </div>
-          {isSeason ? (
-            <>
-              <div style={st.dataCell} className="league-col-data">{row.weeksPlayed}</div>
-              <div style={st.dataCell} className="league-col-data league-hide-mobile">
-                {row.weekPoints > 0 ? `+${row.weekPoints}` : row.weekPoints}
-              </div>
-              <div style={{ ...st.dataCell, ...st.totalCell }} className="league-col-data">{row.seasonTotal}</div>
-            </>
-          ) : (
-            <>
-              <div style={st.dataCell} className="league-col-data">{row.racesScored}</div>
-              <div style={{ ...st.dataCell, ...st.totalCell }} className="league-col-data">{row.weekPoints}</div>
-            </>
-          )}
-        </div>
-      ))}
-    </div>
-  )
-}
-
-// ── Festival / Group leaderboard card (points only) ───────────
-function FestivalLeaderboardCard({ rows, onPlayerClick }) {
-  if (!rows.length) {
-    return (
-      <div style={st.card}>
-        <div style={st.empty}>No entries yet.</div>
-      </div>
-    )
-  }
-  return (
-    <div style={st.card}>
-      <div style={st.tableHeader} className="league-row">
-        <span style={{ minWidth: '40px' }}>#</span>
-        <span style={{ flex: 1 }}>Player</span>
-        <span style={st.colRight}>Points</span>
-      </div>
-      {rows.map((row, idx) => (
-        <div
-          key={row.userId}
-          className="league-row"
-          style={{ ...st.row, ...(row.isMe ? st.rowMe : {}), ...(idx < rows.length - 1 ? {} : st.rowLast) }}>
-          <div style={st.rankCell}>
-            {row.rank === 1 ? '🥇' : row.rank === 2 ? '🥈' : row.rank === 3 ? '🥉' : (
-              <span style={st.rankNum}>{row.rank}</span>
-            )}
-          </div>
-          <div style={st.nameCell}>
-            <span
-              style={{ ...st.playerName, ...(row.isMe ? st.playerNameMe : {}), cursor: 'pointer', textDecoration: 'underline dotted' }}
-              onClick={() => onPlayerClick(row)}>
-              {row.name}
-            </span>
-            {row.isMe && <span style={st.youBadge}>You</span>}
-          </div>
-          <div style={{ ...st.dataCell, ...st.totalCell }}>{row.points}</div>
+          <div style={st.dataCell} className="league-col-data">{row.racesScored}</div>
+          <div style={{ ...st.dataCell, ...st.totalCell }} className="league-col-data">{row.weekPoints}</div>
         </div>
       ))}
     </div>
@@ -732,17 +821,14 @@ const st = {
   heading: { fontFamily: "'Bebas Neue', sans-serif", fontSize: '2.6rem', color: '#e8f0e8', letterSpacing: '0.03em', margin: 0, lineHeight: 1 },
   sub: { marginTop: '0.4rem', fontSize: '0.9rem', color: '#5a8a5a' },
 
-  // Outer tab bar — scrollable pills
+  // Outer tab bar
   outerTabBar: {
     display: 'flex', gap: '0.4rem',
     overflowX: 'auto', paddingBottom: '2px',
-    scrollbarWidth: 'none',
-    msOverflowStyle: 'none',
+    scrollbarWidth: 'none', msOverflowStyle: 'none',
   },
   outerTab: {
-    flexShrink: 0,
-    padding: '0.5rem 1.1rem',
-    borderRadius: '20px',
+    flexShrink: 0, padding: '0.5rem 1.1rem', borderRadius: '20px',
     fontSize: '0.85rem', fontWeight: '600',
     background: 'rgba(255,255,255,0.04)',
     border: '1.5px solid rgba(201,168,76,0.15)',
@@ -756,17 +842,11 @@ const st = {
     color: '#c9a84c',
   },
 
-  // Inner tabs (season/week, saturday/festival within group)
-  innerTabRow: {
-    display: 'flex', gap: '0.35rem',
-    overflowX: 'auto', scrollbarWidth: 'none',
-  },
+  // Inner tabs
+  innerTabRow: { display: 'flex', gap: '0.35rem', overflowX: 'auto', scrollbarWidth: 'none' },
   innerTab: {
-    padding: '0.45rem 1rem',
-    borderRadius: '7px', fontSize: '0.82rem', fontWeight: '600',
-    background: 'none',
-    border: '1px solid rgba(201,168,76,0.12)',
-    color: '#5a8a5a',
+    padding: '0.45rem 1rem', borderRadius: '7px', fontSize: '0.82rem', fontWeight: '600',
+    background: 'none', border: '1px solid rgba(201,168,76,0.12)', color: '#5a8a5a',
     cursor: 'pointer', fontFamily: "'DM Sans', sans-serif",
     whiteSpace: 'nowrap', transition: 'all 0.15s',
   },
@@ -786,8 +866,7 @@ const st = {
   festBannerLeft: {},
   festBannerName: {
     fontFamily: "'Bebas Neue', sans-serif",
-    fontSize: '1.1rem', color: '#e8f0e8',
-    letterSpacing: '0.05em', lineHeight: 1,
+    fontSize: '1.1rem', color: '#e8f0e8', letterSpacing: '0.05em', lineHeight: 1,
   },
   festBannerDates: { fontSize: '0.78rem', color: 'rgba(232,240,232,0.5)', marginTop: '0.2rem' },
   festStatusPill: {
@@ -801,20 +880,17 @@ const st = {
   groupHeader: {
     background: 'linear-gradient(180deg, #152e12 0%, #0a1a08 100%)',
     border: '1.5px solid rgba(201,168,76,0.3)',
-    borderLeft: '4px solid #c9a84c',
-    borderRadius: '8px', padding: '1rem 1.25rem',
+    borderLeft: '4px solid #c9a84c', borderRadius: '8px', padding: '1rem 1.25rem',
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
   },
   groupHeaderLeft: {},
   groupName: { fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.3rem', color: '#e8f0e8', letterSpacing: '0.04em', lineHeight: 1 },
   groupMeta: { fontSize: '0.78rem', color: '#5a8a5a', marginTop: '0.2rem' },
   manageLink: {
-    background: 'none', border: 'none',
+    background: 'none', border: '1px solid rgba(201,168,76,0.25)',
     color: '#c9a84c', fontSize: '0.82rem', fontWeight: '600',
     cursor: 'pointer', fontFamily: "'DM Sans', sans-serif",
-    padding: '0.4rem 0.75rem',
-    borderRadius: '6px',
-    border: '1px solid rgba(201,168,76,0.25)',
+    padding: '0.4rem 0.75rem', borderRadius: '6px',
   },
 
   // Leaderboard card
@@ -859,6 +935,40 @@ const st = {
   totalCell: {
     fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.3rem',
     color: '#c9a84c', letterSpacing: '0.03em',
+  },
+
+  // Mobile card layout
+  mobileCard: {
+    display: 'flex', alignItems: 'center', gap: '0.75rem',
+    padding: '0.85rem 1.1rem',
+    borderBottom: '1px solid rgba(201,168,76,0.1)',
+  },
+  mobileCardMe: {
+    background: 'rgba(201,168,76,0.05)',
+    borderLeft: '4px solid #c9a84c',
+    paddingLeft: 'calc(1.1rem - 4px)',
+  },
+  mobileCardRank: {
+    minWidth: '36px', fontSize: '1.1rem', textAlign: 'center', flexShrink: 0,
+  },
+  mobileCardMid: {
+    flex: 1, display: 'flex', flexDirection: 'column', gap: '0.3rem', minWidth: 0,
+  },
+  mobileNameRow: {
+    display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap',
+  },
+  mobilePillsRow: {
+    display: 'flex', flexWrap: 'wrap', gap: '0.3rem', marginTop: '0.1rem',
+  },
+  mobilePill: {
+    fontSize: '0.7rem', fontWeight: '500',
+    background: 'rgba(201,168,76,0.07)',
+    border: '1px solid rgba(201,168,76,0.15)',
+    borderRadius: '4px', padding: '0.12rem 0.4rem',
+    color: '#5a8a5a', whiteSpace: 'nowrap',
+  },
+  mobilePillVal: {
+    color: '#c9a84c', fontWeight: '700',
   },
 
   // CTA
