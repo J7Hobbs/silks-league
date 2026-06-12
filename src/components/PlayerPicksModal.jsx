@@ -136,7 +136,7 @@ export default function PlayerPicksModal({
       if (picksData?.length) {
         const runnerIds = [...new Set(picksData.map(p => p.runner_id).filter(Boolean))]
         const { data: runnersData } = await supabase
-          .from('runners').select('id, horse_name, silk_colour, horse_number, odds_fractional')
+          .from('runners').select('id, horse_name, silk_colour, silk_colour_1, silk_colour_2, horse_number, odds_fractional')
           .in('id', runnerIds)
         const runnerMap = {}
         runnersData?.forEach(r => { runnerMap[r.id] = r })
