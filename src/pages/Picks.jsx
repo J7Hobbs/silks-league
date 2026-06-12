@@ -263,7 +263,7 @@ export default function Picks() {
       const res = await supabase.from('picks').update({ runner_id: runnerId }).eq('id', existing.id)
       error = res.error
     } else {
-      const res = await supabase.from('picks').insert({ user_id: user.id, race_id: raceId, runner_id: runnerId })
+      const res = await supabase.from('picks').upsert({ user_id: user.id, race_id: raceId, runner_id: runnerId }, { onConflict: 'user_id,race_id' })
       error = res.error
     }
     setSaving(null)
