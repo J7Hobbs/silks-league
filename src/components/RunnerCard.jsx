@@ -24,8 +24,8 @@ export default function RunnerCard({
   if (!runner) return null
 
   const isWD      = !!runner.is_withdrawn
-  const silkFill   = runner.silk_colour_1 || '#1a3a10'
-  const silkStroke = runner.silk_colour_2 || 'white'
+  const silkFill   = runner.silk_colour           || '#1a3a10'
+  const silkStroke = runner.silk_colour_secondary || 'white'
   const canClick   = onClick && !disabled && !isWD
 
   return (

@@ -72,7 +72,7 @@ export default function PlayerPicks() {
       // Load runner details for picks
       const runnerIds = (picksData || []).map(p => p.runner_id).filter(Boolean)
       const { data: runnersData } = runnerIds.length
-        ? await supabase.from('runners').select('id, horse_name, silk_colour, silk_colour_1, silk_colour_2, horse_number, odds_fractional').in('id', runnerIds)
+        ? await supabase.from('runners').select('id, horse_name, silk_colour, silk_colour_secondary, horse_number, odds_fractional').in('id', runnerIds)
         : { data: [] }
       const runnerMap = {}
       runnersData?.forEach(r => { runnerMap[r.id] = r })

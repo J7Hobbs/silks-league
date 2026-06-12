@@ -117,7 +117,7 @@ export default function Results() {
     if (picksData?.length) {
       const runnerIds = [...new Set(picksData.map(p => p.runner_id).filter(Boolean))]
       const { data: runnersData } = await supabase
-        .from('runners').select('id, horse_name, silk_colour, silk_colour_1, silk_colour_2, jockey, trainer, is_withdrawn').in('id', runnerIds)
+        .from('runners').select('id, horse_name, silk_colour, silk_colour_secondary, jockey, trainer, is_withdrawn').in('id', runnerIds)
       const runnerMap = {}
       runnersData?.forEach(r => { runnerMap[r.id] = r })
       picksData.forEach(p => {
