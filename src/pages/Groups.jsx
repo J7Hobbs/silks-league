@@ -305,7 +305,6 @@ export default function Groups() {
             <a href="/picks"     style={st.navLink}>My Picks</a>
             <a href="/league"    style={st.navLink}>League</a>
             <a href="/results"   style={st.navLink}>Results</a>
-            <a href="/groups"    style={{ ...st.navLink, ...st.navLinkActive }}>Groups</a>
           </div>
           <div style={st.navRight}>
             <ProfileDropdown user={user} isAdmin={isAdmin} />
@@ -511,11 +510,6 @@ export default function Groups() {
         <a href="/results" style={st.mobileBarItem}>
           <BarChart2 size={22} strokeWidth={1.5} />
           <span style={st.mobileBarLabel}>Results</span>
-        </a>
-        <a href="/groups" style={{ ...st.mobileBarItem, ...st.mobileBarItemActive }}>
-          <Users size={22} strokeWidth={1.5} />
-          <span style={st.mobileBarLabel}>Groups</span>
-          <span style={st.mobileDot} />
         </a>
       </nav>
 
