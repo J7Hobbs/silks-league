@@ -209,6 +209,10 @@ export default function Admin() {
   const [festivalUnlocked, setFestivalUnlocked]       = useState(new Set())
   const [showFestivalRaceForm, setShowFestivalRaceForm] = useState({})
   const [festivalRaceForms, setFestivalRaceForms]     = useState({})
+  // ── Festival combined bulk import (race + runners per day) ──
+  const [festivalCombinedBulkOpen,   setFestivalCombinedBulkOpen]   = useState(new Set())   // Set of dayIds
+  const [festivalCombinedBulkText,   setFestivalCombinedBulkText]   = useState({})          // { [dayId]: string }
+  const [festivalCombinedBulkResult, setFestivalCombinedBulkResult] = useState({})          // { [dayId]: { errors, warnings, success } }
 
   // ── Withdrawals ──
   // (no extra state needed — withdrawal state lives on runners.is_withdrawn in DB)
@@ -872,6 +876,132 @@ export default function Admin() {
     const successMsg = `Race created: ${headerFields.venue} ${headerFields.time} — ${toInsert.length} runner${toInsert.length !== 1 ? 's' : ''} imported`
     setCombinedImportResult({ errors: [], warnings, success: successMsg })
     setCombinedImportText('')
+  }
+
+  // ── Festival combined import (race + runners, one block per race) ─────────
+  async function bulkImportFestivalCombined(dayId) {
+    if (!dayId) { showToast('error', 'No festival day selected'); return }
+    const text = (festivalCombinedBulkText[dayId] || '').trim()
+    if (!text) { showToast('error', 'Paste race data first'); return }
+
+    // Split at first blank line — header above, runners below
+    const blankLineIdx = text.search(/\n\s*\n/)
+    if (blankLineIdx === -1) {
+      setFestivalCombinedBulkResult(p => ({ ...p, [dayId]: { errors: ['Missing blank line — separate race info from runners with a blank line'], warnings: [], success: null } }))
+      return
+    }
+    const headerSection = text.slice(0, blankLineIdx).trim()
+    const runnerSection = text.slice(blankLineIdx).trim()
+
+    // Parse header key: value pairs
+    const headerFields = {}
+    for (const line of headerSection.split('\n')) {
+      const colonIdx = line.indexOf(':')
+      if (colonIdx === -1) continue
+      const key = line.slice(0, colonIdx).trim().toLowerCase()
+      const val = line.slice(colonIdx + 1).trim()
+      headerFields[key] = val
+    }
+
+    const errors = []; const warnings = []
+    if (!headerFields.venue)     errors.push('Missing field: venue')
+    if (!headerFields.time)      errors.push('Missing field: time')
+    if (!headerFields.race_name) errors.push('Missing field: race_name')
+    if (errors.length) { setFestivalCombinedBulkResult(p => ({ ...p, [dayId]: { errors, warnings, success: null } })); return }
+
+    if (!/^\d{1,2}:\d{2}$/.test(headerFields.time)) {
+      warnings.push(`Time "${headerFields.time}" looks unusual — expected format like 13:50`)
+    }
+
+    // Next available race number for this day
+    const usedNums  = new Set(festivalRaces.map(r => r.race_number))
+    const nextNums  = [1,2,3,4,5,6,7,8,9,10].filter(n => !usedNums.has(n))
+    const nextRaceNum = nextNums.length ? nextNums[0] : (Math.max(0, ...festivalRaces.map(r => r.race_number)) + 1)
+
+    // Parse runners
+    const runnerLines = runnerSection.split('\n').map(l => l.trim()).filter(l => l.length > 0)
+    if (!runnerLines.length) {
+      setFestivalCombinedBulkResult(p => ({ ...p, [dayId]: { errors: ['No runners found — add runner lines after the blank line'], warnings, success: null } })); return
+    }
+
+    const expectedRunners = headerFields.runners ? parseInt(headerFields.runners) : null
+    const toInsert = []
+
+    for (let i = 0; i < runnerLines.length; i++) {
+      const line = runnerLines[i]; const lineNum = i + 1
+      const parts = line.split(',').map(p => p.trim())
+      if (parts.length < 6) { errors.push(`Line ${lineNum} skipped — need at least 6 fields, got ${parts.length}`); continue }
+      const [numStr, name, jockey, trainer, oddsStr, primaryHex, secondaryHex, pattern] = parts
+      if (!name) { errors.push(`Line ${lineNum} skipped — horse name is empty`); continue }
+
+      let oddsDecimal = null
+      const oddsNorm = oddsStr?.trim().toLowerCase()
+      if (oddsNorm && oddsNorm !== 'tba') {
+        oddsDecimal = parseFractionalOdds(oddsStr)
+        if (!oddsDecimal) warnings.push(`Line ${lineNum}: odds "${oddsStr}" not recognised — imported with no odds`)
+      }
+
+      const hexOk      = /^#[0-9a-fA-F]{6}$/.test(primaryHex)
+      const silkColour = hexOk ? primaryHex : (primaryHex && primaryHex.toLowerCase() !== 'tba' ? '#1a3a10' : null)
+      if (primaryHex && !hexOk && primaryHex.toLowerCase() !== 'tba') warnings.push(`Line ${lineNum}: colour "${primaryHex}" invalid — defaulted to #1a3a10`)
+
+      const sec2Ok              = secondaryHex && /^#[0-9a-fA-F]{6}$/.test(secondaryHex)
+      const silkColourSecondary = sec2Ok ? secondaryHex : null
+
+      const horseNum = parseInt(numStr)
+      toInsert.push({
+        horse_number:          !isNaN(horseNum) ? horseNum : null,
+        horse_name:            name,
+        jockey:                (jockey && jockey.toLowerCase() !== 'tba') ? jockey : 'TBA',
+        trainer:               (trainer && trainer.toLowerCase() !== 'tba') ? trainer : null,
+        odds_fractional:       (oddsStr && oddsStr.toLowerCase() !== 'tba') ? oddsStr : null,
+        odds_decimal:          oddsDecimal,
+        silk_colour:           silkColour,
+        silk_colour_secondary: silkColourSecondary,
+        silk_pattern:          pattern?.trim() || null,
+      })
+    }
+
+    if (errors.length) { setFestivalCombinedBulkResult(p => ({ ...p, [dayId]: { errors, warnings, success: null } })); return }
+    if (!toInsert.length) { setFestivalCombinedBulkResult(p => ({ ...p, [dayId]: { errors: ['No valid runners to import'], warnings, success: null } })); return }
+    if (expectedRunners && toInsert.length !== expectedRunners) warnings.push(`Expected ${expectedRunners} runners but parsed ${toInsert.length}`)
+
+    setLoading(true)
+
+    // Create the festival race record
+    const racePayload = {
+      festival_day_id: dayId,
+      race_number:     nextRaceNum,
+      venue:           headerFields.venue,
+      race_name:       headerFields.race_name,
+      race_time:       headerFields.time,
+    }
+    if (headerFields.class)    racePayload.class_type = headerFields.class
+    if (headerFields.distance) racePayload.distance   = headerFields.distance
+
+    const { data: newRace, error: raceErr } = await supabase.from('festival_races').insert(racePayload).select().single()
+    if (raceErr) {
+      setLoading(false)
+      setFestivalCombinedBulkResult(p => ({ ...p, [dayId]: { errors: [`Failed to create race: ${raceErr.message}`], warnings, success: null } }))
+      return
+    }
+
+    // Insert runners linked to the new festival race
+    const runnersPayload = toInsert.map(r => ({ ...r, festival_race_id: newRace.id }))
+    const { error: runnerErr } = await supabase.from('festival_runners').insert(runnersPayload)
+    if (runnerErr) {
+      await supabase.from('festival_races').delete().eq('id', newRace.id)   // rollback
+      setLoading(false)
+      setFestivalCombinedBulkResult(p => ({ ...p, [dayId]: { errors: [`Runners failed — race was not saved: ${runnerErr.message}`], warnings, success: null } }))
+      return
+    }
+
+    await loadFestivalRaces(dayId)
+    setLoading(false)
+
+    const msg = `Race ${nextRaceNum} created: ${headerFields.venue} ${headerFields.time} — ${toInsert.length} runner${toInsert.length !== 1 ? 's' : ''} imported`
+    setFestivalCombinedBulkResult(p => ({ ...p, [dayId]: { errors: [], warnings, success: msg } }))
+    setFestivalCombinedBulkText(p => ({ ...p, [dayId]: '' }))
   }
 
   // ── Results CRUD ─────────────────────────────────────────────
@@ -2750,7 +2880,7 @@ runners: 6`}</code>
                       {/* Selected day content */}
                       {selectedDay && (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
                             {(() => {
                               const DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
                               const d = new Date(selectedFestival.start_date + 'T12:00:00')
@@ -2766,7 +2896,64 @@ runners: 6`}</code>
                                 </span>
                               )
                             })()}
+                            {/* Bulk import races button — day level */}
+                            {(() => {
+                              const dayBulkOpen = festivalCombinedBulkOpen.has(selectedDay.id)
+                              return (
+                                <button
+                                  style={{ ...st.btnSmall, borderColor: dayBulkOpen ? '#c9a84c' : undefined, color: dayBulkOpen ? '#c9a84c' : undefined }}
+                                  onClick={() => setFestivalCombinedBulkOpen(prev => { const s = new Set(prev); dayBulkOpen ? s.delete(selectedDay.id) : s.add(selectedDay.id); return s })}>
+                                  {dayBulkOpen ? '✕ Close Import' : '⬇ Bulk Import Races'}
+                                </button>
+                              )
+                            })()}
                           </div>
+
+                          {/* Festival combined bulk import panel */}
+                          {festivalCombinedBulkOpen.has(selectedDay.id) && (
+                            <div style={{ background: '#0d1f0d', border: '1px solid rgba(201,168,76,0.15)', borderRadius: '10px', padding: '1rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                              <div style={{ fontSize: '0.78rem', fontWeight: '700', color: '#c9a84c', letterSpacing: '0.07em', textTransform: 'uppercase' }}>Bulk Import Race + Runners</div>
+                              <div style={{ fontSize: '0.72rem', color: '#5a8a5a', lineHeight: 1.6 }}>
+                                Paste one race block — header fields then a blank line then runners:<br />
+                                <code style={{ color: '#e8f0e8', fontSize: '0.7rem' }}>venue: Cheltenham</code><br />
+                                <code style={{ color: '#e8f0e8', fontSize: '0.7rem' }}>time: 14:00</code><br />
+                                <code style={{ color: '#e8f0e8', fontSize: '0.7rem' }}>race_name: Gold Cup</code><br />
+                                <code style={{ color: '#5a8a5a', fontSize: '0.7rem' }}>(blank line)</code><br />
+                                <code style={{ color: '#e8f0e8', fontSize: '0.7rem' }}>1, Horse Name, Jockey, Trainer, 7/2, #1a3a7a, #ffffff</code>
+                              </div>
+                              <textarea
+                                style={{ ...st.input, width: '100%', minHeight: '160px', fontFamily: 'monospace', fontSize: '0.78rem', resize: 'vertical', boxSizing: 'border-box' }}
+                                value={festivalCombinedBulkText[selectedDay.id] || ''}
+                                onChange={e => setFestivalCombinedBulkText(p => ({ ...p, [selectedDay.id]: e.target.value }))}
+                                placeholder={"venue: Cheltenham\ntime: 14:00\nrace_name: Gold Cup\nrunners: 8\n\n1, Corach Rambler, D. Skelton, H. Skelton, 7/2, #1a3a7a, #ffffff\n2, Galopin Des Champs, W. Mullins, P. Townend, 2/1, #5a1010, #ffffff"}
+                              />
+                              {festivalCombinedBulkResult[selectedDay.id] && (
+                                <div>
+                                  {festivalCombinedBulkResult[selectedDay.id].success && (
+                                    <div style={{ fontSize: '0.78rem', color: '#4ade80', marginBottom: '0.3rem' }}>
+                                      ✓ {festivalCombinedBulkResult[selectedDay.id].success}
+                                    </div>
+                                  )}
+                                  {festivalCombinedBulkResult[selectedDay.id].errors.map((msg, i) => (
+                                    <div key={i} style={{ fontSize: '0.75rem', color: '#f87171' }}>✗ {msg}</div>
+                                  ))}
+                                  {festivalCombinedBulkResult[selectedDay.id].warnings.map((msg, i) => (
+                                    <div key={i} style={{ fontSize: '0.75rem', color: '#c9a84c' }}>⚠ {msg}</div>
+                                  ))}
+                                </div>
+                              )}
+                              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                <button style={st.btnGold} onClick={() => bulkImportFestivalCombined(selectedDay.id)} disabled={loading}>
+                                  Import Race
+                                </button>
+                                <button style={st.btnGhost} onClick={() => {
+                                  setFestivalCombinedBulkOpen(prev => { const s = new Set(prev); s.delete(selectedDay.id); return s })
+                                  setFestivalCombinedBulkResult(p => { const n = { ...p }; delete n[selectedDay.id]; return n })
+                                  setFestivalCombinedBulkText(p => { const n = { ...p }; delete n[selectedDay.id]; return n })
+                                }}>Clear</button>
+                              </div>
+                            </div>
+                          )}
 
                           {/* Race cards */}
                           {[1,2,3,4,5,6,7].map(raceNum => {
