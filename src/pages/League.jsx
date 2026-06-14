@@ -59,7 +59,7 @@ export default function League() {
 
     // Load all seasons for the selector
     const { data: seasonsData } = await supabase
-      .from('seasons').select('id, name, status, is_active, quarter, year')
+      .from('seasons').select('id, name, status, is_active')
       .order('start_date', { ascending: false })
     setAllSeasons(seasonsData || [])
 

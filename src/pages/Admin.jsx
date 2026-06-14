@@ -94,6 +94,21 @@ function calcPoints(position, spDecimal) {
   return { base, bonus, total: Math.min(base + bonus, 40) }
 }
 
+// ── Month helpers ─────────────────────────────────────────────
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
+
+function getMonthDates(month, year) {
+  const idx = MONTHS.indexOf(month)
+  if (idx === -1) return { startDate: '', endDate: '' }
+  const y   = parseInt(year) || new Date().getFullYear()
+  const mm  = String(idx + 1).padStart(2, '0')
+  const last = new Date(y, idx + 1, 0).getDate()
+  return {
+    startDate: `${y}-${mm}-01`,
+    endDate:   `${y}-${mm}-${String(last).padStart(2, '0')}`,
+  }
+}
+
 // ── Silk colours ─────────────────────────────────────────────
 const SILK_COLOURS = [
   { hex: '#1a3a7a', label: 'Royal Blue'    },
@@ -149,7 +164,7 @@ export default function Admin() {
   const [seasons, setSeasons]               = useState([])
   const [activeSeason, setActiveSeason]     = useState(null)
   const [showSeasonForm, setShowSeasonForm] = useState(false)
-  const [seasonForm, setSeasonForm]         = useState({ name: '', displayName: '', quarter: 'Q1', year: new Date().getFullYear(), startDate: '', endDate: '' })
+  const [seasonForm, setSeasonForm]         = useState({ name: '', displayName: '', month: '', year: new Date().getFullYear(), startDate: '', endDate: '' })
   const [editingSeason, setEditingSeason]   = useState(null)   // id being edited
   const [editSeasonForm, setEditSeasonForm] = useState({})
 
@@ -391,26 +406,28 @@ export default function Admin() {
   async function createSeason(e) {
     e.preventDefault(); setLoading(true)
     const { error } = await supabase.from('seasons').insert({
-      name: seasonForm.name, display_name: seasonForm.displayName || null, quarter: seasonForm.quarter,
+      name: seasonForm.name, display_name: seasonForm.displayName || null,
       year: parseInt(seasonForm.year), start_date: seasonForm.startDate, end_date: seasonForm.endDate, is_active: false,
     })
     setLoading(false)
     if (error) { showToast('error', error.message); return }
     showToast('success', 'Season created')
     setShowSeasonForm(false)
-    setSeasonForm({ name: '', displayName: '', quarter: 'Q1', year: new Date().getFullYear(), startDate: '', endDate: '' })
+    setSeasonForm({ name: '', displayName: '', month: '', year: new Date().getFullYear(), startDate: '', endDate: '' })
     await loadSeasons()
   }
 
   function startEditSeason(s) {
     setEditingSeason(s.id)
-    setEditSeasonForm({ name: s.name, quarter: s.quarter, year: s.year, startDate: s.start_date, endDate: s.end_date })
+    // Derive month from existing start_date for the edit form
+    const monthFromDate = s.start_date ? MONTHS[new Date(s.start_date + 'T12:00:00').getMonth()] : ''
+    setEditSeasonForm({ name: s.name, month: monthFromDate, year: s.year || new Date().getFullYear(), startDate: s.start_date, endDate: s.end_date })
   }
 
   async function saveEditSeason(id) {
     setLoading(true)
     const { error } = await supabase.from('seasons').update({
-      name: editSeasonForm.name, quarter: editSeasonForm.quarter,
+      name: editSeasonForm.name,
       year: parseInt(editSeasonForm.year), start_date: editSeasonForm.startDate, end_date: editSeasonForm.endDate,
     }).eq('id', id)
     setLoading(false)
@@ -1756,7 +1773,7 @@ export default function Admin() {
               <div style={st.infoCard}>
                 <div style={st.infoCardBadge}>Active Season</div>
                 <div style={st.infoCardTitle}>{activeSeason.name}</div>
-                <div style={st.infoCardSub}>{activeSeason.quarter} · {activeSeason.start_date} → {activeSeason.end_date}</div>
+                <div style={st.infoCardSub}>{activeSeason.start_date} → {activeSeason.end_date}</div>
               </div>
             ) : (
               <div style={st.warningCard}>No active season. Create one and click "Set Active".</div>
@@ -1778,16 +1795,34 @@ export default function Admin() {
                       onChange={e => setSeasonForm({ ...seasonForm, displayName: e.target.value })} />
                   </div>
                   <div style={st.formField}>
-                    <label style={st.label}>Quarter</label>
-                    <select style={st.input} value={seasonForm.quarter}
-                      onChange={e => setSeasonForm({ ...seasonForm, quarter: e.target.value })}>
-                      <option>Q1</option><option>Q2</option><option>Q3</option><option>Q4</option>
+                    <label style={st.label}>Month</label>
+                    <select style={st.input} value={seasonForm.month}
+                      onChange={e => {
+                        const month = e.target.value
+                        const { startDate, endDate } = getMonthDates(month, seasonForm.year)
+                        setSeasonForm(f => ({
+                          ...f, month,
+                          startDate: startDate || f.startDate,
+                          endDate:   endDate   || f.endDate,
+                          name: f.name || (month ? `${month} ${f.year}` : ''),
+                        }))
+                      }}>
+                      <option value="">— Select month —</option>
+                      {MONTHS.map(m => <option key={m}>{m}</option>)}
                     </select>
                   </div>
                   <div style={st.formField}>
                     <label style={st.label}>Year</label>
                     <input style={st.input} type="number" value={seasonForm.year}
-                      onChange={e => setSeasonForm({ ...seasonForm, year: e.target.value })} required />
+                      onChange={e => {
+                        const year = e.target.value
+                        const { startDate, endDate } = getMonthDates(seasonForm.month, year)
+                        setSeasonForm(f => ({
+                          ...f, year,
+                          startDate: startDate || f.startDate,
+                          endDate:   endDate   || f.endDate,
+                        }))
+                      }} required />
                   </div>
                   <div style={st.formField}>
                     <label style={st.label}>Start Date</label>
@@ -1818,7 +1853,7 @@ export default function Admin() {
                         <div style={{ flex: 2 }}>
                           <div style={{ color: '#e8f0e8', fontWeight: '500' }}>{s.name}</div>
                           <div style={{ color: '#5a8a5a', fontSize: '0.78rem', marginTop: '0.1rem' }}>
-                            {s.quarter} {s.year} · {s.start_date} → {s.end_date}
+                            {s.start_date} → {s.end_date}
                           </div>
                         </div>
                         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -1861,10 +1896,19 @@ export default function Admin() {
                               onChange={e => setEditSeasonForm({ ...editSeasonForm, name: e.target.value })} />
                           </div>
                           <div style={st.formField}>
-                            <label style={st.label}>Quarter</label>
-                            <select style={st.input} value={editSeasonForm.quarter}
-                              onChange={e => setEditSeasonForm({ ...editSeasonForm, quarter: e.target.value })}>
-                              <option>Q1</option><option>Q2</option><option>Q3</option><option>Q4</option>
+                            <label style={st.label}>Month</label>
+                            <select style={st.input} value={editSeasonForm.month || ''}
+                              onChange={e => {
+                                const month = e.target.value
+                                const { startDate, endDate } = getMonthDates(month, editSeasonForm.year)
+                                setEditSeasonForm(f => ({
+                                  ...f, month,
+                                  startDate: startDate || f.startDate,
+                                  endDate:   endDate   || f.endDate,
+                                }))
+                              }}>
+                              <option value="">— Select month —</option>
+                              {MONTHS.map(m => <option key={m}>{m}</option>)}
                             </select>
                           </div>
                           <div style={st.formField}>

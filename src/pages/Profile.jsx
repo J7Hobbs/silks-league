@@ -298,13 +298,9 @@ export default function Profile() {
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   function filterQuarterWeeks(weeks, season) {
-    if (!season?.quarter || !season?.year) return weeks
-    const ranges = { Q1: [0, 2], Q2: [3, 5], Q3: [6, 8], Q4: [9, 11] }
-    const [start, end] = ranges[season.quarter] || [0, 11]
-    return weeks.filter(w => {
-      const d = new Date(w.saturday_date)
-      return d.getFullYear() === season.year && d.getMonth() >= start && d.getMonth() <= end
-    })
+    // Filter weeks to those within the season's date range
+    if (!season?.start_date || !season?.end_date) return weeks
+    return weeks.filter(w => w.saturday_date >= season.start_date && w.saturday_date <= season.end_date)
   }
 
   async function saveName() {
@@ -435,7 +431,7 @@ export default function Profile() {
                   <span style={st.metaItem}>Member since {formatDate(user.created_at)}</span>
                 )}
                 {season && (
-                  <span style={st.metaItem}>{season.quarter} {season.year}</span>
+                  <span style={st.metaItem}>{season.name || season.year}</span>
                 )}
               </div>
 
@@ -474,10 +470,10 @@ export default function Profile() {
         <div style={st.card}>
           <div style={st.cardHeader}>
             <span style={st.cardTitle}>Weekly History</span>
-            {season && <span style={st.cardSub}>{season.quarter} {season.year}</span>}
+            {season && <span style={st.cardSub}>{season.name || season.year}</span>}
           </div>
           {quarterDisplay.length === 0 ? (
-            <p style={st.emptyMsg}>No weeks in this quarter yet — check back soon.</p>
+            <p style={st.emptyMsg}>No weeks this season yet — check back soon.</p>
           ) : (
             <div style={st.weekList}>
               {quarterDisplay.map(({ week, myPoints, rank, totalPlayers }) => {
