@@ -976,7 +976,6 @@ export default function Admin() {
       race_name:       headerFields.race_name,
       race_time:       headerFields.time,
     }
-    if (headerFields.class)    racePayload.class_type = headerFields.class
     if (headerFields.distance) racePayload.distance   = headerFields.distance
 
     const { data: newRace, error: raceErr } = await supabase.from('festival_races').insert(racePayload).select().single()
