@@ -444,6 +444,20 @@ export default function Admin() {
     )
   }
 
+  async function completeSeason(s) {
+    confirm(
+      `Complete ${s.name}?`,
+      `This will lock the season and preserve all standings. All data, results and points are kept.`,
+      async () => {
+        const { error } = await supabase.from('seasons').update({ status: 'completed' }).eq('id', s.id)
+        if (error) { showToast('error', error.message); return }
+        showToast('success', `${s.name} completed`)
+        await loadSeasons()
+      },
+      { confirmLabel: 'Complete Season', confirmStyle: { ...st.btnGold } }
+    )
+  }
+
   // ── Race week CRUD ───────────────────────────────────────────
   async function createRaceWeek(e) {
     e.preventDefault()
@@ -1807,12 +1821,31 @@ export default function Admin() {
                             {s.quarter} {s.year} · {s.start_date} → {s.end_date}
                           </div>
                         </div>
-                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                          {s.is_active
-                            ? <span style={st.badgeGreen}>Active</span>
-                            : <button style={st.btnSmall} onClick={() => activateSeason(s.id)}>Set Active</button>}
-                          <button style={st.btnSmallGhost} onClick={() => startEditSeason(s)}>Edit</button>
-                          <button style={st.btnSmallDanger} onClick={() => deleteSeason(s.id)}>Delete</button>
+                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                          {s.status === 'completed' ? (
+                            <>
+                              <span style={{ ...st.badgeGreen, opacity: 0.6 }}>Completed</span>
+                              <button style={st.btnSmallGhost} onClick={() => navigate('/league')}>View</button>
+                              <button style={st.btnSmallDanger} onClick={() => deleteSeason(s.id)}>Delete</button>
+                            </>
+                          ) : s.is_active ? (
+                            <>
+                              <span style={st.badgeGreen}>Active</span>
+                              <button
+                                style={{ border: '1px solid #c9a84c', color: '#c9a84c', background: 'transparent', borderRadius: '6px', padding: '0.22rem 0.65rem', fontSize: '0.72rem', fontWeight: '600', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", whiteSpace: 'nowrap' }}
+                                onClick={() => completeSeason(s)}>
+                                Complete Season
+                              </button>
+                              <button style={st.btnSmallGhost} onClick={() => startEditSeason(s)}>Edit</button>
+                              <button style={st.btnSmallDanger} onClick={() => deleteSeason(s.id)}>Delete</button>
+                            </>
+                          ) : (
+                            <>
+                              <button style={st.btnSmall} onClick={() => activateSeason(s.id)}>Set Active</button>
+                              <button style={st.btnSmallGhost} onClick={() => startEditSeason(s)}>Edit</button>
+                              <button style={st.btnSmallDanger} onClick={() => deleteSeason(s.id)}>Delete</button>
+                            </>
+                          )}
                         </div>
                       </div>
                     ) : (

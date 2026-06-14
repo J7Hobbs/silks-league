@@ -18,6 +18,12 @@ export default function League() {
   const [isAdmin, setIsAdmin] = useState(false)
   const [loading, setLoading] = useState(true)
 
+  // ── Season selector ───────────────────────────────────────────
+  const [allSeasons,      setAllSeasons]      = useState([])   // all seasons, desc
+  const [viewSeason,      setViewSeason]      = useState(null) // currently displayed season
+  const [seasonPickerOpen, setSeasonPickerOpen] = useState(false)
+  const [seasonLoading,   setSeasonLoading]   = useState(false)
+
   // ── Saturday League ───────────────────────────────────────────
   const [season,         setSeason]         = useState(null)
   const [currentWeek,    setCurrentWeek]    = useState(null)
@@ -50,6 +56,13 @@ export default function League() {
     const { data: profile } = await supabase
       .from('profiles').select('is_admin').eq('id', u.id).single()
     setIsAdmin(profile?.is_admin || false)
+
+    // Load all seasons for the selector
+    const { data: seasonsData } = await supabase
+      .from('seasons').select('id, name, status, is_active, quarter, year')
+      .order('start_date', { ascending: false })
+    setAllSeasons(seasonsData || [])
+
     await Promise.all([
       loadSaturdayLeague(u.id),
       loadFestivals(),
@@ -59,11 +72,18 @@ export default function League() {
   }
 
   // ── Saturday League ───────────────────────────────────────────
-  async function loadSaturdayLeague(myUserId) {
-    const { data: s } = await supabase
-      .from('seasons').select('id, name').eq('is_active', true).single()
+  async function loadSaturdayLeague(myUserId, seasonId) {
+    let s
+    if (seasonId) {
+      const { data } = await supabase.from('seasons').select('id, name, status').eq('id', seasonId).single()
+      s = data
+    } else {
+      const { data } = await supabase.from('seasons').select('id, name, status').eq('is_active', true).single()
+      s = data
+    }
     if (!s) return
     setSeason(s)
+    setViewSeason(s)
 
     const { data: weeks } = await supabase
       .from('race_weeks').select('id, week_number, saturday_date')
@@ -373,6 +393,16 @@ export default function League() {
     return `${s} – ${e}`
   }
 
+  async function switchSeason(s) {
+    setSeasonPickerOpen(false)
+    if (s.id === viewSeason?.id) return
+    setSeasonLoading(true)
+    setSatRows([]); setWeekRows([]); setCompletedWeeks([])
+    setFestData({}); setGroupData({})
+    await loadSaturdayLeague(user?.id, s.id)
+    setSeasonLoading(false)
+  }
+
   // ── Loading ───────────────────────────────────────────────────
   if (loading) {
     return (
@@ -406,7 +436,7 @@ export default function League() {
 
   // ── Render ────────────────────────────────────────────────────
   return (
-    <div style={st.page}>
+    <div style={st.page} onClick={() => seasonPickerOpen && setSeasonPickerOpen(false)}>
 
       {/* ── Nav ── */}
       <nav style={st.nav}>
@@ -431,9 +461,45 @@ export default function League() {
         <div style={st.pageHeadRow}>
           <div>
             <h1 style={st.heading}>League</h1>
-            <p style={st.sub}>{season?.name || 'Current Season'}</p>
+            <p style={st.sub}>{viewSeason?.name || season?.name || 'Current Season'}</p>
           </div>
+          {/* Season selector pill */}
+          {allSeasons.length > 1 && (
+            <div style={{ position: 'relative', flexShrink: 0 }}>
+              <button
+                style={{ border: '1px solid rgba(201,168,76,0.35)', color: '#c9a84c', background: 'rgba(201,168,76,0.06)', borderRadius: '20px', padding: '0.35rem 0.85rem', fontSize: '0.78rem', fontWeight: '600', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", display: 'flex', alignItems: 'center', gap: '0.3rem' }}
+                onClick={e => { e.stopPropagation(); setSeasonPickerOpen(v => !v) }}>
+                {viewSeason?.name || 'Season'} ▾
+              </button>
+              {seasonPickerOpen && (
+                <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, background: '#0d1f0d', border: '1px solid rgba(201,168,76,0.2)', borderRadius: '10px', minWidth: '180px', zIndex: 200, overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.5)' }}>
+                  {allSeasons.map(s => (
+                    <button
+                      key={s.id}
+                      onClick={e => { e.stopPropagation(); switchSeason(s) }}
+                      style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.6rem 1rem', background: s.id === viewSeason?.id ? 'rgba(201,168,76,0.1)' : 'transparent', color: s.id === viewSeason?.id ? '#c9a84c' : '#e8f0e8', border: 'none', borderBottom: '1px solid rgba(201,168,76,0.07)', fontSize: '0.82rem', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" }}>
+                      {s.name}
+                      {s.status === 'completed' && <span style={{ marginLeft: '0.4rem', fontSize: '0.65rem', color: '#4ade80', opacity: 0.7 }}>✓</span>}
+                      {s.is_active && <span style={{ marginLeft: '0.4rem', fontSize: '0.65rem', color: '#c9a84c' }}>●</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
+
+        {/* Past season banner */}
+        {viewSeason && !viewSeason.is_active && (
+          <div style={{ background: 'rgba(201,168,76,0.06)', border: '1px solid rgba(201,168,76,0.15)', borderRadius: '8px', padding: '0.55rem 1rem', fontSize: '0.8rem', color: 'rgba(201,168,76,0.65)', fontStyle: 'italic' }}>
+            Viewing {viewSeason.name} — final standings
+          </div>
+        )}
+
+        {/* Season loading state */}
+        {seasonLoading && (
+          <div style={{ textAlign: 'center', color: '#5a8a5a', padding: '2rem', fontSize: '0.875rem' }}>Loading season…</div>
+        )}
 
         {/* ── Outer scrollable tab bar ── */}
         <div style={st.outerTabBar}>

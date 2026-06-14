@@ -16,15 +16,21 @@ export default function PlayerPicks() {
   const navigate     = useNavigate()
 
   const [myUserId,   setMyUserId]   = useState(null)
-  const [profile,    setProfile]    = useState(null)   // the target player's profile
+  const [profile,    setProfile]    = useState(null)
   const [races,      setRaces]      = useState([])
-  const [picks,      setPicks]      = useState({})     // { raceId: runner }
-  const [scores,     setScores]     = useState({})     // { raceId: score }
-  const [results,    setResults]    = useState({})     // { raceId: [...] }
-  const [week,       setWeek]       = useState(null)
+  const [picks,      setPicks]      = useState({})
+  const [scores,     setScores]     = useState({})
+  const [results,    setResults]    = useState({})
   const [loading,    setLoading]    = useState(true)
   const [deadlinePassed, setDeadlinePassed] = useState(false)
   const [isOwnPicks, setIsOwnPicks] = useState(false)
+
+  // ── Season / week navigation ──────────────────────────────────
+  const [allSeasons,       setAllSeasons]       = useState([])
+  const [viewSeason,       setViewSeason]       = useState(null)
+  const [allWeeks,         setAllWeeks]         = useState([])
+  const [selectedWeek,     setSelectedWeek]     = useState(null)
+  const [seasonPickerOpen, setSeasonPickerOpen] = useState(false)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -33,94 +39,124 @@ export default function PlayerPicks() {
       const own = user.id === userId
       setIsOwnPicks(own)
       setDeadlinePassed(own || isAfterDeadline())
-      load(user.id)
+      init(user.id)
     })
   }, [userId])
 
-  async function load(myId) {
+  async function init(myId) {
     setLoading(true)
     try {
-      // Target player profile
       const { data: prof } = await supabase
         .from('profiles').select('id, username, full_name').eq('id', userId).single()
       setProfile(prof)
 
-      // Current active week
-      const { data: season } = await supabase
-        .from('seasons').select('id').eq('is_active', true).single()
-      if (!season) return
+      // Load all seasons for the selector
+      const { data: seasonsData } = await supabase
+        .from('seasons').select('id, name, status, is_active, quarter, year')
+        .order('start_date', { ascending: false })
+      setAllSeasons(seasonsData || [])
 
-      const { data: weeks } = await supabase
-        .from('race_weeks').select('*').eq('season_id', season.id)
-        .order('saturday_date', { ascending: false }).limit(1)
-      const currentWeek = weeks?.[0]
-      if (!currentWeek) return
-      setWeek(currentWeek)
+      // Default to the active season
+      const { data: activeSeason } = await supabase
+        .from('seasons').select('id, name, status, is_active').eq('is_active', true).single()
+      if (!activeSeason) return
+      setViewSeason(activeSeason)
 
-      // Races for the week
-      const { data: racesData } = await supabase
-        .from('races').select('*').eq('race_week_id', currentWeek.id).order('race_number')
-      if (!racesData?.length) return
-      setRaces(racesData)
-
-      const raceIds = racesData.map(r => r.id)
-
-      // Target player's picks for these races
-      const { data: picksData } = await supabase
-        .from('picks').select('race_id, runner_id, was_replaced, original_runner_id').eq('user_id', userId).in('race_id', raceIds)
-
-      // Load runner details for picks
-      const runnerIds = (picksData || []).map(p => p.runner_id).filter(Boolean)
-      const { data: runnersData } = runnerIds.length
-        ? await supabase.from('runners').select('id, horse_name, silk_colour, silk_colour_secondary, horse_number, odds_fractional').in('id', runnerIds)
-        : { data: [] }
-      const runnerMap = {}
-      runnersData?.forEach(r => { runnerMap[r.id] = r })
-      const picksMap = {}
-      picksData?.forEach(p => {
-        if (p.runner_id && runnerMap[p.runner_id]) {
-          picksMap[p.race_id] = {
-            ...runnerMap[p.runner_id],
-            was_replaced: p.was_replaced,
-            original_runner_id: p.original_runner_id,
-          }
-        }
-      })
-      setPicks(picksMap)
-
-      // Results
-      const { data: resultsData } = await supabase
-        .from('results').select('race_id, position, horse_name, starting_price_display').in('race_id', raceIds)
-      const resultsMap = {}
-      resultsData?.forEach(r => {
-        if (!resultsMap[r.race_id]) resultsMap[r.race_id] = []
-        resultsMap[r.race_id].push(r)
-      })
-      setResults(resultsMap)
-
-      // Scores for target player
-      const { data: scoresData } = await supabase
-        .from('scores').select('race_id, base_points, bonus_points, total_points, position_achieved, score_note')
-        .eq('user_id', userId).in('race_id', raceIds)
-      const scoresMap = {}
-      scoresData?.forEach(s => { scoresMap[s.race_id] = s })
-      setScores(scoresMap)
-
+      await loadSeasonWeeks(activeSeason, myId, null)
     } finally {
       setLoading(false)
     }
   }
 
+  async function loadSeasonWeeks(season, myId, weekId) {
+    const { data: weeks } = await supabase
+      .from('race_weeks').select('*').eq('season_id', season.id)
+      .order('saturday_date', { ascending: false })
+    setAllWeeks(weeks || [])
+    const targetWeek = weekId
+      ? (weeks || []).find(w => w.id === weekId)
+      : (weeks || [])[0]
+    if (!targetWeek) return
+    setSelectedWeek(targetWeek)
+    await loadWeekData(targetWeek, myId)
+  }
+
+  async function loadWeekData(week, myId) {
+    setRaces([]); setPicks({}); setScores({}); setResults({})
+    const { data: racesData } = await supabase
+      .from('races').select('*').eq('race_week_id', week.id).order('race_number')
+    if (!racesData?.length) return
+    setRaces(racesData)
+    const raceIds = racesData.map(r => r.id)
+
+    const { data: picksData } = await supabase
+      .from('picks').select('race_id, runner_id, was_replaced, original_runner_id')
+      .eq('user_id', userId).in('race_id', raceIds)
+    const runnerIds = (picksData || []).map(p => p.runner_id).filter(Boolean)
+    const { data: runnersData } = runnerIds.length
+      ? await supabase.from('runners').select('id, horse_name, silk_colour, silk_colour_secondary, horse_number, odds_fractional').in('id', runnerIds)
+      : { data: [] }
+    const runnerMap = {}
+    runnersData?.forEach(r => { runnerMap[r.id] = r })
+    const picksMap = {}
+    picksData?.forEach(p => {
+      if (p.runner_id && runnerMap[p.runner_id]) {
+        picksMap[p.race_id] = {
+          ...runnerMap[p.runner_id],
+          was_replaced: p.was_replaced,
+          original_runner_id: p.original_runner_id,
+        }
+      }
+    })
+    setPicks(picksMap)
+
+    const { data: resultsData } = await supabase
+      .from('results').select('race_id, position, horse_name, starting_price_display').in('race_id', raceIds)
+    const resultsMap = {}
+    resultsData?.forEach(r => {
+      if (!resultsMap[r.race_id]) resultsMap[r.race_id] = []
+      resultsMap[r.race_id].push(r)
+    })
+    setResults(resultsMap)
+
+    const { data: scoresData } = await supabase
+      .from('scores').select('race_id, base_points, bonus_points, total_points, position_achieved, score_note')
+      .eq('user_id', userId).in('race_id', raceIds)
+    const scoresMap = {}
+    scoresData?.forEach(s => { scoresMap[s.race_id] = s })
+    setScores(scoresMap)
+  }
+
+  async function switchSeason(s) {
+    setSeasonPickerOpen(false)
+    if (s.id === viewSeason?.id) return
+    setLoading(true)
+    setViewSeason(s)
+    setAllWeeks([])
+    setSelectedWeek(null)
+    await loadSeasonWeeks(s, myUserId, null)
+    setLoading(false)
+  }
+
+  async function switchWeek(week) {
+    if (week.id === selectedWeek?.id) return
+    setSelectedWeek(week)
+    setLoading(true)
+    await loadWeekData(week, myUserId)
+    setLoading(false)
+  }
+
   const displayName = profile?.username || profile?.full_name || 'Player'
   const totalPts = Object.values(scores).reduce((sum, s) => sum + (s?.total_points || 0), 0)
-  const weekDateStr = week?.saturday_date
-    ? new Date(week.saturday_date + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })
+  const weekDateStr = selectedWeek?.saturday_date
+    ? new Date(selectedWeek.saturday_date + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })
     : ''
+  const isPastSeason = viewSeason && !viewSeason.is_active
 
   const posLabel = (p) => p === 1 ? '1st' : p === 2 ? '2nd' : p === 3 ? '3rd' : null
 
   return (
-    <div style={st.page}>
+    <div style={st.page} onClick={() => seasonPickerOpen && setSeasonPickerOpen(false)}>
 
       {/* Nav */}
       <nav style={st.nav}>
@@ -143,12 +179,62 @@ export default function PlayerPicks() {
           <>
             {/* Header */}
             <div style={st.header}>
-              <h1 style={st.title}>{isOwnPicks ? 'My picks' : `${displayName}'s picks`}</h1>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.75rem' }}>
+                <h1 style={st.title}>{isOwnPicks ? 'My picks' : `${displayName}'s picks`}</h1>
+
+                {/* Season selector */}
+                {allSeasons.length > 1 && (
+                  <div style={{ position: 'relative', flexShrink: 0, marginTop: '0.2rem' }}>
+                    <button
+                      style={st.seasonPill}
+                      onClick={e => { e.stopPropagation(); setSeasonPickerOpen(v => !v) }}>
+                      {viewSeason?.name || 'Season'} ▾
+                    </button>
+                    {seasonPickerOpen && (
+                      <div style={st.seasonDropdown}>
+                        {allSeasons.map(s => (
+                          <button
+                            key={s.id}
+                            onClick={e => { e.stopPropagation(); switchSeason(s) }}
+                            style={{ ...st.seasonDropdownItem, ...(s.id === viewSeason?.id ? st.seasonDropdownItemActive : {}) }}>
+                            {s.name}
+                            {s.status === 'completed' && <span style={{ marginLeft: '0.4rem', fontSize: '0.65rem', color: '#4ade80', opacity: 0.7 }}>✓</span>}
+                            {s.is_active && <span style={{ marginLeft: '0.4rem', fontSize: '0.65rem', color: '#c9a84c' }}>●</span>}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Past season banner */}
+              {isPastSeason && (
+                <div style={st.pastSeasonBanner}>
+                  Viewing {viewSeason.name} — final standings
+                </div>
+              )}
+
               {weekDateStr && <div style={st.weekLabel}>{weekDateStr}</div>}
+
               {Object.keys(scores).length > 0 && (
                 <div style={st.totalPts}>
                   <span style={st.totalNum}>{totalPts}</span>
                   <span style={st.totalLabel}>pts total</span>
+                </div>
+              )}
+
+              {/* Week navigator — show when season has multiple weeks */}
+              {allWeeks.length > 1 && (
+                <div style={st.weekNav}>
+                  {[...allWeeks].reverse().map(w => (
+                    <button
+                      key={w.id}
+                      style={{ ...st.weekNavBtn, ...(w.id === selectedWeek?.id ? st.weekNavBtnActive : {}) }}
+                      onClick={() => switchWeek(w)}>
+                      Wk {w.week_number}
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
@@ -161,7 +247,6 @@ export default function PlayerPicks() {
               const score       = scores[race.id]
               const raceResults = results[race.id] || []
               const hasResult   = raceResults.length > 0
-              const silkBg      = pick?.silk_colour || '#1a3a10'
               const wasReplaced = !!pick?.was_replaced
 
               return (
@@ -237,9 +322,9 @@ const st = {
   lockIcon:   { fontSize: '2.5rem', marginBottom: '1rem' },
   lockTitle:  { fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.8rem', color: '#c9a84c', letterSpacing: '0.05em', marginBottom: '0.5rem' },
   lockSub:    { fontSize: '0.9rem', color: '#5a8a5a', lineHeight: 1.5 },
-  header:  { marginBottom: '1.5rem' },
-  title:   { fontFamily: "'Bebas Neue', sans-serif", fontSize: '2rem', color: '#e8f0e8', letterSpacing: '0.04em', marginBottom: '0.2rem' },
-  weekLabel: { fontSize: '0.8rem', color: '#5a8a5a', marginBottom: '0.75rem' },
+  header:  { marginBottom: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' },
+  title:   { fontFamily: "'Bebas Neue', sans-serif", fontSize: '2rem', color: '#e8f0e8', letterSpacing: '0.04em', margin: 0 },
+  weekLabel: { fontSize: '0.8rem', color: '#5a8a5a' },
   totalPts:  { display: 'inline-flex', alignItems: 'baseline', gap: '0.35rem', background: 'rgba(201,168,76,0.1)', border: '1px solid rgba(201,168,76,0.3)', borderRadius: '8px', padding: '0.4rem 0.9rem' },
   totalNum:  { fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.6rem', color: '#c9a84c', lineHeight: 1 },
   totalLabel:{ fontSize: '0.75rem', color: '#5a8a5a' },
@@ -250,7 +335,15 @@ const st = {
   raceMeta:  { fontSize: '0.82rem', flex: 1 },
   ptsChip:   { background: 'rgba(201,168,76,0.15)', border: '1px solid rgba(201,168,76,0.3)', borderRadius: '999px', padding: '0.2rem 0.7rem', fontSize: '0.78rem', fontWeight: '700', color: '#c9a84c' },
   pendingChip: { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '999px', padding: '0.2rem 0.7rem', fontSize: '0.75rem', color: '#5a8a5a' },
-  wdChip:    { background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: '999px', padding: '0.2rem 0.7rem', fontSize: '0.72rem', fontWeight: '600', color: '#f87171' },
-  pickCard:  { display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px 12px', background: '#ffffff', margin: '10px', borderRadius: '10px', border: '2px solid #c9a84c' },
   noPick:    { padding: '0.85rem 1rem', fontSize: '0.85rem', color: '#5a8a5a', fontStyle: 'italic' },
+  // Season selector
+  seasonPill: { border: '1px solid rgba(201,168,76,0.35)', color: '#c9a84c', background: 'rgba(201,168,76,0.06)', borderRadius: '20px', padding: '0.3rem 0.75rem', fontSize: '0.75rem', fontWeight: '600', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", display: 'flex', alignItems: 'center', gap: '0.25rem', whiteSpace: 'nowrap' },
+  seasonDropdown: { position: 'absolute', top: 'calc(100% + 6px)', right: 0, background: '#0d1f0d', border: '1px solid rgba(201,168,76,0.2)', borderRadius: '10px', minWidth: '170px', zIndex: 200, overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.5)' },
+  seasonDropdownItem: { display: 'block', width: '100%', textAlign: 'left', padding: '0.55rem 1rem', background: 'transparent', color: '#e8f0e8', border: 'none', borderBottom: '1px solid rgba(201,168,76,0.07)', fontSize: '0.8rem', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" },
+  seasonDropdownItemActive: { background: 'rgba(201,168,76,0.1)', color: '#c9a84c' },
+  pastSeasonBanner: { background: 'rgba(201,168,76,0.06)', border: '1px solid rgba(201,168,76,0.15)', borderRadius: '7px', padding: '0.45rem 0.85rem', fontSize: '0.78rem', color: 'rgba(201,168,76,0.65)', fontStyle: 'italic' },
+  // Week navigator
+  weekNav: { display: 'flex', gap: '0.35rem', flexWrap: 'wrap' },
+  weekNavBtn: { border: '1px solid rgba(201,168,76,0.2)', color: '#5a8a5a', background: 'transparent', borderRadius: '6px', padding: '0.25rem 0.6rem', fontSize: '0.72rem', fontWeight: '600', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" },
+  weekNavBtnActive: { border: '1px solid #c9a84c', color: '#c9a84c', background: 'rgba(201,168,76,0.08)' },
 }
