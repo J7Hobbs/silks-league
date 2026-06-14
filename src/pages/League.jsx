@@ -46,6 +46,11 @@ export default function League() {
   // ── Picks modal ───────────────────────────────────────────────
   const [picksModal, setPicksModal] = useState(null)
 
+  // ── Annual League ─────────────────────────────────────────────
+  const [annualRows,    setAnnualRows]    = useState([])
+  const [annualSeasons, setAnnualSeasons] = useState([])
+  const [annualLoading, setAnnualLoading] = useState(false)
+
   // ── Init ──────────────────────────────────────────────────────
   useEffect(() => { init() }, [])
 
@@ -75,10 +80,10 @@ export default function League() {
   async function loadSaturdayLeague(myUserId, seasonId) {
     let s
     if (seasonId) {
-      const { data } = await supabase.from('seasons').select('id, name, status').eq('id', seasonId).single()
+      const { data } = await supabase.from('seasons').select('id, name, status, is_active').eq('id', seasonId).single()
       s = data
     } else {
-      const { data } = await supabase.from('seasons').select('id, name, status').eq('is_active', true).single()
+      const { data } = await supabase.from('seasons').select('id, name, status, is_active').eq('is_active', true).single()
       s = data
     }
     if (!s) return
@@ -105,21 +110,21 @@ export default function League() {
       }
     }
 
-    const ownQuery = allRaceIds.length
-      ? supabase.from('scores').select('user_id, race_id, total_points').eq('user_id', myUserId).in('race_id', allRaceIds)
-      : supabase.from('scores').select('user_id, race_id, total_points').eq('user_id', myUserId)
-    const { data: ownScores } = await ownQuery
+    let ownScores = []
+    if (allRaceIds.length) {
+      const { data: od } = await supabase
+        .from('scores').select('user_id, race_id, total_points')
+        .eq('user_id', myUserId).in('race_id', allRaceIds)
+      ownScores = od || []
+    }
 
     let allScores = []
     if (allRaceIds.length) {
       const { data: everyone, error: evErr } = await supabase
         .from('scores').select('user_id, race_id, total_points').in('race_id', allRaceIds)
       if (!evErr && everyone?.length) allScores = everyone
-    } else {
-      const { data: everyone, error: evErr } = await supabase
-        .from('scores').select('user_id, race_id, total_points')
-      if (!evErr && everyone?.length) allScores = everyone
     }
+    // else: no races in this season yet — all scores stay []
 
     const scores = allScores.length ? allScores : (ownScores || [])
     const allUserIds = [...new Set([...scores.map(sc => sc.user_id), myUserId])]
@@ -345,6 +350,14 @@ export default function League() {
     setMainTab(tabId)
     const myUserId = user?.id
     if (tabId === 'saturday') return
+    if (tabId === 'annual') {
+      if (!annualRows.length && !annualLoading) {
+        setAnnualLoading(true)
+        await loadAnnualLeague(myUserId)
+        setAnnualLoading(false)
+      }
+      return
+    }
 
     // Festival tab
     const fest = festivals.find(f => f.id === tabId)
@@ -403,6 +416,62 @@ export default function League() {
     setSeasonLoading(false)
   }
 
+  // ── Annual League ────────────────────────────────────────────
+  async function loadAnnualLeague(myUserId) {
+    const { data: seasons26 } = await supabase
+      .from('seasons').select('id, name, start_date')
+      .eq('year', 2026)
+      .order('start_date', { ascending: true })
+    if (!seasons26?.length) { setAnnualRows([]); setAnnualSeasons([]); return }
+    setAnnualSeasons(seasons26)
+
+    const seasonIds = seasons26.map(s => s.id)
+    const { data: allWeeks } = await supabase
+      .from('race_weeks').select('id, season_id').in('season_id', seasonIds)
+    const weekIds = (allWeeks || []).map(w => w.id)
+
+    const weekSeasonMap = {}
+    allWeeks?.forEach(w => { weekSeasonMap[w.id] = w.season_id })
+
+    let allRaceIds = []
+    const raceSeasonMap = {}
+    if (weekIds.length) {
+      const { data: allRaces } = await supabase
+        .from('races').select('id, race_week_id').in('race_week_id', weekIds)
+      allRaceIds = (allRaces || []).map(r => r.id)
+      allRaces?.forEach(r => { raceSeasonMap[r.id] = weekSeasonMap[r.race_week_id] })
+    }
+
+    let allScores = []
+    if (allRaceIds.length) {
+      const { data: scores } = await supabase
+        .from('scores').select('user_id, race_id, total_points').in('race_id', allRaceIds)
+      allScores = scores || []
+    }
+
+    const byUser = {}
+    for (const sc of allScores) {
+      if (!byUser[sc.user_id]) byUser[sc.user_id] = { user_id: sc.user_id, total: 0, seasonPts: {} }
+      byUser[sc.user_id].total += (sc.total_points || 0)
+      const sId = raceSeasonMap[sc.race_id]
+      if (sId) byUser[sc.user_id].seasonPts[sId] = (byUser[sc.user_id].seasonPts[sId] || 0) + (sc.total_points || 0)
+    }
+    if (!byUser[myUserId]) byUser[myUserId] = { user_id: myUserId, total: 0, seasonPts: {} }
+
+    const allUserIds = [...new Set([...Object.keys(byUser), myUserId])]
+    const { data: profiles } = await supabase.rpc('get_user_names', { user_ids: allUserIds })
+    const nameMap = {}
+    profiles?.forEach(p => { nameMap[p.id] = p.username || p.full_name || null })
+
+    const sorted = Object.values(byUser)
+      .sort((a, b) => b.total - a.total || (nameMap[a.user_id] || '').localeCompare(nameMap[b.user_id] || ''))
+      .map((u, i) => ({
+        rank: i + 1, userId: u.user_id, name: nameMap[u.user_id] || 'Player',
+        isMe: u.user_id === myUserId, total: u.total, seasonPts: u.seasonPts,
+      }))
+    setAnnualRows(sorted)
+  }
+
   // ── Loading ───────────────────────────────────────────────────
   if (loading) {
     return (
@@ -417,6 +486,7 @@ export default function League() {
 
   // ── Computed active tab data ───────────────────────────────────
   const isSatTab    = mainTab === 'saturday'
+  const isAnnualTab = mainTab === 'annual'
   const activeFest  = festivals.find(f => f.id === mainTab)
   const activeGroup = myGroups.find(g => g.id === mainTab)
   const currentGroupData = activeGroup ? groupData[activeGroup.id] : null
@@ -463,8 +533,8 @@ export default function League() {
             <h1 style={st.heading}>League</h1>
             <p style={st.sub}>{viewSeason?.name || season?.name || 'Current Season'}</p>
           </div>
-          {/* Season selector pill */}
-          {allSeasons.length > 1 && (
+          {/* Season selector pill — hidden on Annual tab */}
+          {allSeasons.length > 1 && !isAnnualTab && (
             <div style={{ position: 'relative', flexShrink: 0 }}>
               <button
                 style={{ border: '1px solid rgba(201,168,76,0.35)', color: '#c9a84c', background: 'rgba(201,168,76,0.06)', borderRadius: '20px', padding: '0.35rem 0.85rem', fontSize: '0.78rem', fontWeight: '600', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", display: 'flex', alignItems: 'center', gap: '0.3rem' }}
@@ -489,8 +559,8 @@ export default function League() {
           )}
         </div>
 
-        {/* Past season banner */}
-        {viewSeason && !viewSeason.is_active && (
+        {/* Past season banner — only on completed seasons, not on Annual tab */}
+        {viewSeason && !viewSeason.is_active && !isAnnualTab && (
           <div style={{ background: 'rgba(201,168,76,0.06)', border: '1px solid rgba(201,168,76,0.15)', borderRadius: '8px', padding: '0.55rem 1rem', fontSize: '0.8rem', color: 'rgba(201,168,76,0.65)', fontStyle: 'italic' }}>
             Viewing {viewSeason.name} — final standings
           </div>
@@ -507,6 +577,11 @@ export default function League() {
             style={{ ...st.outerTab, ...(mainTab === 'saturday' ? st.outerTabActive : {}) }}
             onClick={() => handleMainTab('saturday')}>
             🏇 Saturday League
+          </button>
+          <button
+            style={{ ...st.outerTab, ...(isAnnualTab ? st.outerTabActive : {}) }}
+            onClick={() => handleMainTab('annual')}>
+            📅 2026 Annual
           </button>
           {festivals.map(fest => (
             <button
@@ -560,6 +635,26 @@ export default function League() {
                   userId: row.user_id,
                   name: row.name,
                   pts: row.weekPoints,
+                  rank: row.rank,
+                })}
+              />
+            )}
+          </>
+        )}
+
+        {/* ══════════════ ANNUAL LEAGUE TAB ══════════════ */}
+        {isAnnualTab && (
+          <>
+            {annualLoading ? (
+              <div style={st.loadingInline}>Loading 2026 Annual…</div>
+            ) : (
+              <AnnualLeagueTable
+                rows={annualRows}
+                seasons={annualSeasons}
+                onPlayerClick={row => setPicksModal({
+                  userId: row.userId,
+                  name: row.name,
+                  pts: row.total,
                   rank: row.rank,
                 })}
               />
@@ -859,6 +954,108 @@ function WeekLeaderboardCard({ rows, onPlayerClick }) {
           <div style={{ ...st.dataCell, ...st.totalCell }} className="league-col-data">{row.weekPoints}</div>
         </div>
       ))}
+    </div>
+  )
+}
+
+// ── Annual League table ──────────────────────────────────────
+function AnnualLeagueTable({ rows, seasons = [], onPlayerClick }) {
+  function abbrev(name) {
+    if (!name) return '?'
+    return name.split(' ')[0].slice(0, 3)
+  }
+
+  if (!rows.length) {
+    return (
+      <div style={st.card}>
+        <div style={st.empty}>No scores yet across 2026 seasons — check back after results are in.</div>
+      </div>
+    )
+  }
+
+  return (
+    <div style={st.card}>
+      {/* Desktop */}
+      <div className="league-desktop-only" style={{ overflowX: 'auto' }}>
+        <div style={st.tableHeader} className="league-row">
+          <span style={{ minWidth: '40px' }}>#</span>
+          <span style={{ flex: 1 }}>Player</span>
+          {seasons.map(s => (
+            <span key={s.id} style={st.colRight} className="league-col-data">{abbrev(s.name)}</span>
+          ))}
+          <span style={st.colRight} className="league-col-data">Total</span>
+        </div>
+        {rows.map((row, idx) => (
+          <div
+            key={row.userId}
+            className="league-row"
+            style={{ ...st.row, ...(row.isMe ? st.rowMe : {}), ...(idx < rows.length - 1 ? {} : st.rowLast) }}>
+            <div style={st.rankCell}>
+              {row.rank === 1 ? '🥇' : row.rank === 2 ? '🥈' : row.rank === 3 ? '🥉' : (
+                <span style={st.rankNum}>{row.rank}</span>
+              )}
+            </div>
+            <div style={st.nameCell}>
+              <span
+                style={{ ...st.playerName, ...(row.isMe ? st.playerNameMe : {}), cursor: 'pointer', textDecoration: 'underline dotted' }}
+                onClick={() => onPlayerClick && onPlayerClick(row)}>
+                {row.name}
+              </span>
+              {row.isMe && <span style={st.youBadge}>You</span>}
+            </div>
+            {seasons.map(s => (
+              <div key={s.id} style={st.dataCell} className="league-col-data">
+                {row.seasonPts[s.id] !== undefined
+                  ? row.seasonPts[s.id]
+                  : <span style={{ color: 'rgba(90,138,90,0.3)' }}>—</span>}
+              </div>
+            ))}
+            <div style={{ ...st.dataCell, ...st.totalCell }} className="league-col-data">{row.total}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Mobile */}
+      <div className="league-mobile-only">
+        {rows.map((row, idx) => (
+          <div
+            key={row.userId}
+            style={{
+              ...st.mobileCard,
+              ...(row.isMe ? st.mobileCardMe : {}),
+              ...(idx < rows.length - 1 ? {} : { borderBottom: 'none' }),
+            }}>
+            <div style={st.mobileCardRank}>
+              {row.rank === 1 ? '🥇' : row.rank === 2 ? '🥈' : row.rank === 3 ? '🥉' : (
+                <span style={st.rankNum}>{row.rank}</span>
+              )}
+            </div>
+            <div style={st.mobileCardMid}>
+              <div style={st.mobileNameRow}>
+                <span
+                  style={{ ...st.playerName, ...(row.isMe ? st.playerNameMe : {}), cursor: 'pointer', textDecoration: 'underline dotted' }}
+                  onClick={() => onPlayerClick && onPlayerClick(row)}>
+                  {row.name}
+                </span>
+                {row.isMe && <span style={st.youBadge}>You</span>}
+              </div>
+              {seasons.length > 0 && (
+                <div style={st.mobilePillsRow}>
+                  {seasons.map(s => (
+                    <span key={s.id} style={st.mobilePill}>
+                      {abbrev(s.name)}&nbsp;
+                      <span style={st.mobilePillVal}>
+                        {row.seasonPts[s.id] !== undefined ? row.seasonPts[s.id] : '—'}
+                      </span>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div style={{ ...st.totalCell, fontSize: '1.4rem' }}>{row.total}</div>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

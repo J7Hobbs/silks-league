@@ -201,37 +201,30 @@ export default function Dashboard() {
       allRaceIds = allRaces?.map(r => r.id) || []
     }
 
-    let scores = []
+    // Fetch all app profiles so 0-point players still appear
+    const { data: allProfileData } = await supabase
+      .from('profiles').select('id')
+    const allProfileIds = (allProfileData || []).map(p => p.id)
+    const { data: profiles } = await supabase
+      .rpc('get_user_names', { user_ids: allProfileIds.length ? allProfileIds : [myUserId] })
+
+    // Initialise every player at 0
+    const byUser = {}
+    profiles?.forEach(p => {
+      byUser[p.id] = { user_id: p.id, total: 0, name: p.username || p.full_name || null }
+    })
+
+    // Add scores for this season only
     if (allRaceIds.length) {
       const { data: allScores, error } = await supabase
         .from('scores').select('user_id, total_points').in('race_id', allRaceIds)
-      if (!error && allScores?.length) scores = allScores
-    }
-    if (!scores.length) {
-      const ownQ = supabase.from('scores').select('user_id, total_points').eq('user_id', myUserId)
-      const { data: ownScores } = allRaceIds.length
-        ? await ownQ.in('race_id', allRaceIds)
-        : await ownQ
-      scores = ownScores || []
-    }
-    if (!scores.length) return
-
-    const byUser = {}
-    scores.forEach(s => {
-      if (!byUser[s.user_id]) byUser[s.user_id] = { user_id: s.user_id, total: 0 }
-      byUser[s.user_id].total += (s.total_points || 0)
-    })
-
-    const profileIds = [...new Set([...Object.keys(byUser), myUserId])]
-    const { data: profiles } = await supabase
-      .rpc('get_user_names', { user_ids: profileIds })
-    profiles?.forEach(p => {
-      if (byUser[p.id]) {
-        byUser[p.id].name           = p.username || p.full_name || null
-        byUser[p.id].startingPoints = p.season_starting_points || 0
-        byUser[p.id].total         += (p.season_starting_points || 0)
+      if (!error) {
+        (allScores || []).forEach(s => {
+          if (!byUser[s.user_id]) byUser[s.user_id] = { user_id: s.user_id, total: 0, name: null }
+          byUser[s.user_id].total += (s.total_points || 0)
+        })
       }
-    })
+    }
 
     const sorted = Object.values(byUser)
       .sort((a, b) => b.total - a.total)
@@ -242,7 +235,7 @@ export default function Dashboard() {
         name:      u.name || 'Player',
         points:    u.total,
         isMe:      u.user_id === myUserId,
-        midSeason: (u.startingPoints || 0) > 0,
+        midSeason: false,
       }))
     setLeaderboard(sorted)
   }
