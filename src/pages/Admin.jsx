@@ -368,8 +368,23 @@ export default function Admin() {
   }
 
   // ── Confirm helper ───────────────────────────────────────────
-  function confirm(title, body, onConfirm) {
-    setDeleteConfirm({ title, body, onConfirm })
+  function confirm(title, body, onConfirm, opts = {}) {
+    setDeleteConfirm({ title, body, onConfirm, confirmLabel: opts.confirmLabel, confirmStyle: opts.confirmStyle })
+  }
+
+  // ── Complete week ────────────────────────────────────────────
+  function completeWeek(week) {
+    confirm(
+      `Complete Week ${week.week_number}?`,
+      `This will mark the week as completed and lock results. The dashboard will update for all users.`,
+      async () => {
+        const { error } = await supabase.from('race_weeks').update({ status: 'completed' }).eq('id', week.id)
+        if (error) { showToast('error', `Failed: ${error.message}`); return }
+        showToast('success', `Week ${week.week_number} completed`)
+        setResultWeeksLoaded(false)
+      },
+      { confirmLabel: 'Complete Week', confirmStyle: { ...st.btnGold } }
+    )
   }
 
   // ── Season CRUD ──────────────────────────────────────────────
@@ -1702,8 +1717,8 @@ export default function Admin() {
             <div style={st.confirmTitle}>{deleteConfirm.title}</div>
             <div style={st.confirmBody}>{deleteConfirm.body}</div>
             <div style={st.confirmActions}>
-              <button style={st.btnDanger} onClick={() => { deleteConfirm.onConfirm(); setDeleteConfirm(null) }}>
-                Yes, delete
+              <button style={deleteConfirm.confirmStyle || st.btnDanger} onClick={() => { deleteConfirm.onConfirm(); setDeleteConfirm(null) }}>
+                {deleteConfirm.confirmLabel || 'Yes, delete'}
               </button>
               <button style={st.btnGhost} onClick={() => setDeleteConfirm(null)}>Cancel</button>
             </div>
@@ -2456,6 +2471,7 @@ runners: 6`}</code>
           const activeWId    = getActiveWeekId(allResultWeeks.map(w => w.week))
 
           function weekStatus(week, raceList) {
+            if (week.status === 'completed') return 'COMPLETED'
             if (week.id === activeWId) return 'ACTIVE'
             if (!raceList.length) return 'PENDING'
             const allDone = raceList.every(r => (raceResults[r.id] || []).length > 0)
@@ -2526,6 +2542,26 @@ runners: 6`}</code>
                       <span style={{ fontSize: '0.67rem', fontWeight: '700', letterSpacing: '0.08em', textTransform: 'uppercase', padding: '0.2rem 0.6rem', borderRadius: '6px', whiteSpace: 'nowrap', ...statusStyle }}>
                         {status}
                       </span>
+                      {/* Complete Week button — only on ACTIVE weeks */}
+                      {status === 'ACTIVE' && (() => {
+                        const allResultsDone = weekRaces.length > 0 && weekRaces.every(r => (raceResults[r.id] || []).length > 0)
+                        return (
+                          <button
+                            title={allResultsDone ? undefined : 'Enter all results before completing'}
+                            disabled={!allResultsDone}
+                            onClick={e => { e.stopPropagation(); completeWeek(week) }}
+                            style={{
+                              border: '1px solid #c9a84c', color: '#c9a84c', background: 'transparent',
+                              borderRadius: '6px', padding: '0.25rem 0.75rem',
+                              fontSize: '0.73rem', fontWeight: '600', cursor: allResultsDone ? 'pointer' : 'not-allowed',
+                              fontFamily: "'DM Sans', sans-serif", whiteSpace: 'nowrap', flexShrink: 0,
+                              opacity: allResultsDone ? 1 : 0.35,
+                            }}
+                          >
+                            Complete Week
+                          </button>
+                        )
+                      })()}
                       {isExpanded
                         ? <ChevronUp   size={16} color="#c9a84c" style={{ flexShrink: 0 }} />
                         : <ChevronDown size={16} color="#c9a84c" style={{ flexShrink: 0 }} />
