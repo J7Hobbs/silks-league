@@ -122,7 +122,7 @@ export default function Auth() {
           const { data: { user } } = await supabase.auth.getUser()
           if (user) {
             await supabase.from('profiles')
-              .update({ username: form.username.trim() })
+              .update({ username: form.username.trim(), full_name: form.fullName.trim(), email: form.email.trim() })
               .eq('id', user.id)
           }
         } catch (_) {}

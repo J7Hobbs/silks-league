@@ -208,6 +208,11 @@ export default function Admin() {
   // ── Festivals ──
   const [festivals, setFestivals]                     = useState([])
   const [selectedFestival, setSelectedFestival]       = useState(null)
+
+  // ── Users ──
+  const [users,       setUsers]       = useState([])
+  const [userSearch,  setUserSearch]  = useState('')
+  const [usersLoaded, setUsersLoaded] = useState(false)
   const [festivalDays, setFestivalDays]               = useState([])
   const [selectedDay, setSelectedDay]                 = useState(null)
   const [festivalRaces, setFestivalRaces]             = useState([])
@@ -1364,6 +1369,46 @@ export default function Admin() {
     if (first) await loadFestivalDays(first.id)
   }
 
+  async function loadUsers() {
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, username, full_name, email, created_at')
+      .order('created_at', { ascending: false })
+    if (!profiles?.length) { setUsers([]); setUsersLoaded(true); return }
+
+    // Group memberships
+    const { data: memberships } = await supabase
+      .from('group_members').select('user_id, groups(name)')
+    const groupsByUser = {}
+    memberships?.forEach(m => {
+      if (!groupsByUser[m.user_id]) groupsByUser[m.user_id] = []
+      if (m.groups?.name) groupsByUser[m.user_id].push(m.groups.name)
+    })
+
+    // Picks count for active season
+    const pickCountByUser = {}
+    const { data: season } = await supabase.from('seasons').select('id').eq('is_active', true).single()
+    if (season) {
+      const { data: weeks } = await supabase.from('race_weeks').select('id').eq('season_id', season.id)
+      const weekIds = (weeks || []).map(w => w.id)
+      if (weekIds.length) {
+        const { data: races } = await supabase.from('races').select('id').in('race_week_id', weekIds)
+        const raceIds = (races || []).map(r => r.id)
+        if (raceIds.length) {
+          const { data: picks } = await supabase.from('picks').select('user_id').in('race_id', raceIds)
+          picks?.forEach(p => { pickCountByUser[p.user_id] = (pickCountByUser[p.user_id] || 0) + 1 })
+        }
+      }
+    }
+
+    setUsers(profiles.map(p => ({
+      ...p,
+      groups:    groupsByUser[p.id]?.join(', ') || '—',
+      pickCount: pickCountByUser[p.id] || 0,
+    })))
+    setUsersLoaded(true)
+  }
+
   async function selectFestivalById(festival) {
     setSelectedFestival(festival)
     setFestivalDays([])
@@ -1707,6 +1752,7 @@ export default function Admin() {
     { id: 'results',     label: '03 · Results'     },
     { id: 'leaderboard', label: '04 · Leaderboard' },
     { id: 'festivals',   label: '05 · Festivals'   },
+    { id: 'users',       label: '06 · Users'       },
   ]
 
   return (
@@ -1727,7 +1773,7 @@ export default function Admin() {
           {TABS.map(tab => (
             <button key={tab.id}
               style={{ ...st.tabBtn, ...(activeTab === tab.id ? st.tabBtnActive : {}) }}
-              onClick={() => { setActiveTab(tab.id); if (tab.id === 'leaderboard') loadLeaderboard(); if (tab.id === 'festivals') loadFestivals() }}>
+              onClick={() => { setActiveTab(tab.id); if (tab.id === 'leaderboard') loadLeaderboard(); if (tab.id === 'festivals') loadFestivals(); if (tab.id === 'users' && !usersLoaded) loadUsers() }}>
               {tab.label}
             </button>
           ))}
@@ -3220,6 +3266,67 @@ runners: 6`}</code>
           </div>
         )}
 
+
+        {/* ══════════════ 06 · USERS TAB ══════════════ */}
+        {activeTab === 'users' && (
+          <div style={st.section}>
+            <div style={st.sectionHeader}>
+              <h2 style={st.sectionTitle}>Users</h2>
+              <span style={{ fontSize: '0.8rem', color: '#5a8a5a' }}>{users.length} registered</span>
+            </div>
+
+            {/* Search */}
+            <input
+              type="text"
+              placeholder="Search by username or name…"
+              value={userSearch}
+              onChange={e => setUserSearch(e.target.value)}
+              style={{ ...st.input, marginBottom: '0.25rem', maxWidth: '360px' }}
+            />
+
+            {!usersLoaded ? (
+              <div style={{ color: '#5a8a5a', fontSize: '0.875rem', padding: '2rem 0' }}>Loading users…</div>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                {/* Header row */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1.4fr 1.8fr 1fr 1.4fr 0.8fr', gap: '0.5rem', padding: '0.6rem 1rem', background: 'rgba(0,0,0,0.2)', borderRadius: '6px 6px 0 0', fontSize: '0.68rem', fontWeight: '700', letterSpacing: '0.08em', textTransform: 'uppercase', color: '#5a8a5a', minWidth: '680px' }}>
+                  <span>Username</span>
+                  <span>Full Name</span>
+                  <span>Email</span>
+                  <span>Joined</span>
+                  <span>Groups</span>
+                  <span style={{ textAlign: 'right' }}>Picks</span>
+                </div>
+                {users
+                  .filter(u => {
+                    if (!userSearch.trim()) return true
+                    const q = userSearch.toLowerCase()
+                    return (u.username || '').toLowerCase().includes(q) || (u.full_name || '').toLowerCase().includes(q)
+                  })
+                  .map((u, idx, arr) => (
+                    <div
+                      key={u.id}
+                      style={{ display: 'grid', gridTemplateColumns: '1.4fr 1.4fr 1.8fr 1fr 1.4fr 0.8fr', gap: '0.5rem', padding: '0.7rem 1rem', background: idx % 2 === 0 ? 'rgba(201,168,76,0.02)' : 'transparent', borderBottom: idx < arr.length - 1 ? '1px solid rgba(201,168,76,0.07)' : 'none', fontSize: '0.84rem', color: '#e8f0e8', alignItems: 'center', minWidth: '680px' }}>
+                      <span style={{ fontWeight: '600', color: '#c9a84c', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.username || <span style={{ color: '#5a8a5a', fontStyle: 'italic' }}>—</span>}</span>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.full_name || <span style={{ color: '#5a8a5a', fontStyle: 'italic' }}>—</span>}</span>
+                      <span style={{ color: '#5a8a5a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.email || <span style={{ fontStyle: 'italic' }}>—</span>}</span>
+                      <span style={{ color: '#5a8a5a', whiteSpace: 'nowrap' }}>{u.created_at ? new Date(u.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}</span>
+                      <span style={{ color: '#5a8a5a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.groups}</span>
+                      <span style={{ textAlign: 'right', fontFamily: "'Bebas Neue', sans-serif", fontSize: '1rem', color: u.pickCount > 0 ? '#c9a84c' : '#5a8a5a' }}>{u.pickCount}</span>
+                    </div>
+                  ))
+                }
+                {users.filter(u => {
+                  if (!userSearch.trim()) return true
+                  const q = userSearch.toLowerCase()
+                  return (u.username || '').toLowerCase().includes(q) || (u.full_name || '').toLowerCase().includes(q)
+                }).length === 0 && (
+                  <div style={{ padding: '2rem', textAlign: 'center', color: '#5a8a5a', fontSize: '0.875rem' }}>No users match your search.</div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
       </main>
     </div>
