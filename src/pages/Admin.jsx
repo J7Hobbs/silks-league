@@ -1360,6 +1360,99 @@ export default function Admin() {
   }
 
 
+  // ── Festival runner withdraw / reinstate ─────────────────────
+  async function withdrawFestivalRunner(runner, raceId) {
+    setLoading(true)
+    // Find the favourite for this race (lowest odds_decimal, not already withdrawn, not this runner)
+    const { data: raceRunners } = await supabase
+      .from('festival_runners')
+      .select('id, horse_name, odds_decimal, odds_fractional')
+      .eq('festival_race_id', raceId)
+      .eq('is_withdrawn', false)
+      .neq('id', runner.id)
+      .order('odds_decimal', { ascending: true })
+      .limit(1)
+    setLoading(false)
+
+    const favourite = raceRunners?.[0] || null
+
+    if (!favourite) {
+      confirm(
+        `Cannot withdraw ${runner.horse_name}`,
+        `No valid favourite found — all other runners may also be withdrawn. Please handle this manually.`,
+        () => {}
+      )
+      return
+    }
+
+    const oddsDisplay = favourite.odds_fractional || (favourite.odds_decimal ? `${favourite.odds_decimal}` : '?')
+
+    confirm(
+      `Mark ${runner.horse_name} as withdrawn?`,
+      `Any players who picked this horse will automatically be switched to the race favourite: ${favourite.horse_name} (${oddsDisplay}).`,
+      async () => {
+        setLoading(true)
+
+        // 1. Mark runner as withdrawn
+        const { error: wdErr } = await supabase.from('festival_runners').update({ is_withdrawn: true }).eq('id', runner.id)
+        if (wdErr) { showToast('error', wdErr.message); setLoading(false); return }
+
+        // 2. Find all festival picks for this withdrawn runner
+        const { data: affectedPicks } = await supabase
+          .from('festival_picks').select('id').eq('runner_id', runner.id)
+
+        // 3. Update each affected pick — switch to favourite and record the replacement
+        if (affectedPicks?.length) {
+          const { error: pickErr } = await supabase.from('festival_picks').update({
+            runner_id:          favourite.id,
+            original_runner_id: runner.id,
+            was_replaced:       true,
+            replacement_reason: 'Horse withdrawn — replaced with race favourite',
+          }).eq('runner_id', runner.id)
+          if (pickErr) showToast('error', `Withdrawal saved but pick update failed: ${pickErr.message}`)
+        }
+
+        await loadFestivalRunners(raceId)
+        setLoading(false)
+        const pickCount = affectedPicks?.length || 0
+        showToast('success', `${runner.horse_name} withdrawn — ${pickCount} pick${pickCount !== 1 ? 's' : ''} switched to ${favourite.horse_name}`)
+      }
+    )
+  }
+
+  async function reinstateFestivalRunner(runner, raceId) {
+    confirm(
+      `Reinstate ${runner.horse_name}?`,
+      `The horse will be reinstated. Any auto-replaced picks will be reverted back to this horse.`,
+      async () => {
+        setLoading(true)
+
+        // 1. Reinstate the runner
+        const { error: reErr } = await supabase.from('festival_runners').update({ is_withdrawn: false }).eq('id', runner.id)
+        if (reErr) { showToast('error', reErr.message); setLoading(false); return }
+
+        // 2. Revert any picks that were auto-replaced from this runner
+        const { data: replacedPicks } = await supabase
+          .from('festival_picks').select('id').eq('original_runner_id', runner.id).eq('was_replaced', true)
+
+        if (replacedPicks?.length) {
+          const { error: revertErr } = await supabase.from('festival_picks').update({
+            runner_id:          runner.id,
+            original_runner_id: null,
+            was_replaced:       false,
+            replacement_reason: null,
+          }).eq('original_runner_id', runner.id).eq('was_replaced', true)
+          if (revertErr) showToast('error', `Reinstated but pick revert failed: ${revertErr.message}`)
+        }
+
+        await loadFestivalRunners(raceId)
+        const revertCount = replacedPicks?.length || 0
+        setLoading(false)
+        showToast('success', `${runner.horse_name} reinstated${revertCount > 0 ? ` — ${revertCount} pick${revertCount !== 1 ? 's' : ''} reverted` : ''}`)
+      }
+    )
+  }
+
   // ── Festival loaders ──────────────────────────────────────────
   async function loadFestivals() {
     const { data } = await supabase.from('festivals').select('*').order('start_date', { ascending: false })
@@ -3232,15 +3325,25 @@ runners: 6`}</code>
                                   <div style={st.runnersSection}>
                                     <div style={st.runnersLabel}>{rRunners.length} Runners</div>
                                     {rRunners.map(r => (
-                                      <div key={r.id} style={st.runnerCard}>
+                                      <div key={r.id} style={{ ...st.runnerCard, ...(r.is_withdrawn ? { opacity: 0.6, borderColor: 'rgba(239,68,68,0.3)' } : {}) }}>
                                         <div style={st.runnerCardRow}>
                                           <div style={st.runnerCardLeft}>
                                             {r.silk_colour && <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: r.silk_colour, border: '1px solid rgba(255,255,255,0.2)', flexShrink: 0 }} />}
                                             <span style={st.runnerNum}>{r.horse_number}</span>
-                                            <span style={{ fontWeight: '600', fontSize: '0.875rem', color: '#e8f0e8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.horse_name}</span>
-                                            {r.odds_fractional && <span style={{ fontSize: '0.72rem', color: '#c9a84c' }}>{r.odds_fractional}</span>}
+                                            <span style={{ fontWeight: '600', fontSize: '0.875rem', color: r.is_withdrawn ? '#9ca3af' : '#e8f0e8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: r.is_withdrawn ? 'line-through' : 'none' }}>{r.horse_name}</span>
+                                            {r.odds_fractional && <span style={{ fontSize: '0.72rem', color: r.is_withdrawn ? '#9ca3af' : '#c9a84c' }}>{r.odds_fractional}</span>}
+                                            {r.is_withdrawn && <span style={{ fontSize: '0.62rem', fontWeight: '700', color: '#f87171', background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '4px', padding: '0.1rem 0.35rem' }}>WD</span>}
                                           </div>
-                                          <button style={st.btnSmallDanger} onClick={async () => { await supabase.from('festival_runners').delete().eq('id', r.id); loadFestivalRunners(race.id) }}>✕</button>
+                                          <div style={{ display: 'flex', gap: '0.4rem', flexShrink: 0 }}>
+                                            {r.is_withdrawn ? (
+                                              <button style={{ ...st.btnSmallGhost, color: '#4ade80', borderColor: 'rgba(74,222,128,0.35)' }} onClick={() => reinstateFestivalRunner(r, race.id)}>Reinstate</button>
+                                            ) : (
+                                              <button style={{ ...st.btnSmallGhost, color: '#fbbf24', borderColor: 'rgba(251,191,36,0.35)' }} onClick={() => withdrawFestivalRunner(r, race.id)}>Withdraw</button>
+                                            )}
+                                            {!r.is_withdrawn && (
+                                              <button style={st.btnSmallDanger} onClick={async () => { await supabase.from('festival_runners').delete().eq('id', r.id); loadFestivalRunners(race.id) }}>✕</button>
+                                            )}
+                                          </div>
                                         </div>
                                       </div>
                                     ))}
