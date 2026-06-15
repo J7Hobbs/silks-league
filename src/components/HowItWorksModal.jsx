@@ -45,16 +45,25 @@ export default function HowItWorksModal({ open, onClose }) {
           {/* 1 — The Basics */}
           <Section label="The Basics">
             Every Saturday, 7 races are selected from across the UK racing card. Pick one horse per race
-            before the 12pm Saturday deadline. Simple as that.
+            before the 12pm Saturday deadline. During festival weeks like Royal Ascot, additional daily
+            races are also available alongside the Saturday league — giving you more chances to score points.
           </Section>
 
           {/* 2 — Making Your Picks */}
           <Section label="Making Your Picks">
             Head to the Picks screen before 12pm on Saturday. Choose one horse per race. Once picks lock
-            at 12pm they're final — no changes.
+            at 12pm they're final — no changes. During festivals, picks for each day's races also close
+            at 12pm on that day.
           </Section>
 
-          {/* 3 — Scoring */}
+          {/* 3 — Non-Runners */}
+          <Section label="Non-Runners">
+            If your selected horse is withdrawn from a race before the off, you'll automatically be
+            assigned the race favourite based on the current odds. You'll see a notification on your
+            picks screen showing your original pick and your replacement.
+          </Section>
+
+          {/* 4 — Scoring */}
           <div style={m.card}>
             <div style={m.sectionLabel}>Scoring</div>
             <div style={m.scoreGrid}>
@@ -78,7 +87,7 @@ export default function HowItWorksModal({ open, onClose }) {
             <div style={m.scoreNote}>Maximum 40 points per race &nbsp;·&nbsp; 280 points per week</div>
           </div>
 
-          {/* 4 — Odds Bonus */}
+          {/* 5 — Odds Bonus */}
           <div style={m.card}>
             <div style={m.sectionLabel}>Odds Bonus</div>
             <div style={m.oddsNote}>
@@ -127,7 +136,9 @@ export default function HowItWorksModal({ open, onClose }) {
           {/* 8 — Festivals */}
           <Section label="Festivals">
             During major race meetings like Royal Ascot and Cheltenham, special festival tournaments run
-            alongside the regular weekly game with their own separate leaderboard.
+            alongside the regular weekly game with their own separate leaderboard. Festivals span multiple
+            days — picks close at 12pm each day, and the same scoring system applies. Points accumulate
+            across all days of the festival, with a combined leaderboard updated after each day's racing.
           </Section>
 
         </div>
