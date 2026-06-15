@@ -230,27 +230,51 @@ export default function League() {
   }
 
   // ── Festival leaderboard helper ───────────────────────────────
+  // Returns { rows, festDays } where rows include dayPts: { [dayNumber]: pts }
   async function fetchFestivalRows(fest, memberIds, myUserId) {
-    const { data: days } = await supabase
-      .from('festival_days').select('id').eq('festival_id', fest.id)
-    if (!days?.length) return []
+    const { data: daysData } = await supabase
+      .from('festival_days').select('id, day_number, race_date').eq('festival_id', fest.id).order('day_number')
+    if (!daysData?.length) return { rows: [], festDays: [] }
     const { data: races } = await supabase
-      .from('festival_races').select('id').in('festival_day_id', days.map(d => d.id))
+      .from('festival_races').select('id').in('festival_day_id', daysData.map(d => d.id))
     const raceIds = (races || []).map(r => r.id)
 
     let entriesQ = supabase.from('festival_entries')
       .select('user_id, starting_points').eq('festival_id', fest.id)
     if (memberIds?.length) entriesQ = entriesQ.in('user_id', memberIds)
     const { data: entries } = await entriesQ
-    if (!entries?.length) return []
+    if (!entries?.length) return { rows: [], festDays: daysData }
 
     const entryUserIds = entries.map(e => e.user_id)
+
+    // Fetch race scores (for totals)
     let scoresData = []
     if (raceIds.length) {
       const { data: sc } = await supabase
         .from('festival_scores').select('user_id, total_points')
         .in('festival_race_id', raceIds).in('user_id', entryUserIds)
       scoresData = sc || []
+    }
+
+    // Fetch day-by-day points from festival_day_points
+    let dayPointsData = []
+    if (memberIds?.length) {
+      const { data: dp } = await supabase
+        .from('festival_day_points').select('user_id, day_number, points')
+        .eq('festival_id', fest.id).in('user_id', memberIds)
+      dayPointsData = dp || []
+    } else {
+      const { data: dp } = await supabase
+        .from('festival_day_points').select('user_id, day_number, points')
+        .eq('festival_id', fest.id).in('user_id', entryUserIds)
+      dayPointsData = dp || []
+    }
+
+    // Build day-points lookup: { userId: { dayNumber: pts } }
+    const dayPtsMap = {}
+    for (const dp of dayPointsData) {
+      if (!dayPtsMap[dp.user_id]) dayPtsMap[dp.user_id] = {}
+      dayPtsMap[dp.user_id][dp.day_number] = dp.points
     }
 
     const totals = {}
@@ -265,13 +289,16 @@ export default function League() {
     const nameMap = {}
     profiles?.forEach(p => { nameMap[p.id] = p.username || p.full_name || null })
 
-    return Object.entries(totals)
+    const rows = Object.entries(totals)
       .sort((a, b) => b[1] - a[1])
       .map(([uid, pts], i) => ({
         rank: i + 1, userId: uid, points: pts,
         name: nameMap[uid] || 'Player',
         isMe: uid === myUserId,
+        dayPts: dayPtsMap[uid] || {},
       }))
+
+    return { rows, festDays: daysData }
   }
 
   // ── Group Saturday helper ─────────────────────────────────────
@@ -347,9 +374,9 @@ export default function League() {
     const fest = festivals.find(f => f.id === tabId)
     if (fest) {
       if (!festData[tabId]?.loaded && !festData[tabId]?.loading) {
-        setFestData(prev => ({ ...prev, [tabId]: { rows: [], loading: true, loaded: false } }))
-        const rows = await fetchFestivalRows(fest, null, myUserId)
-        setFestData(prev => ({ ...prev, [tabId]: { rows, loading: false, loaded: true } }))
+        setFestData(prev => ({ ...prev, [tabId]: { rows: [], festDays: [], loading: true, loaded: false } }))
+        const { rows, festDays } = await fetchFestivalRows(fest, null, myUserId)
+        setFestData(prev => ({ ...prev, [tabId]: { rows, festDays, loading: false, loaded: true } }))
       }
       return
     }
@@ -367,7 +394,7 @@ export default function League() {
         ...festivals.map(f => fetchFestivalRows(f, memberIds, myUserId)),
       ])
       const gFestRows = {}
-      festivals.forEach((f, i) => { gFestRows[f.id] = festRowsArr[i] || [] })
+      festivals.forEach((f, i) => { gFestRows[f.id] = (festRowsArr[i]?.rows) || [] })
 
       setGroupData(prev => ({
         ...prev,
@@ -670,9 +697,9 @@ export default function League() {
             {festData[activeFest.id]?.loading ? (
               <div style={st.loadingInline}>Loading standings…</div>
             ) : (
-              <LeaderboardTable
+              <FestivalDayTable
                 rows={festData[activeFest.id]?.rows || []}
-                completedWeeks={[]}
+                festDays={festData[activeFest.id]?.festDays || []}
                 onPlayerClick={row => setPicksModal({
                   userId: row.userId,
                   name: row.name,
@@ -941,6 +968,119 @@ function WeekLeaderboardCard({ rows, onPlayerClick }) {
           <div style={{ ...st.dataCell, ...st.totalCell }} className="league-col-data">{row.weekPoints}</div>
         </div>
       ))}
+    </div>
+  )
+}
+
+// ── Festival day-by-day leaderboard table ────────────────────
+// Shows # · Player · Day1 · Day2 · … · Total (desktop)
+// Mobile: card per player with day pills
+function FestivalDayTable({ rows, festDays = [], onPlayerClick }) {
+  // Derive short day labels from race_date (e.g. "TUE", "WED")
+  const dayLabels = festDays.map(d => {
+    if (!d.race_date) return `D${d.day_number}`
+    try {
+      return new Date(d.race_date + 'T12:00:00')
+        .toLocaleDateString('en-GB', { weekday: 'short' })
+        .toUpperCase()
+    } catch { return `D${d.day_number}` }
+  })
+
+  const dash = <span style={{ color: 'rgba(90,138,90,0.3)' }}>—</span>
+
+  if (!rows.length) {
+    return (
+      <div style={st.card}>
+        <div style={st.empty}>No entries yet — check back after results are in.</div>
+      </div>
+    )
+  }
+
+  return (
+    <div style={st.card}>
+
+      {/* Desktop */}
+      <div className="league-desktop-only" style={{ overflowX: 'auto' }}>
+        <div style={st.tableHeader} className="league-row">
+          <span style={{ minWidth: '40px' }}>#</span>
+          <span style={{ flex: 1 }}>Player</span>
+          {dayLabels.map((lbl, i) => (
+            <span key={i} style={st.colRight} className="league-col-data">{lbl}</span>
+          ))}
+          <span style={st.colRight} className="league-col-data">Total</span>
+        </div>
+        {rows.map((row, idx) => (
+          <div
+            key={row.userId}
+            className="league-row"
+            style={{ ...st.row, ...(row.isMe ? st.rowMe : {}), ...(idx < rows.length - 1 ? {} : st.rowLast) }}>
+            <div style={st.rankCell}>
+              {row.rank === 1 ? '🥇' : row.rank === 2 ? '🥈' : row.rank === 3 ? '🥉' : (
+                <span style={st.rankNum}>{row.rank}</span>
+              )}
+            </div>
+            <div style={st.nameCell}>
+              <span
+                style={{ ...st.playerName, ...(row.isMe ? st.playerNameMe : {}), cursor: 'pointer', textDecoration: 'underline dotted' }}
+                onClick={() => onPlayerClick(row)}>
+                {row.name}
+              </span>
+              {row.isMe && <span style={st.youBadge}>You</span>}
+            </div>
+            {festDays.map(d => (
+              <div key={d.day_number} style={st.dataCell} className="league-col-data">
+                {row.dayPts?.[d.day_number] !== undefined ? row.dayPts[d.day_number] : dash}
+              </div>
+            ))}
+            <div style={{ ...st.dataCell, ...st.totalCell }} className="league-col-data">
+              {row.points}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Mobile */}
+      <div className="league-mobile-only">
+        {rows.map((row, idx) => (
+          <div
+            key={row.userId}
+            style={{
+              ...st.mobileCard,
+              ...(row.isMe ? st.mobileCardMe : {}),
+              ...(idx < rows.length - 1 ? {} : { borderBottom: 'none' }),
+            }}>
+            <div style={st.mobileCardRank}>
+              {row.rank === 1 ? '🥇' : row.rank === 2 ? '🥈' : row.rank === 3 ? '🥉' : (
+                <span style={st.rankNum}>{row.rank}</span>
+              )}
+            </div>
+            <div style={st.mobileCardMid}>
+              <div style={st.mobileNameRow}>
+                <span
+                  style={{ ...st.playerName, ...(row.isMe ? st.playerNameMe : {}), cursor: 'pointer', textDecoration: 'underline dotted' }}
+                  onClick={() => onPlayerClick(row)}>
+                  {row.name}
+                </span>
+                {row.isMe && <span style={st.youBadge}>You</span>}
+              </div>
+              {festDays.length > 0 && (
+                <div style={st.mobilePillsRow}>
+                  {festDays.map((d, i) => (
+                    <span key={d.day_number} style={st.mobilePill}>
+                      {dayLabels[i]}&nbsp;
+                      <span style={st.mobilePillVal}>
+                        {row.dayPts?.[d.day_number] !== undefined ? row.dayPts[d.day_number] : '—'}
+                      </span>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div style={{ ...st.totalCell, fontSize: '1.4rem' }}>{row.points}</div>
+          </div>
+        ))}
+      </div>
+
     </div>
   )
 }

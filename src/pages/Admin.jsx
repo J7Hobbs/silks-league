@@ -1729,6 +1729,36 @@ export default function Admin() {
 
       const { error: scoreErr } = await supabase.from('festival_scores').insert(scoreRows)
       if (scoreErr) { showToast('error', `Results saved but scores failed: ${scoreErr.message}`); setLoading(false); return }
+
+      // ── Update festival_day_points ──────────────────────────────
+      // Find which day this race belongs to and recalculate the day total for each user
+      const day = festivalDays.find(d => d.id === race.festival_day_id)
+      if (day && selectedFestival) {
+        // Gather all races on this day (including the one just scored)
+        const { data: dayRaces } = await supabase
+          .from('festival_races').select('id').eq('festival_day_id', race.festival_day_id)
+        const dayRaceIds = (dayRaces || []).map(r => r.id)
+        if (dayRaceIds.length) {
+          // Sum festival_scores for all races on this day, grouped by user
+          const { data: dayScores } = await supabase
+            .from('festival_scores').select('user_id, total_points')
+            .in('festival_race_id', dayRaceIds)
+          const dayTotals = {}
+          ;(dayScores || []).forEach(s => {
+            dayTotals[s.user_id] = (dayTotals[s.user_id] || 0) + (s.total_points || 0)
+          })
+          const dayPointsRows = Object.entries(dayTotals).map(([userId, pts]) => ({
+            festival_id: selectedFestival.id,
+            user_id:     userId,
+            day_number:  day.day_number,
+            points:      pts,
+          }))
+          if (dayPointsRows.length) {
+            await supabase.from('festival_day_points')
+              .upsert(dayPointsRows, { onConflict: 'festival_id,user_id,day_number' })
+          }
+        }
+      }
     }
 
     setFestivalUnlocked(prev => { const s = new Set(prev); s.delete(race.id); return s })
