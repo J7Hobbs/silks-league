@@ -89,8 +89,12 @@ export default function Picks() {
     setActiveFestivals(fests || [])
     // Auto-select festival tab if navigated here with festivalTab state (e.g. from Dashboard banner)
     const requestedTab = location.state?.festivalTab
-    if (requestedTab && fests?.some(f => f.id === requestedTab)) {
-      setSelectedTab(requestedTab)
+    if (requestedTab) {
+      const targetFest = fests?.find(f => f.id === requestedTab)
+      if (targetFest) {
+        setSelectedTab(requestedTab)
+        await loadFestivalData(targetFest)
+      }
     }
   }
 
