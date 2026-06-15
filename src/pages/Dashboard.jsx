@@ -447,6 +447,15 @@ export default function Dashboard() {
     const dayNum = Math.min(Math.max(Math.floor((now - festStartDate) / 86400000) + 1, 1), festTotalDays)
     return `Day ${dayNum} of ${festTotalDays} · ${now.toLocaleDateString('en-GB', { weekday: 'long' })}`
   })()
+  const festDayLabelShort = (() => {
+    if (!festStartDate || !festTotalDays) return '—'
+    if (beforeFestival) {
+      const startWeekday = festStartDate.toLocaleDateString('en-GB', { weekday: 'short' })
+      return `Day 1 · ${startWeekday}`
+    }
+    const dayNum = Math.min(Math.max(Math.floor((now - festStartDate) / 86400000) + 1, 1), festTotalDays)
+    return `Day ${dayNum} · ${now.toLocaleDateString('en-GB', { weekday: 'short' })}`
+  })()
   // PICKS CLOSE — count down to 12:00pm on the next relevant festival day
   const picksDeadline = (() => {
     const target = beforeFestival ? new Date(festStartDate) : new Date(now)
@@ -545,7 +554,10 @@ export default function Dashboard() {
                 <div style={s.festStrip}>
                   <div style={s.festStripCol}>
                     <div style={s.festStripLabel}>RACE DAY</div>
-                    <div style={{ ...s.festStripVal, color: '#e8f0e8' }}>{festDayLabel}</div>
+                    <div style={{ ...s.festStripVal, color: '#e8f0e8' }}>
+                      <span className="league-desktop-only">{festDayLabel}</span>
+                      <span className="league-mobile-only">{festDayLabelShort}</span>
+                    </div>
                   </div>
                   <div style={s.festStripSep} />
                   <div style={s.festStripCol}>
