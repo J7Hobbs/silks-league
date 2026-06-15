@@ -394,7 +394,12 @@ export default function League() {
         ...festivals.map(f => fetchFestivalRows(f, memberIds, myUserId)),
       ])
       const gFestRows = {}
-      festivals.forEach((f, i) => { gFestRows[f.id] = (festRowsArr[i]?.rows) || [] })
+      festivals.forEach((f, i) => {
+        gFestRows[f.id] = {
+          rows:     (festRowsArr[i]?.rows)     || [],
+          festDays: (festRowsArr[i]?.festDays) || [],
+        }
+      })
 
       setGroupData(prev => ({
         ...prev,
@@ -507,6 +512,7 @@ export default function League() {
 
   // Group display rows
   let groupDisplayRows = []
+  let groupFestDays    = []
   let isGroupSatSubTab = false
   if (currentGroupData?.loaded) {
     const gSubTab = currentGroupData.subTab
@@ -514,7 +520,8 @@ export default function League() {
     if (gSubTab === 'saturday') {
       groupDisplayRows = currentGroupData.satRows || []
     } else {
-      groupDisplayRows = currentGroupData.festRows?.[gSubTab] || []
+      groupDisplayRows = currentGroupData.festRows?.[gSubTab]?.rows     || []
+      groupFestDays    = currentGroupData.festRows?.[gSubTab]?.festDays || []
     }
   }
 
@@ -750,16 +757,29 @@ export default function League() {
                   ))}
                 </div>
 
-                <LeaderboardTable
-                  rows={groupDisplayRows}
-                  completedWeeks={isGroupSatSubTab ? completedWeeks : []}
-                  onPlayerClick={row => setPicksModal({
-                    userId: row.userId,
-                    name: row.name,
-                    pts: row.points,
-                    rank: row.rank,
-                  })}
-                />
+                {isGroupSatSubTab ? (
+                  <LeaderboardTable
+                    rows={groupDisplayRows}
+                    completedWeeks={completedWeeks}
+                    onPlayerClick={row => setPicksModal({
+                      userId: row.userId,
+                      name: row.name,
+                      pts: row.points,
+                      rank: row.rank,
+                    })}
+                  />
+                ) : (
+                  <FestivalDayTable
+                    rows={groupDisplayRows}
+                    festDays={groupFestDays}
+                    onPlayerClick={row => setPicksModal({
+                      userId: row.userId,
+                      name: row.name,
+                      pts: row.points,
+                      rank: row.rank,
+                    })}
+                  />
+                )}
               </>
             ) : null}
           </>
