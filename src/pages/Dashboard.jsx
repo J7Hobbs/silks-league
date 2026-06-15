@@ -517,29 +517,6 @@ export default function Dashboard() {
           </section>
         )}
 
-        {/* Stat pills */}
-        <section style={s.pillsRow}>
-          <div style={s.pill}>
-            <span style={s.pillIcon}>⭐</span>
-            <div>
-              <div style={s.pillValue}>{seasonPoints !== null ? seasonPoints : '—'}</div>
-              <div style={s.pillLabel}>My Points this season</div>
-            </div>
-          </div>
-          <div style={s.pill}>
-            <span style={s.pillIcon}>🏆</span>
-            <div>
-              <div style={s.pillValue}>
-                {myRank ? `#${myRank}` : '—'}
-                {myRank && leaderboard.length > 0 && (
-                  <span style={s.pillValueSub}> / {leaderboard.length}</span>
-                )}
-              </div>
-              <div style={s.pillLabel}>League Rank</div>
-            </div>
-          </div>
-        </section>
-
         {/* Next race day countdown */}
         <style>{`@media(min-width:768px){.nrd-mb{display:none !important}.nrd-dt{display:flex !important}}@media(max-width:767px){.dash-two-col{grid-template-columns:1fr!important;width:100%}.dash-two-col>*{min-width:0;width:100%}}`}</style>
         <div style={s.card}>
@@ -609,6 +586,29 @@ export default function Dashboard() {
           </div>
 
         </div>
+
+        {/* Stat pills */}
+        <section style={s.pillsRow}>
+          <div style={s.pill}>
+            <span style={s.pillIcon}>⭐</span>
+            <div>
+              <div style={s.pillValue}>{seasonPoints !== null ? seasonPoints : '—'}</div>
+              <div style={s.pillLabel}>My Points this season</div>
+            </div>
+          </div>
+          <div style={s.pill}>
+            <span style={s.pillIcon}>🏆</span>
+            <div>
+              <div style={s.pillValue}>
+                {myRank ? `#${myRank}` : '—'}
+                {myRank && leaderboard.length > 0 && (
+                  <span style={s.pillValueSub}> / {leaderboard.length}</span>
+                )}
+              </div>
+              <div style={s.pillLabel}>League Rank</div>
+            </div>
+          </div>
+        </section>
 
         {/* Main two-column grid */}
         <section style={s.twoCol} className="dash-two-col">
