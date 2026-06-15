@@ -16,6 +16,7 @@ import PlayerPicks         from './pages/PlayerPicks.jsx'
 import Account             from './pages/Account.jsx'
 import FestivalPicks       from './pages/FestivalPicks.jsx'
 import FestivalLeaderboard from './pages/FestivalLeaderboard.jsx'
+import FestivalResults     from './pages/FestivalResults.jsx'
 import InstallPrompt       from './components/InstallPrompt.jsx'
 
 createRoot(document.getElementById('root')).render(
@@ -35,7 +36,8 @@ createRoot(document.getElementById('root')).render(
         <Route path="/player-picks/:userId"    element={<PlayerPicks />}         />
         <Route path="/account"               element={<Account />}             />
         <Route path="/festival-picks"        element={<FestivalPicks />}       />
-        <Route path="/festival-leaderboard"  element={<FestivalLeaderboard />} />
+        <Route path="/festival-leaderboard"        element={<FestivalLeaderboard />}           />
+        <Route path="/results/festival/:festivalId" element={<FestivalResults />}              />
       </Routes>
       <InstallPrompt />
     </BrowserRouter>

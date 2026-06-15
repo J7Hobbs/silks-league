@@ -31,6 +31,10 @@ export default function Results() {
   const [weekStandings, setWeekStandings] = useState([])    // [{ userId, name, points, isMe }]
   const [picksModal,    setPicksModal]    = useState(null)  // { userId, name, pts, rank }
 
+  // Festivals
+  const [myFestivals, setMyFestivals] = useState([])
+  const [festLoading, setFestLoading] = useState(false)
+
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (!user) { navigate('/auth'); return }
@@ -38,7 +42,7 @@ export default function Results() {
       const { data: profile } = await supabase
         .from('profiles').select('is_admin').eq('id', user.id).single()
       setIsAdmin(profile?.is_admin || false)
-      await init(user.id)
+      await Promise.all([init(user.id), loadMyFestivals(user.id)])
       setPageLoading(false)
     })
   }, [navigate])
@@ -181,6 +185,59 @@ export default function Results() {
     await loadWeekData(user.id, weeks[newIdx])
   }
 
+  // ── Festival entries ─────────────────────────────────────────
+  async function loadMyFestivals(userId) {
+    setFestLoading(true)
+    try {
+      const { data: entries } = await supabase
+        .from('festival_entries')
+        .select('festival_id, starting_points, festivals(*)')
+        .eq('user_id', userId)
+      if (!entries?.length) { setMyFestivals([]); return }
+
+      const results = await Promise.all(entries.map(async entry => {
+        const fest = entry.festivals
+        if (!fest) return null
+
+        const { data: days } = await supabase
+          .from('festival_days').select('id').eq('festival_id', fest.id)
+        const dayIds = (days || []).map(d => d.id)
+
+        let userTotal = entry.starting_points || 0
+        let rank = 1
+        let totalEntrants = 1
+
+        if (dayIds.length) {
+          const { data: races } = await supabase
+            .from('festival_races').select('id').in('festival_day_id', dayIds)
+          const raceIds = (races || []).map(r => r.id)
+          if (raceIds.length) {
+            const [{ data: myScores }, { data: allEntries }, { data: allScores }] = await Promise.all([
+              supabase.from('festival_scores').select('total_points').eq('user_id', userId).in('festival_race_id', raceIds),
+              supabase.from('festival_entries').select('user_id, starting_points').eq('festival_id', fest.id),
+              supabase.from('festival_scores').select('user_id, total_points').in('festival_race_id', raceIds),
+            ])
+            userTotal += (myScores || []).reduce((s, sc) => s + (sc.total_points || 0), 0)
+            const byUser = {}
+            ;(allEntries || []).forEach(e => { byUser[e.user_id] = e.starting_points || 0 })
+            ;(allScores  || []).forEach(s => { if (byUser[s.user_id] !== undefined) byUser[s.user_id] += s.total_points || 0 })
+            totalEntrants = Object.keys(byUser).length
+            rank = Object.values(byUser).filter(t => t > userTotal).length + 1
+          }
+        }
+
+        return {
+          id: fest.id, name: fest.display_name || fest.name,
+          startDate: fest.start_date, endDate: fest.end_date,
+          isActive: fest.is_active, userTotal, rank, totalEntrants,
+        }
+      }))
+      setMyFestivals(results.filter(Boolean))
+    } finally {
+      setFestLoading(false)
+    }
+  }
+
   // ── Helpers ──────────────────────────────────────────────────
   function formatWeekLabel(week) {
     if (!week) return ''
@@ -215,6 +272,13 @@ export default function Results() {
       if (next.has(raceId)) next.delete(raceId); else next.add(raceId)
       return next
     })
+  }
+
+  function fmtDate(ds) {
+    if (!ds) return ''
+    try {
+      return new Date(ds + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+    } catch { return ds }
   }
 
   const handleSignOut = async () => { await supabase.auth.signOut(); navigate('/auth') }
@@ -268,6 +332,9 @@ export default function Results() {
           <h1 style={st.heading}>My Results</h1>
           <p style={st.sub}>How your picks performed each week</p>
         </div>
+
+        {/* Section heading */}
+        <h2 style={st.sectionHeading}>SATURDAY LEAGUE</h2>
 
         {/* Week selector */}
         {weeks.length === 0 ? (
@@ -499,6 +566,47 @@ export default function Results() {
             )}
           </>
         )}
+        {/* ── RACING FESTIVALS ── */}
+        <h2 style={st.sectionHeading}>RACING FESTIVALS</h2>
+
+        {festLoading ? (
+          <div style={st.weekSpinner}><div style={st.loadingDot} /></div>
+        ) : myFestivals.length === 0 ? (
+          <div style={st.emptyMuted}>No festivals entered yet.</div>
+        ) : (
+          myFestivals.map(f => (
+            <div key={f.id} style={st.festCard}>
+              <div style={st.festCardTop}>
+                <div>
+                  <div style={st.festCardBadge}>
+                    👑 {f.isActive ? 'Live Now' : 'Completed'}
+                  </div>
+                  <div style={st.festCardName}>{f.name}</div>
+                  <div style={st.festCardDates}>{fmtDate(f.startDate)} — {fmtDate(f.endDate)}</div>
+                </div>
+                <div style={st.festCardStats}>
+                  <div style={st.festStatBlock}>
+                    <div style={st.festStatVal}>{f.userTotal}</div>
+                    <div style={st.festStatLbl}>pts</div>
+                  </div>
+                  <div style={st.festStatDivider} />
+                  <div style={st.festStatBlock}>
+                    <div style={st.festStatVal}>#{f.rank}</div>
+                    <div style={st.festStatLbl}>of {f.totalEntrants}</div>
+                  </div>
+                </div>
+              </div>
+              <div style={st.festCardFooter}>
+                <button
+                  style={st.festViewBtn}
+                  onClick={() => navigate(`/results/festival/${f.id}`)}>
+                  View Results →
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+
       </main>
 
       {/* ── Mobile bar ── */}
@@ -810,6 +918,56 @@ const st = {
     whiteSpace: 'nowrap',
   },
   finisherSP: { fontSize: '0.78rem', color: '#5a8a5a', minWidth: '36px', textAlign: 'right' },
+
+  // Section headings
+  sectionHeading: {
+    fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.5rem',
+    color: '#e8f0e8', letterSpacing: '0.08em', margin: 0,
+    paddingBottom: '0.25rem', borderBottom: '1px solid rgba(201,168,76,0.15)',
+  },
+
+  // Festival cards
+  emptyMuted: {
+    color: '#5a8a5a', fontSize: '0.9rem', fontStyle: 'italic',
+    padding: '1.5rem 0',
+  },
+  festCard: {
+    background: 'linear-gradient(135deg, #162a1a 0%, #0e200e 100%)',
+    border: '1px solid rgba(201,168,76,0.25)', borderLeft: '4px solid #c9a84c',
+    borderRadius: '10px', overflow: 'hidden',
+  },
+  festCardTop: {
+    display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
+    padding: '1.25rem 1.5rem', gap: '1rem', flexWrap: 'wrap',
+  },
+  festCardBadge: {
+    fontSize: '0.65rem', fontWeight: '700', letterSpacing: '0.1em',
+    textTransform: 'uppercase', color: '#c9a84c', marginBottom: '0.35rem',
+  },
+  festCardName: {
+    fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.6rem',
+    color: '#fff', letterSpacing: '0.04em', lineHeight: 1.1,
+  },
+  festCardDates: { fontSize: '0.8rem', color: 'rgba(232,240,232,0.5)', marginTop: '0.2rem' },
+  festCardStats: { display: 'flex', alignItems: 'center', gap: '1rem', flexShrink: 0 },
+  festStatBlock: { textAlign: 'center' },
+  festStatVal: {
+    fontFamily: "'Bebas Neue', sans-serif", fontSize: '2rem',
+    color: '#c9a84c', lineHeight: 1,
+  },
+  festStatLbl: { fontSize: '0.62rem', color: 'rgba(201,168,76,0.6)', textTransform: 'uppercase', letterSpacing: '0.08em' },
+  festStatDivider: { width: '1px', height: '40px', background: 'rgba(201,168,76,0.2)' },
+  festCardFooter: {
+    padding: '0.75rem 1.5rem',
+    borderTop: '1px solid rgba(201,168,76,0.1)',
+    background: 'rgba(0,0,0,0.1)',
+  },
+  festViewBtn: {
+    background: '#c9a84c', border: 'none', color: '#0a1a08',
+    borderRadius: '7px', padding: '0.5rem 1.1rem',
+    fontFamily: "'DM Sans', sans-serif", fontWeight: '700', fontSize: '0.875rem',
+    cursor: 'pointer',
+  },
 
   // Mobile bar
   mobileBar: {
