@@ -430,6 +430,25 @@ export default function Dashboard() {
   const festStartDate     = festival ? new Date(festival.start_date + 'T00:00:00') : null
   const festDaysUntil     = festStartDate ? Math.ceil((festStartDate - now) / 86400000) : null
 
+  // Festival stat strip computations
+  const festTotalDays  = (festival && festival.end_date)
+    ? Math.round((new Date(festival.end_date + 'T00:00:00') - new Date(festival.start_date + 'T00:00:00')) / 86400000) + 1
+    : null
+  const festDayNum     = (festStartDate && festTotalDays)
+    ? Math.min(Math.max(Math.floor((now - festStartDate) / 86400000) + 1, 1), festTotalDays)
+    : null
+  const festDayLabel   = (festDayNum && festTotalDays)
+    ? `Day ${festDayNum} of ${festTotalDays} · ${now.toLocaleDateString('en-GB', { weekday: 'long' })}`
+    : '—'
+  const picksDeadline  = (() => { const d = new Date(now); d.setHours(12, 0, 0, 0); return d })()
+  const msToClose      = picksDeadline - now
+  const picksClosed    = msToClose <= 0
+  const picksCloseH    = picksClosed ? 0 : Math.floor(msToClose / 3600000)
+  const picksCloseM    = picksClosed ? 0 : Math.floor((msToClose % 3600000) / 60000)
+  const picksCloseLabel = picksClosed
+    ? 'Closed'
+    : picksCloseH > 0 ? `${picksCloseH}h ${picksCloseM}m` : `${picksCloseM}m`
+
   // Countdown blocks
   const getNextSat = () => {
     const d = new Date(now)
@@ -514,6 +533,31 @@ export default function Dashboard() {
                 </button>
               </div>
             </div>
+            {festIsLive && (
+              <>
+                <div style={s.festStripDivider} />
+                <div style={s.festStrip}>
+                  <div style={s.festStripCol}>
+                    <div style={s.festStripLabel}>TODAY</div>
+                    <div style={{ ...s.festStripVal, color: '#e8f0e8' }}>{festDayLabel}</div>
+                  </div>
+                  <div style={s.festStripSep} />
+                  <div style={s.festStripCol}>
+                    <div style={s.festStripLabel}>PICKS CLOSE</div>
+                    <div style={{ ...s.festStripVal, color: picksClosed ? 'rgba(232,240,232,0.35)' : '#c9a84c' }}>
+                      {picksCloseLabel}
+                    </div>
+                  </div>
+                  <div style={s.festStripSep} />
+                  <div style={s.festStripCol}>
+                    <div style={s.festStripLabel}>YOUR POINTS</div>
+                    <div style={{ ...s.festStripVal, color: '#c9a84c' }}>
+                      {festivalPoints !== null ? `${festivalPoints} pts` : '0 pts'}
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
           </section>
         )}
 
@@ -830,7 +874,13 @@ const s = {
   festPtsVal: { fontFamily: "'Bebas Neue', sans-serif", fontSize: '2.4rem', color: '#c9a84c', lineHeight: 1 },
   festPtsLbl: { fontSize: '0.63rem', color: 'rgba(201,168,76,0.7)', textTransform: 'uppercase', letterSpacing: '0.1em' },
   festJoinBtn: { background: 'rgba(201,168,76,0.15)', border: '1.5px solid #c9a84c', color: '#c9a84c', borderRadius: '8px', padding: '0.55rem 1.2rem', fontFamily: "'DM Sans', sans-serif", fontWeight: '600', fontSize: '0.875rem', cursor: 'pointer', whiteSpace: 'nowrap' },
-  festViewBtn: { background: '#c9a84c', border: 'none', color: '#0a1a08', borderRadius: '8px', padding: '0.55rem 1.2rem', fontFamily: "'DM Sans', sans-serif", fontWeight: '700', fontSize: '0.875rem', cursor: 'pointer', whiteSpace: 'nowrap' },
+  festViewBtn:      { background: '#c9a84c', border: 'none', color: '#0a1a08', borderRadius: '8px', padding: '0.55rem 1.2rem', fontFamily: "'DM Sans', sans-serif", fontWeight: '700', fontSize: '0.875rem', cursor: 'pointer', whiteSpace: 'nowrap' },
+  festStripDivider: { height: '1px', background: 'rgba(201,168,76,0.25)' },
+  festStrip:        { display: 'grid', gridTemplateColumns: '1fr auto 1fr auto 1fr', alignItems: 'center', background: 'rgba(0,0,0,0.2)', padding: '0.85rem 2rem' },
+  festStripCol:     { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem', padding: '0 0.5rem' },
+  festStripLabel:   { fontSize: '0.62rem', fontWeight: '700', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(232,240,232,0.45)', fontFamily: "'DM Sans', sans-serif" },
+  festStripVal:     { fontSize: '14px', fontWeight: '700', fontFamily: "'DM Sans', sans-serif" },
+  festStripSep:     { width: '1px', height: '36px', background: 'rgba(201,168,76,0.25)' },
 
   // Stat pills
   pillsRow: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' },
