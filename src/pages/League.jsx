@@ -712,6 +712,8 @@ export default function League() {
                   name: row.name,
                   pts: row.points,
                   rank: row.rank,
+                  festivalId: activeFest.id,
+                  festivalName: activeFest.display_name || activeFest.name,
                 })}
               />
             )}
@@ -772,12 +774,18 @@ export default function League() {
                   <FestivalDayTable
                     rows={groupDisplayRows}
                     festDays={groupFestDays}
-                    onPlayerClick={row => setPicksModal({
-                      userId: row.userId,
-                      name: row.name,
-                      pts: row.points,
-                      rank: row.rank,
-                    })}
+                    onPlayerClick={row => {
+                      const gSubTab = currentGroupData.subTab
+                      const clickedFest = festivals.find(f => f.id === gSubTab)
+                      setPicksModal({
+                        userId: row.userId,
+                        name: row.name,
+                        pts: row.points,
+                        rank: row.rank,
+                        festivalId: clickedFest?.id || null,
+                        festivalName: clickedFest ? (clickedFest.display_name || clickedFest.name) : null,
+                      })
+                    }}
                   />
                 )}
               </>
@@ -823,6 +831,8 @@ export default function League() {
           displayName={picksModal.name}
           seasonPoints={picksModal.pts}
           seasonRank={picksModal.rank}
+          festivalId={picksModal.festivalId || null}
+          festivalName={picksModal.festivalName || null}
           onClose={() => setPicksModal(null)}
         />
       )}
