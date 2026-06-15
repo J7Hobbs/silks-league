@@ -509,7 +509,7 @@ export default function Dashboard() {
                 )}
                 <button
                   style={s.festViewBtn}
-                  onClick={() => navigate(festIsLive ? '/festival-picks' : '/festival-leaderboard')}>
+                  onClick={() => navigate(festIsLive ? '/picks' : '/festival-leaderboard', festIsLive ? { state: { festivalTab: festival?.id } } : undefined)}>
                   {festIsLive ? 'Make Picks →' : 'View Festival →'}
                 </button>
               </div>

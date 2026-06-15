@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import ProfileDropdown from '../components/ProfileDropdown.jsx'
 import RunnerCard from '../components/RunnerCard.jsx'
@@ -36,6 +36,7 @@ function formatCountdown(ms) {
 
 export default function Picks() {
   const navigate = useNavigate()
+  const location  = useLocation()
 
   // ── Weekly state ──────────────────────────────────────────────
   const [user,          setUser]          = useState(null)
@@ -86,6 +87,11 @@ export default function Picks() {
     const { data: fests } = await supabase
       .from('festivals').select('*').eq('is_active', true).order('start_date')
     setActiveFestivals(fests || [])
+    // Auto-select festival tab if navigated here with festivalTab state (e.g. from Dashboard banner)
+    const requestedTab = location.state?.festivalTab
+    if (requestedTab && fests?.some(f => f.id === requestedTab)) {
+      setSelectedTab(requestedTab)
+    }
   }
 
   // ── Weekly loader ─────────────────────────────────────────────
