@@ -25,6 +25,7 @@ export default function Dashboard() {
   const [joiningFestival, setJoiningFestival] = useState(false)
   const [myGroup, setMyGroup]                 = useState(null)
   const [picksModal, setPicksModal]           = useState(null) // { userId, name, pts, rank }
+  const [totalUserCount, setTotalUserCount]   = useState(0)
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000)
@@ -205,6 +206,7 @@ export default function Dashboard() {
     const { data: allProfileData } = await supabase
       .from('profiles').select('id')
     const allProfileIds = (allProfileData || []).map(p => p.id)
+    setTotalUserCount(allProfileIds.length)
     const { data: profiles } = await supabase
       .rpc('get_user_names', { user_ids: allProfileIds.length ? allProfileIds : [myUserId] })
 
@@ -649,8 +651,8 @@ export default function Dashboard() {
             <div>
               <div style={s.pillValue}>
                 {myRank ? `#${myRank}` : '—'}
-                {myRank && leaderboard.length > 0 && (
-                  <span style={s.pillValueSub}> / {leaderboard.length}</span>
+                {myRank && totalUserCount > 0 && (
+                  <span style={s.pillValueSub}> / {totalUserCount}</span>
                 )}
               </div>
               <div style={s.pillLabel}>League Rank</div>
@@ -761,8 +763,8 @@ export default function Dashboard() {
                 ? <div style={s.emptyMsg}>No scores yet — results appear here once submitted.</div>
                 : shownLeaderboard.map(row => (
                     <div key={row.rank} style={{ ...s.leaderRow, ...(row.isMe ? s.leaderRowMe : {}) }}>
-                      <div style={s.leaderRank}>
-                        {row.rank === 1 ? '🥇' : row.rank === 2 ? '🥈' : row.rank === 3 ? '🥉' : `#${row.rank}`}
+                      <div style={{ ...s.leaderRank, ...(row.rank > 3 ? { color: '#5a8a5a', fontSize: '0.82rem' } : {}) }}>
+                        {row.rank === 1 ? '🥇' : row.rank === 2 ? '🥈' : row.rank === 3 ? '🥉' : row.rank}
                       </div>
                       <div
                         style={{ ...s.leaderName, cursor: 'pointer', textDecorationLine: 'underline', textDecorationStyle: 'dotted', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
