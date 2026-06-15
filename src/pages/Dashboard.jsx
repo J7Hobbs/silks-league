@@ -525,12 +525,6 @@ export default function Dashboard() {
                 <div style={s.festDates}>{fmtDate(festival.start_date)} — {fmtDate(festival.end_date)}</div>
               </div>
               <div style={s.festRight}>
-                {festIsLive && festivalEntry && (
-                  <div style={s.festPts}>
-                    <div style={s.festPtsVal}>{festivalPoints ?? '—'}</div>
-                    <div style={s.festPtsLbl}>pts</div>
-                  </div>
-                )}
                 {festIsLive && !festivalEntry && (
                   <button style={s.festJoinBtn} onClick={joinFestival} disabled={joiningFestival}>
                     {joiningFestival ? 'Joining…' : 'Join Tournament'}
@@ -548,7 +542,7 @@ export default function Dashboard() {
                 <div style={s.festStripDivider} />
                 <div style={s.festStrip}>
                   <div style={s.festStripCol}>
-                    <div style={s.festStripLabel}>TODAY</div>
+                    <div style={s.festStripLabel}>RACE DAY</div>
                     <div style={{ ...s.festStripVal, color: '#e8f0e8' }}>{festDayLabel}</div>
                   </div>
                   <div style={s.festStripSep} />
@@ -578,7 +572,7 @@ export default function Dashboard() {
           {/* ── Mobile layout — completely unchanged ── */}
           <div className="nrd-mb" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <div style={s.cardHeader}>
-              <span style={s.cardTitle}>NEXT RACE DAY</span>
+              <span style={s.cardTitle}>SATURDAY LEAGUE · NEXT RACE DAY</span>
               <span style={s.cardBadge}>{nextSatLabel}</span>
             </div>
             {msToSat === 0 ? (
@@ -603,7 +597,7 @@ export default function Dashboard() {
             {/* Left third — label + date + deadline */}
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: '10px', fontWeight: '700', letterSpacing: '2px', color: '#c9a84c', textTransform: 'uppercase', marginBottom: '0.4rem' }}>
-                NEXT RACE DAY
+                SATURDAY LEAGUE · NEXT RACE DAY
               </div>
               <div style={{ fontSize: '16px', fontWeight: '700', color: '#e8f0e8', marginBottom: '0.25rem' }}>
                 {nextSatDt.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
