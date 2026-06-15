@@ -431,16 +431,26 @@ export default function Dashboard() {
   const festDaysUntil     = festStartDate ? Math.ceil((festStartDate - now) / 86400000) : null
 
   // Festival stat strip computations
-  const festTotalDays  = (festival && festival.end_date)
+  const festTotalDays    = (festival && festival.end_date)
     ? Math.round((new Date(festival.end_date + 'T00:00:00') - new Date(festival.start_date + 'T00:00:00')) / 86400000) + 1
     : null
-  const festDayNum     = (festStartDate && festTotalDays)
-    ? Math.min(Math.max(Math.floor((now - festStartDate) / 86400000) + 1, 1), festTotalDays)
-    : null
-  const festDayLabel   = (festDayNum && festTotalDays)
-    ? `Day ${festDayNum} of ${festTotalDays} · ${now.toLocaleDateString('en-GB', { weekday: 'long' })}`
-    : '—'
-  const picksDeadline  = (() => { const d = new Date(now); d.setHours(12, 0, 0, 0); return d })()
+  const beforeFestival   = festStartDate ? now < festStartDate : false
+  // TODAY label — if before festival show "Day 1 · <start weekday>", else show current day
+  const festDayLabel = (() => {
+    if (!festStartDate || !festTotalDays) return '—'
+    if (beforeFestival) {
+      const startWeekday = festStartDate.toLocaleDateString('en-GB', { weekday: 'long' })
+      return `Day 1 of ${festTotalDays} · ${startWeekday}`
+    }
+    const dayNum = Math.min(Math.max(Math.floor((now - festStartDate) / 86400000) + 1, 1), festTotalDays)
+    return `Day ${dayNum} of ${festTotalDays} · ${now.toLocaleDateString('en-GB', { weekday: 'long' })}`
+  })()
+  // PICKS CLOSE — count down to 12:00pm on the next relevant festival day
+  const picksDeadline = (() => {
+    const target = beforeFestival ? new Date(festStartDate) : new Date(now)
+    target.setHours(12, 0, 0, 0)
+    return target
+  })()
   const msToClose      = picksDeadline - now
   const picksClosed    = msToClose <= 0
   const picksCloseH    = picksClosed ? 0 : Math.floor(msToClose / 3600000)
