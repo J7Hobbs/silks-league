@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import ProfileDropdown from '../components/ProfileDropdown.jsx'
 import PlayerPicksModal from '../components/PlayerPicksModal.jsx'
@@ -12,6 +12,7 @@ import { Home, Target, Trophy, BarChart2 } from 'lucide-react'
 
 export default function League() {
   const navigate = useNavigate()
+  const location = useLocation()
 
   // ── Core ──────────────────────────────────────────────────────
   const [user,    setUser]    = useState(null)
@@ -74,6 +75,10 @@ export default function League() {
       loadMyGroups(u.id),
     ])
     setLoading(false)
+
+    // Pre-select tab from navigation state (e.g. "Full leaderboard" on Dashboard)
+    const wantedTab = location.state?.festivalTab
+    if (wantedTab) setMainTab(wantedTab)
   }
 
   // ── Saturday League ───────────────────────────────────────────
