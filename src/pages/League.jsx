@@ -69,16 +69,26 @@ export default function League() {
       .order('start_date', { ascending: false })
     setAllSeasons(seasonsData || [])
 
-    await Promise.all([
+    const [, loadedFestivals] = await Promise.all([
       loadSaturdayLeague(u.id),
       loadFestivals(),
       loadMyGroups(u.id),
     ])
     setLoading(false)
 
-    // Pre-select tab from navigation state (e.g. "Full leaderboard" on Dashboard)
+    // Pre-select tab from navigation state (e.g. "Full leaderboard →" on Dashboard)
     const wantedTab = location.state?.festivalTab
-    if (wantedTab) setMainTab(wantedTab)
+    if (wantedTab) {
+      setMainTab(wantedTab)
+      // Directly trigger the festival data fetch — handleMainTab() isn't called
+      // here so we use the returned festivals list from loadFestivals()
+      const fest = (loadedFestivals || []).find(f => f.id === wantedTab)
+      if (fest) {
+        setFestData(prev => ({ ...prev, [wantedTab]: { rows: [], festDays: [], loading: true, loaded: false } }))
+        const { rows, festDays } = await fetchFestivalRows(fest, null, u.id)
+        setFestData(prev => ({ ...prev, [wantedTab]: { rows, festDays, loading: false, loaded: true } }))
+      }
+    }
   }
 
   // ── Saturday League ───────────────────────────────────────────
@@ -214,6 +224,7 @@ export default function League() {
       .or(`is_active.eq.true,end_date.gte.${cutoff}`)
       .order('start_date')
     setFestivals(data || [])
+    return data || []
   }
 
   // ── My Groups ─────────────────────────────────────────────────
