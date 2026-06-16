@@ -26,6 +26,7 @@ export default function Dashboard() {
   const [myGroup, setMyGroup]                 = useState(null)
   const [picksModal, setPicksModal]           = useState(null) // { userId, name, pts, rank }
   const [totalUserCount, setTotalUserCount]   = useState(0)
+  const [festLeaderboard, setFestLeaderboard] = useState([])
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000)
@@ -289,6 +290,52 @@ export default function Dashboard() {
     setWeekLeaderboard(sorted)
   }
 
+  async function loadFestivalLeaderboard(myUserId, festivalId) {
+    const { data: entries } = await supabase
+      .from('festival_entries')
+      .select('user_id, starting_points')
+      .eq('festival_id', festivalId)
+    if (!entries?.length) return
+
+    const { data: days } = await supabase
+      .from('festival_days').select('id').eq('festival_id', festivalId)
+    const dayIds = days?.map(d => d.id) || []
+
+    let scoresByUser = {}
+    if (dayIds.length) {
+      const { data: fRaces } = await supabase
+        .from('festival_races').select('id').in('festival_day_id', dayIds)
+      const raceIds = fRaces?.map(r => r.id) || []
+      if (raceIds.length) {
+        const { data: scores } = await supabase
+          .from('festival_scores').select('user_id, total_points')
+          .in('festival_race_id', raceIds)
+        scores?.forEach(s => {
+          scoresByUser[s.user_id] = (scoresByUser[s.user_id] || 0) + (s.total_points || 0)
+        })
+      }
+    }
+
+    const userIds = entries.map(e => e.user_id)
+    const { data: profiles } = await supabase
+      .rpc('get_user_names', { user_ids: userIds })
+    const nameMap = {}
+    profiles?.forEach(p => { nameMap[p.id] = p.username || p.full_name || null })
+
+    const sorted = entries
+      .map(e => ({
+        userId: e.user_id,
+        points: (scoresByUser[e.user_id] || 0) + (e.starting_points || 0),
+        name:   nameMap[e.user_id] || 'Player',
+        isMe:   e.user_id === myUserId,
+      }))
+      .sort((a, b) => b.points - a.points)
+      .slice(0, 5)
+      .map((u, i) => ({ ...u, rank: i + 1 }))
+
+    setFestLeaderboard(sorted)
+  }
+
   async function loadFestival(userId) {
     let fest = null
 
@@ -297,6 +344,8 @@ export default function Dashboard() {
       .from('festivals').select('*').eq('is_active', true).maybeSingle()
     if (activeFest) {
       fest = activeFest
+      setLeaderboardTab('festival')
+      await loadFestivalLeaderboard(userId, activeFest.id)
     } else {
       // Look for upcoming within 30 days
       const todayStr = new Date().toISOString().split('T')[0]
@@ -487,7 +536,9 @@ export default function Dashboard() {
   const cdMins       = Math.floor((secsToSat % 3600) / 60)
   const nextSatLabel = nextSatDt.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'long' })
 
-  const shownLeaderboard = leaderboardTab === 'season' ? leaderboard : weekLeaderboard
+  const shownLeaderboard = leaderboardTab === 'season'   ? leaderboard
+    : leaderboardTab === 'week'     ? weekLeaderboard
+    : festLeaderboard
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
@@ -649,6 +700,55 @@ export default function Dashboard() {
 
         </div>
 
+        {/* Leaderboard with tab toggle — sits below festival banner / countdown */}
+        <div style={s.card}>
+          <div style={s.cardHeader}>
+            <span style={s.cardTitle}>Leaderboard</span>
+            <div style={s.tabRow}>
+              {festIsLive && (
+                <button
+                  style={{ ...s.tab, ...(leaderboardTab === 'festival' ? s.tabActive : {}) }}
+                  onClick={() => setLeaderboardTab('festival')}>
+                  {festival.display_name || festival.name}
+                </button>
+              )}
+              <button
+                style={{ ...s.tab, ...(leaderboardTab === 'week' ? s.tabActive : {}) }}
+                onClick={() => setLeaderboardTab('week')}>
+                This Week
+              </button>
+              <button
+                style={{ ...s.tab, ...(leaderboardTab === 'season' ? s.tabActive : {}) }}
+                onClick={() => setLeaderboardTab('season')}>
+                Season
+              </button>
+            </div>
+          </div>
+          <div style={s.leaderList}>
+            {shownLeaderboard.length === 0
+              ? <div style={s.emptyMsg}>No scores yet — results appear here once submitted.</div>
+              : shownLeaderboard.map(row => (
+                  <div key={row.rank} style={{ ...s.leaderRow, ...(row.isMe ? s.leaderRowMe : {}) }}>
+                    <div style={{ ...s.leaderRank, ...(row.rank > 3 ? { color: '#5a8a5a', fontSize: '0.82rem' } : {}) }}>
+                      {row.rank === 1 ? '🥇' : row.rank === 2 ? '🥈' : row.rank === 3 ? '🥉' : row.rank}
+                    </div>
+                    <div
+                      style={{ ...s.leaderName, cursor: 'pointer', textDecorationLine: 'underline', textDecorationStyle: 'dotted', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+                      onClick={() => setPicksModal({ userId: row.userId, name: row.name, pts: row.points, rank: row.rank })}>
+                      {row.name}
+                      {row.isMe && <span style={s.youBadge}>You</span>}
+                      {row.midSeason && leaderboardTab === 'season' && (
+                        <span style={{ fontSize: '0.58rem', fontWeight: '700', letterSpacing: '0.06em', color: '#5a8a5a', background: 'rgba(90,138,90,0.12)', padding: '0.1rem 0.4rem', borderRadius: '3px', whiteSpace: 'nowrap' }}>mid-season</span>
+                      )}
+                    </div>
+                    <div style={s.leaderPoints}>{row.points} pts</div>
+                  </div>
+                ))
+            }
+          </div>
+          <button style={s.viewAllBtn} onClick={() => navigate('/league')}>Full leaderboard →</button>
+        </div>
+
         {/* Stat pills */}
         <section style={s.pillsRow}>
           <div style={s.pill}>
@@ -672,129 +772,83 @@ export default function Dashboard() {
           </div>
         </section>
 
-        {/* Main two-column grid */}
-        <section style={s.twoCol} className="dash-two-col">
-
-          {/* Smart race card */}
-          <div style={s.card}>
-            <div style={s.cardHeader}>
-              <span style={s.cardTitle}>
-                {isRaceDay ? "THIS WEEK'S RACES" : 'LAST WEEK'}
-              </span>
-              <span style={s.cardBadge}>
-                {isRaceDay
-                  ? `${races.length} race${races.length !== 1 ? 's' : ''}`
-                  : 'Performance'}
-              </span>
-            </div>
-
-            {/* State A — Race day (Fri / Sat) */}
-            {isRaceDay && (
-              <div style={s.raceList}>
-                {races.length === 0
-                  ? <div style={s.emptyMsg}>No races set up yet — check back soon.</div>
-                  : races.map(r => {
-                      const picked = thisWeekPicks[r.id]
-                      return (
-                        <div key={r.id} style={s.raceRow}>
-                          <div style={s.raceTime}>{r.time || '—'}</div>
-                          <div style={s.raceInfo}>
-                            <div style={s.raceCourse}>{r.course}</div>
-                            <div style={s.raceName}>{r.race || 'Race'}</div>
-                          </div>
-                          {picked
-                            ? <div style={s.pickedBadge}>✓ Picked</div>
-                            : <button style={s.pickBtn} onClick={() => navigate('/picks')}>Pick →</button>
-                          }
-                        </div>
-                      )
-                    })
-                }
-              </div>
-            )}
-
-            {/* State B — Mid-week */}
-            {!isRaceDay && (
-              <div style={s.raceList}>
-                {lastWeekData.length === 0
-                  ? <div style={s.emptyMsg}>No results available for last week yet.</div>
-                  : lastWeekData.map(({ race, pick, score }) => {
-                      const pos = score?.position_achieved
-                      const pts = score?.total_points ?? null
-                      const posBadge = pos === 1 ? s.posBadgeGreen : (pos === 2 || pos === 3) ? s.posBadgeGold : s.posBadgeGrey
-                      const ptsPill  = pos === 1 ? s.ptsPillGreen  : (pos === 2 || pos === 3) ? s.ptsPillGold  : s.ptsPillGrey
-                      const posLabel = pos === 1 ? '1st' : pos === 2 ? '2nd' : pos === 3 ? '3rd' : pos ? `${pos}th` : '—'
-                      return (
-                        <div key={race.id} style={s.raceRow}>
-                          <div style={s.raceTime}>{race.race_time || '—'}</div>
-                          <div style={s.raceInfo}>
-                            <div style={s.raceCourse}>{race.venue}</div>
-                            {pick
-                              ? (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginTop: '0.1rem' }}>
-                                  {pick.silkColour && (
-                                    <span style={{ width: '9px', height: '9px', borderRadius: '2px', background: pick.silkColour, display: 'inline-block', flexShrink: 0, border: '1px solid rgba(255,255,255,0.25)' }} />
-                                  )}
-                                  <span style={s.raceName}>{pick.horseName}</span>
-                                </div>
-                              )
-                              : <div style={s.raceName}>No pick</div>
-                            }
-                          </div>
-                          <div style={posBadge}>{posLabel}</div>
-                          {pts !== null && (
-                            <div style={ptsPill}>{pts > 0 ? `+${pts}` : pts} pts</div>
-                          )}
-                        </div>
-                      )
-                    })
-                }
-              </div>
-            )}
+        {/* Smart race card — full width at bottom */}
+        <div style={s.card}>
+          <div style={s.cardHeader}>
+            <span style={s.cardTitle}>
+              {isRaceDay ? "THIS WEEK'S RACES" : 'LAST WEEK'}
+            </span>
+            <span style={s.cardBadge}>
+              {isRaceDay
+                ? `${races.length} race${races.length !== 1 ? 's' : ''}`
+                : 'Performance'}
+            </span>
           </div>
 
-          {/* Leaderboard with tab toggle */}
-          <div style={s.card}>
-            <div style={s.cardHeader}>
-              <span style={s.cardTitle}>Leaderboard</span>
-              <div style={s.tabRow}>
-                <button
-                  style={{ ...s.tab, ...(leaderboardTab === 'week' ? s.tabActive : {}) }}
-                  onClick={() => setLeaderboardTab('week')}>
-                  This Week
-                </button>
-                <button
-                  style={{ ...s.tab, ...(leaderboardTab === 'season' ? s.tabActive : {}) }}
-                  onClick={() => setLeaderboardTab('season')}>
-                  Season
-                </button>
-              </div>
-            </div>
-            <div style={s.leaderList}>
-              {shownLeaderboard.length === 0
-                ? <div style={s.emptyMsg}>No scores yet — results appear here once submitted.</div>
-                : shownLeaderboard.map(row => (
-                    <div key={row.rank} style={{ ...s.leaderRow, ...(row.isMe ? s.leaderRowMe : {}) }}>
-                      <div style={{ ...s.leaderRank, ...(row.rank > 3 ? { color: '#5a8a5a', fontSize: '0.82rem' } : {}) }}>
-                        {row.rank === 1 ? '🥇' : row.rank === 2 ? '🥈' : row.rank === 3 ? '🥉' : row.rank}
+          {/* State A — Race day */}
+          {isRaceDay && (
+            <div style={s.raceList}>
+              {races.length === 0
+                ? <div style={s.emptyMsg}>No races set up yet — check back soon.</div>
+                : races.map(r => {
+                    const picked = thisWeekPicks[r.id]
+                    return (
+                      <div key={r.id} style={s.raceRow}>
+                        <div style={s.raceTime}>{r.time || '—'}</div>
+                        <div style={s.raceInfo}>
+                          <div style={s.raceCourse}>{r.course}</div>
+                          <div style={s.raceName}>{r.race || 'Race'}</div>
+                        </div>
+                        {picked
+                          ? <div style={s.pickedBadge}>✓ Picked</div>
+                          : <button style={s.pickBtn} onClick={() => navigate('/picks')}>Pick →</button>
+                        }
                       </div>
-                      <div
-                        style={{ ...s.leaderName, cursor: 'pointer', textDecorationLine: 'underline', textDecorationStyle: 'dotted', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
-                        onClick={() => setPicksModal({ userId: row.userId, name: row.name, pts: row.points, rank: row.rank })}>
-                        {row.name}
-                        {row.isMe && <span style={s.youBadge}>You</span>}
-                        {row.midSeason && leaderboardTab === 'season' && (
-                          <span style={{ fontSize: '0.58rem', fontWeight: '700', letterSpacing: '0.06em', color: '#5a8a5a', background: 'rgba(90,138,90,0.12)', padding: '0.1rem 0.4rem', borderRadius: '3px', whiteSpace: 'nowrap' }}>mid-season</span>
-                        )}
-                      </div>
-                      <div style={s.leaderPoints}>{row.points} pts</div>
-                    </div>
-                  ))
+                    )
+                  })
               }
             </div>
-            <button style={s.viewAllBtn} onClick={() => navigate('/league')}>Full leaderboard →</button>
-          </div>
-        </section>
+          )}
+
+          {/* State B — Mid-week / Last week */}
+          {!isRaceDay && (
+            <div style={s.raceList}>
+              {lastWeekData.length === 0
+                ? <div style={s.emptyMsg}>No results available for last week yet.</div>
+                : lastWeekData.map(({ race, pick, score }) => {
+                    const pos = score?.position_achieved
+                    const pts = score?.total_points ?? null
+                    const posBadge = pos === 1 ? s.posBadgeGreen : (pos === 2 || pos === 3) ? s.posBadgeGold : s.posBadgeGrey
+                    const ptsPill  = pos === 1 ? s.ptsPillGreen  : (pos === 2 || pos === 3) ? s.ptsPillGold  : s.ptsPillGrey
+                    const posLabel = pos === 1 ? '1st' : pos === 2 ? '2nd' : pos === 3 ? '3rd' : pos ? `${pos}th` : '—'
+                    return (
+                      <div key={race.id} style={s.raceRow}>
+                        <div style={s.raceTime}>{race.race_time || '—'}</div>
+                        <div style={s.raceInfo}>
+                          <div style={s.raceCourse}>{race.venue}</div>
+                          {pick
+                            ? (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginTop: '0.1rem' }}>
+                                {pick.silkColour && (
+                                  <span style={{ width: '9px', height: '9px', borderRadius: '2px', background: pick.silkColour, display: 'inline-block', flexShrink: 0, border: '1px solid rgba(255,255,255,0.25)' }} />
+                                )}
+                                <span style={s.raceName}>{pick.horseName}</span>
+                              </div>
+                            )
+                            : <div style={s.raceName}>No pick</div>
+                          }
+                        </div>
+                        <div style={posBadge}>{posLabel}</div>
+                        {pts !== null && (
+                          <div style={ptsPill}>{pts > 0 ? `+${pts}` : pts} pts</div>
+                        )}
+                      </div>
+                    )
+                  })
+              }
+            </div>
+          )}
+        </div>
 
 
       </main>
