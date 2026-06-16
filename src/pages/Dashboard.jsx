@@ -664,7 +664,15 @@ export default function Dashboard() {
                     </div>
                     <div
                       style={{ ...s.leaderName, cursor: 'pointer', textDecorationLine: 'underline', textDecorationStyle: 'dotted', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
-                      onClick={() => setPicksModal({ userId: row.userId, name: row.name, pts: row.points, rank: row.rank })}>
+                      onClick={() => setPicksModal({
+                        userId: row.userId,
+                        name:   row.name,
+                        pts:    row.points,
+                        rank:   row.rank,
+                        ...(leaderboardTab === 'festival' && festival
+                          ? { festivalId: festival.id, festivalName: festival.display_name || festival.name }
+                          : {}),
+                      })}>
                       {row.name}
                       {row.isMe && <span style={s.youBadge}>You</span>}
                       {row.midSeason && leaderboardTab === 'season' && (
@@ -676,7 +684,14 @@ export default function Dashboard() {
                 ))
             }
           </div>
-          <button style={s.viewAllBtn} onClick={() => navigate('/league')}>Full leaderboard →</button>
+          <button
+            style={s.viewAllBtn}
+            onClick={() => leaderboardTab === 'festival' && festival
+              ? navigate('/league', { state: { festivalTab: festival.id } })
+              : navigate('/league')
+            }>
+            Full leaderboard →
+          </button>
         </div>
 
         {/* Next race day countdown */}
@@ -882,6 +897,8 @@ export default function Dashboard() {
           displayName={picksModal.name}
           seasonPoints={picksModal.pts}
           seasonRank={picksModal.rank}
+          festivalId={picksModal.festivalId || null}
+          festivalName={picksModal.festivalName || null}
           onClose={() => setPicksModal(null)}
         />
       )}
