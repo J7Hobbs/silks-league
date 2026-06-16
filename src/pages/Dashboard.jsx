@@ -630,6 +630,55 @@ export default function Dashboard() {
           </section>
         )}
 
+        {/* Leaderboard — sits between festival banner and countdown */}
+        <div style={s.card}>
+          <div style={s.cardHeader}>
+            <span style={s.cardTitle}>Leaderboard</span>
+            <div style={s.tabRow}>
+              {festIsLive && (
+                <button
+                  style={{ ...s.tab, ...(leaderboardTab === 'festival' ? s.tabActive : {}) }}
+                  onClick={() => setLeaderboardTab('festival')}>
+                  {festival.display_name || festival.name}
+                </button>
+              )}
+              <button
+                style={{ ...s.tab, ...(leaderboardTab === 'week' ? s.tabActive : {}) }}
+                onClick={() => setLeaderboardTab('week')}>
+                This Week
+              </button>
+              <button
+                style={{ ...s.tab, ...(leaderboardTab === 'season' ? s.tabActive : {}) }}
+                onClick={() => setLeaderboardTab('season')}>
+                Season
+              </button>
+            </div>
+          </div>
+          <div style={s.leaderList}>
+            {shownLeaderboard.length === 0
+              ? <div style={s.emptyMsg}>No scores yet — results appear here once submitted.</div>
+              : shownLeaderboard.map(row => (
+                  <div key={row.rank} style={{ ...s.leaderRow, ...(row.isMe ? s.leaderRowMe : {}) }}>
+                    <div style={{ ...s.leaderRank, ...(row.rank > 3 ? { color: '#5a8a5a', fontSize: '0.82rem' } : {}) }}>
+                      {row.rank === 1 ? '🥇' : row.rank === 2 ? '🥈' : row.rank === 3 ? '🥉' : row.rank}
+                    </div>
+                    <div
+                      style={{ ...s.leaderName, cursor: 'pointer', textDecorationLine: 'underline', textDecorationStyle: 'dotted', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+                      onClick={() => setPicksModal({ userId: row.userId, name: row.name, pts: row.points, rank: row.rank })}>
+                      {row.name}
+                      {row.isMe && <span style={s.youBadge}>You</span>}
+                      {row.midSeason && leaderboardTab === 'season' && (
+                        <span style={{ fontSize: '0.58rem', fontWeight: '700', letterSpacing: '0.06em', color: '#5a8a5a', background: 'rgba(90,138,90,0.12)', padding: '0.1rem 0.4rem', borderRadius: '3px', whiteSpace: 'nowrap' }}>mid-season</span>
+                      )}
+                    </div>
+                    <div style={s.leaderPoints}>{row.points} pts</div>
+                  </div>
+                ))
+            }
+          </div>
+          <button style={s.viewAllBtn} onClick={() => navigate('/league')}>Full leaderboard →</button>
+        </div>
+
         {/* Next race day countdown */}
         <style>{`@media(min-width:768px){.nrd-mb{display:none !important}.nrd-dt{display:flex !important}}@media(max-width:767px){.dash-two-col{grid-template-columns:1fr!important;width:100%}.dash-two-col>*{min-width:0;width:100%}}`}</style>
         <div style={s.card}>
@@ -698,55 +747,6 @@ export default function Dashboard() {
 
           </div>
 
-        </div>
-
-        {/* Leaderboard with tab toggle — sits below festival banner / countdown */}
-        <div style={s.card}>
-          <div style={s.cardHeader}>
-            <span style={s.cardTitle}>Leaderboard</span>
-            <div style={s.tabRow}>
-              {festIsLive && (
-                <button
-                  style={{ ...s.tab, ...(leaderboardTab === 'festival' ? s.tabActive : {}) }}
-                  onClick={() => setLeaderboardTab('festival')}>
-                  {festival.display_name || festival.name}
-                </button>
-              )}
-              <button
-                style={{ ...s.tab, ...(leaderboardTab === 'week' ? s.tabActive : {}) }}
-                onClick={() => setLeaderboardTab('week')}>
-                This Week
-              </button>
-              <button
-                style={{ ...s.tab, ...(leaderboardTab === 'season' ? s.tabActive : {}) }}
-                onClick={() => setLeaderboardTab('season')}>
-                Season
-              </button>
-            </div>
-          </div>
-          <div style={s.leaderList}>
-            {shownLeaderboard.length === 0
-              ? <div style={s.emptyMsg}>No scores yet — results appear here once submitted.</div>
-              : shownLeaderboard.map(row => (
-                  <div key={row.rank} style={{ ...s.leaderRow, ...(row.isMe ? s.leaderRowMe : {}) }}>
-                    <div style={{ ...s.leaderRank, ...(row.rank > 3 ? { color: '#5a8a5a', fontSize: '0.82rem' } : {}) }}>
-                      {row.rank === 1 ? '🥇' : row.rank === 2 ? '🥈' : row.rank === 3 ? '🥉' : row.rank}
-                    </div>
-                    <div
-                      style={{ ...s.leaderName, cursor: 'pointer', textDecorationLine: 'underline', textDecorationStyle: 'dotted', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
-                      onClick={() => setPicksModal({ userId: row.userId, name: row.name, pts: row.points, rank: row.rank })}>
-                      {row.name}
-                      {row.isMe && <span style={s.youBadge}>You</span>}
-                      {row.midSeason && leaderboardTab === 'season' && (
-                        <span style={{ fontSize: '0.58rem', fontWeight: '700', letterSpacing: '0.06em', color: '#5a8a5a', background: 'rgba(90,138,90,0.12)', padding: '0.1rem 0.4rem', borderRadius: '3px', whiteSpace: 'nowrap' }}>mid-season</span>
-                      )}
-                    </div>
-                    <div style={s.leaderPoints}>{row.points} pts</div>
-                  </div>
-                ))
-            }
-          </div>
-          <button style={s.viewAllBtn} onClick={() => navigate('/league')}>Full leaderboard →</button>
         </div>
 
         {/* Stat pills */}
