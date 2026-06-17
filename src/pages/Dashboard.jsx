@@ -218,19 +218,21 @@ export default function Dashboard() {
     })
 
     // Add scores for this season only
+    const seasonWinsByUser = {}
     if (allRaceIds.length) {
       const { data: allScores, error } = await supabase
-        .from('scores').select('user_id, total_points').in('race_id', allRaceIds)
+        .from('scores').select('user_id, total_points, position_achieved').in('race_id', allRaceIds)
       if (!error) {
         (allScores || []).forEach(s => {
           if (!byUser[s.user_id]) byUser[s.user_id] = { user_id: s.user_id, total: 0, name: null }
           byUser[s.user_id].total += (s.total_points || 0)
+          if (s.position_achieved === 1) seasonWinsByUser[s.user_id] = (seasonWinsByUser[s.user_id] || 0) + 1
         })
       }
     }
 
     const sorted = Object.values(byUser)
-      .sort((a, b) => b.total - a.total)
+      .sort((a, b) => b.total - a.total || (seasonWinsByUser[b.user_id] || 0) - (seasonWinsByUser[a.user_id] || 0))
       .slice(0, 5)
       .map((u, i) => ({
         rank:      i + 1,
@@ -262,13 +264,15 @@ export default function Dashboard() {
     const raceIds = raceArr.map(r => r.id)
 
     const { data: scores } = await supabase
-      .from('scores').select('user_id, total_points').in('race_id', raceIds)
+      .from('scores').select('user_id, total_points, position_achieved').in('race_id', raceIds)
     if (!scores?.length) return
 
     const byUser = {}
+    const weekWinsByUser = {}
     scores.forEach(s => {
       if (!byUser[s.user_id]) byUser[s.user_id] = 0
       byUser[s.user_id] += (s.total_points || 0)
+      if (s.position_achieved === 1) weekWinsByUser[s.user_id] = (weekWinsByUser[s.user_id] || 0) + 1
     })
 
     const weekProfileIds = [...new Set([...Object.keys(byUser), myUserId])]
@@ -281,10 +285,11 @@ export default function Dashboard() {
       .map(([uid, pts]) => ({
         userId: uid,
         points: pts,
+        wins:   weekWinsByUser[uid] || 0,
         name:   nameMap[uid] || 'Player',
         isMe:   uid === myUserId,
       }))
-      .sort((a, b) => b.points - a.points)
+      .sort((a, b) => b.points - a.points || b.wins - a.wins)
       .slice(0, 5)
       .map((u, i) => ({ ...u, rank: i + 1 }))
     setWeekLeaderboard(sorted)

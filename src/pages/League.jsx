@@ -136,10 +136,21 @@ export default function League() {
     let allScores = []
     if (allRaceIds.length) {
       const { data: everyone, error: evErr } = await supabase
-        .from('scores').select('user_id, race_id, total_points').in('race_id', allRaceIds)
+        .from('scores').select('user_id, race_id, total_points, position_achieved').in('race_id', allRaceIds)
       if (!evErr && everyone?.length) allScores = everyone
     }
     // else: no races in this season yet — all scores stay []
+
+    // Count 1st-place finishes per user for tiebreaker (season)
+    const satWinsByUser = {}
+    allScores.forEach(sc => {
+      if (sc.position_achieved === 1) satWinsByUser[sc.user_id] = (satWinsByUser[sc.user_id] || 0) + 1
+    })
+    // Count 1st-place finishes per user for tiebreaker (this week)
+    const weekWinsByUser = {}
+    allScores.filter(sc => weekRaceIds.includes(sc.race_id)).forEach(sc => {
+      if (sc.position_achieved === 1) weekWinsByUser[sc.user_id] = (weekWinsByUser[sc.user_id] || 0) + 1
+    })
 
     // Fetch all profiles — every registered user appears even with 0 pts
     const { data: allProfileData } = await supabase.from('profiles').select('id')
@@ -184,7 +195,7 @@ export default function League() {
     })
 
     const seasonSorted = Object.values(byUser)
-      .sort((a, b) => b.seasonTotal - a.seasonTotal || a.name.localeCompare(b.name))
+      .sort((a, b) => b.seasonTotal - a.seasonTotal || (satWinsByUser[b.user_id] || 0) - (satWinsByUser[a.user_id] || 0) || a.name.localeCompare(b.name))
       .map((u, i) => ({ ...u, rank: i + 1, weeksPlayed: u.weeksPlayed.size, weekPts: u.weekPts || {} }))
     setSatRows(seasonSorted)
 
@@ -211,7 +222,7 @@ export default function League() {
       }
     }
     const weekSorted = Object.values(weekByUser)
-      .sort((a, b) => b.weekPoints - a.weekPoints || a.name.localeCompare(b.name))
+      .sort((a, b) => b.weekPoints - a.weekPoints || (weekWinsByUser[b.user_id] || 0) - (weekWinsByUser[a.user_id] || 0) || a.name.localeCompare(b.name))
       .map((u, i) => ({ ...u, rank: i + 1 }))
     setWeekRows(weekSorted)
   }
@@ -354,11 +365,12 @@ export default function League() {
     }))
 
     const { data: scores } = await supabase
-      .from('scores').select('user_id, race_id, total_points')
+      .from('scores').select('user_id, race_id, total_points, position_achieved')
       .in('race_id', raceIds).in('user_id', memberIds)
 
     const totals = {}
     const weekPtsMap = {}
+    const groupSatWins = {}
     for (const uid of memberIds) { totals[uid] = 0; weekPtsMap[uid] = {} }
     for (const s of (scores || [])) {
       totals[s.user_id] = (totals[s.user_id] || 0) + s.total_points
@@ -367,10 +379,11 @@ export default function League() {
         if (!weekPtsMap[s.user_id]) weekPtsMap[s.user_id] = {}
         weekPtsMap[s.user_id][wId] = (weekPtsMap[s.user_id][wId] || 0) + s.total_points
       }
+      if (s.position_achieved === 1) groupSatWins[s.user_id] = (groupSatWins[s.user_id] || 0) + 1
     }
 
     return Object.entries(totals)
-      .sort((a, b) => b[1] - a[1] || (groupNameMap[a[0]] || '').localeCompare(groupNameMap[b[0]] || ''))
+      .sort((a, b) => b[1] - a[1] || (groupSatWins[b[0]] || 0) - (groupSatWins[a[0]] || 0) || (groupNameMap[a[0]] || '').localeCompare(groupNameMap[b[0]] || ''))
       .map(([uid, pts], i) => ({
         rank: i + 1, userId: uid, points: pts,
         weekPts: weekPtsMap[uid] || {},
@@ -484,7 +497,7 @@ export default function League() {
     let allScores = []
     if (allRaceIds.length) {
       const { data: scores } = await supabase
-        .from('scores').select('user_id, race_id, total_points').in('race_id', allRaceIds)
+        .from('scores').select('user_id, race_id, total_points, position_achieved').in('race_id', allRaceIds)
       allScores = scores || []
     }
 
@@ -498,15 +511,18 @@ export default function League() {
     // Init every registered user at 0, then layer scores on top
     const byUser = {}
     annualProfileIds.forEach(uid => { byUser[uid] = { user_id: uid, total: 0, seasonPts: {} } })
+    // Count 1st-place finishes per user for tiebreaker
+    const annualWinsByUser = {}
     for (const sc of allScores) {
       if (!byUser[sc.user_id]) byUser[sc.user_id] = { user_id: sc.user_id, total: 0, seasonPts: {} }
       byUser[sc.user_id].total += (sc.total_points || 0)
       const sId = raceSeasonMap[sc.race_id]
       if (sId) byUser[sc.user_id].seasonPts[sId] = (byUser[sc.user_id].seasonPts[sId] || 0) + (sc.total_points || 0)
+      if (sc.position_achieved === 1) annualWinsByUser[sc.user_id] = (annualWinsByUser[sc.user_id] || 0) + 1
     }
 
     const sorted = Object.values(byUser)
-      .sort((a, b) => b.total - a.total || (nameMap[a.user_id] || '').localeCompare(nameMap[b.user_id] || ''))
+      .sort((a, b) => b.total - a.total || (annualWinsByUser[b.user_id] || 0) - (annualWinsByUser[a.user_id] || 0) || (nameMap[a.user_id] || '').localeCompare(nameMap[b.user_id] || ''))
       .map((u, i) => ({
         rank: i + 1, userId: u.user_id, name: nameMap[u.user_id] || 'Player',
         isMe: u.user_id === myUserId, total: u.total, seasonPts: u.seasonPts,
