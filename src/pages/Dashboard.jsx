@@ -302,16 +302,18 @@ export default function Dashboard() {
     const dayIds = days?.map(d => d.id) || []
 
     let scoresByUser = {}
+    let winsByUser   = {}
     if (dayIds.length) {
       const { data: fRaces } = await supabase
         .from('festival_races').select('id').in('festival_day_id', dayIds)
       const raceIds = fRaces?.map(r => r.id) || []
       if (raceIds.length) {
         const { data: scores } = await supabase
-          .from('festival_scores').select('user_id, total_points')
+          .from('festival_scores').select('user_id, total_points, position_achieved')
           .in('festival_race_id', raceIds)
         scores?.forEach(s => {
           scoresByUser[s.user_id] = (scoresByUser[s.user_id] || 0) + (s.total_points || 0)
+          if (s.position_achieved === 1) winsByUser[s.user_id] = (winsByUser[s.user_id] || 0) + 1
         })
       }
     }
@@ -326,10 +328,11 @@ export default function Dashboard() {
       .map(e => ({
         userId: e.user_id,
         points: (scoresByUser[e.user_id] || 0) + (e.starting_points || 0),
+        wins:   winsByUser[e.user_id] || 0,
         name:   nameMap[e.user_id] || 'Player',
         isMe:   e.user_id === myUserId,
       }))
-      .sort((a, b) => b.points - a.points)
+      .sort((a, b) => b.points - a.points || b.wins - a.wins)
       .slice(0, 5)
       .map((u, i) => ({ ...u, rank: i + 1 }))
 

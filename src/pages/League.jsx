@@ -263,13 +263,19 @@ export default function League() {
 
     const entryUserIds = entries.map(e => e.user_id)
 
-    // Fetch race scores (for totals)
+    // Fetch race scores (for totals + tiebreaker wins)
     let scoresData = []
     if (raceIds.length) {
       const { data: sc } = await supabase
-        .from('festival_scores').select('user_id, total_points')
+        .from('festival_scores').select('user_id, total_points, position_achieved')
         .in('festival_race_id', raceIds).in('user_id', entryUserIds)
       scoresData = sc || []
+    }
+
+    // Count 1st-place finishes per user for tiebreaker
+    const winsByUser = {}
+    for (const s of scoresData) {
+      if (s.position_achieved === 1) winsByUser[s.user_id] = (winsByUser[s.user_id] || 0) + 1
     }
 
     // Fetch day-by-day points from festival_day_points
@@ -306,9 +312,10 @@ export default function League() {
     profiles?.forEach(p => { nameMap[p.id] = p.username || p.full_name || null })
 
     const rows = Object.entries(totals)
-      .sort((a, b) => b[1] - a[1])
+      .sort((a, b) => b[1] - a[1] || (winsByUser[b[0]] || 0) - (winsByUser[a[0]] || 0))
       .map(([uid, pts], i) => ({
         rank: i + 1, userId: uid, points: pts,
+        wins: winsByUser[uid] || 0,
         name: nameMap[uid] || 'Player',
         isMe: uid === myUserId,
         dayPts: dayPtsMap[uid] || {},
