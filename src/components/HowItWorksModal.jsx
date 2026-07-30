@@ -12,6 +12,12 @@ const PLACE_TERMS = [
   { range: '16+ runners',    places: 'Top 4' },
 ]
 
+const POSITION_TAPER = [
+  { pos: '2nd', taper: 'Full place value', note: 'Paid in every each-way field (5+ runners)' },
+  { pos: '3rd', taper: '65% of place value', note: 'Paid in 8+ runner fields' },
+  { pos: '4th', taper: '40% of place value', note: 'Paid in 16+ runner fields only' },
+]
+
 export default function HowItWorksModal({ open, onClose }) {
   // Lock body scroll while open
   useEffect(() => {
@@ -83,8 +89,9 @@ export default function HowItWorksModal({ open, onClose }) {
             <p style={m.bodyText}>
               <strong>All-in Win</strong> pays out only if your horse wins — but pays big: 2 × the decimal odds,
               scaled up ×10. <strong>Each-way</strong> pays a smaller win amount, plus a place amount if your horse
-              finishes in the paid places (see below), with 2nd place worth more than 3rd, and 3rd worth more than
-              4th. The picks screen always shows you the exact points on offer before you confirm.
+              finishes in the paid places (see below) — built from ¼ of the odds, tapered down the further back
+              it finishes: full value for 2nd, 65% for 3rd, and 40% for 4th in the biggest fields. The picks screen
+              always shows you the exact points on offer before you confirm.
             </p>
             <div style={m.scoreNote}>No cap — the bigger the odds, the bigger the reward.</div>
           </div>
@@ -114,13 +121,39 @@ export default function HowItWorksModal({ open, onClose }) {
             </table>
           </div>
 
-          {/* 5 — Seasons */}
+          {/* 6 — Position Taper */}
+          <div style={m.card}>
+            <div style={m.sectionLabel}>Position Taper</div>
+            <div style={m.oddsNote}>
+              The place portion of an each-way pick isn't flat — it shrinks the further back your horse finishes.
+            </div>
+            <table style={m.oddsTable}>
+              <thead>
+                <tr>
+                  <th style={m.oddsTh}>Finish</th>
+                  <th style={{ ...m.oddsTh, textAlign: 'center' }}>Place Value</th>
+                  <th style={{ ...m.oddsTh, textAlign: 'right' }}>When It Pays</th>
+                </tr>
+              </thead>
+              <tbody>
+                {POSITION_TAPER.map(row => (
+                  <tr key={row.pos}>
+                    <td style={m.oddsTd}>{row.pos}</td>
+                    <td style={{ ...m.oddsTd, textAlign: 'center', color: '#c9a84c', fontWeight: '600' }}>{row.taper}</td>
+                    <td style={{ ...m.oddsTd, textAlign: 'right', color: '#5a8a5a', fontSize: '0.72rem' }}>{row.note}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* 7 — Seasons */}
           <Section label="Seasons">
             Silks League runs on monthly seasons — each calendar month is a fresh competition. Your points
             reset at the start of each new month and everyone competes for the monthly title.
           </Section>
 
-          {/* 6 — Joining Mid-Season */}
+          {/* 8 — Joining Mid-Season */}
           <Section label="Joining Mid-Season">
             Joined part way through the month? No problem. As soon as the first race week of the season
             has been played, any new joiner is automatically credited with points equal to the lowest score
@@ -128,13 +161,13 @@ export default function HowItWorksModal({ open, onClose }) {
             from zero while everyone else has a head start.
           </Section>
 
-          {/* 7 — Groups */}
+          {/* 9 — Groups */}
           <Section label="Groups">
             Create or join a private group to compete against friends, family or colleagues alongside the
             main league. Group standings run on the same monthly season format.
           </Section>
 
-          {/* 8 — Festivals */}
+          {/* 10 — Festivals */}
           <Section label="Festivals">
             During major race meetings like Royal Ascot and Cheltenham, special festival tournaments run
             alongside the regular weekly game with their own separate leaderboard. Festivals span multiple
