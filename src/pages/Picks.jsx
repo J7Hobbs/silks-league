@@ -9,6 +9,18 @@ import { supabase } from '../lib/supabase'
 import ProfileDropdown from '../components/ProfileDropdown.jsx'
 import RunnerCard from '../components/RunnerCard.jsx'
 import { Home, Target, Trophy, BarChart2 } from 'lucide-react'
+import { isWinOnly, canOfferEachWay, calcTokenPoints } from '../lib/scoring.js'
+
+// "If it places" preview always shows the 2nd-place figure (the best-case
+// place payout) — exact taper depends on the actual finishing position.
+function previewPoints(betType, oddsDecimal, runnerCount) {
+  if (!oddsDecimal) return { win: null, place: null }
+  const win = calcTokenPoints({ betType, position: 1, oddsDecimal, runnerCount }).totalPoints
+  const place = betType === 'each_way'
+    ? calcTokenPoints({ betType, position: 2, oddsDecimal, runnerCount }).totalPoints
+    : null
+  return { win, place }
+}
 
 function fmtDeadlineDate(ds) {
   if (!ds) return ''
@@ -49,6 +61,7 @@ export default function Picks() {
   const [userPicks,     setUserPicks]     = useState({})
   const [expandedRace,  setExpandedRace]  = useState(null)
   const [selected,      setSelected]      = useState({})
+  const [betType,       setBetType]       = useState({})
   const [saving,        setSaving]        = useState(null)
   const [toast,         setToast]         = useState(null)
   const [now,           setNow]           = useState(new Date())
@@ -66,6 +79,7 @@ export default function Picks() {
   const [festScores,       setFestScores]       = useState({})
   const [festExpandedRace, setFestExpandedRace] = useState(null)
   const [festSelected,     setFestSelected]     = useState({})
+  const [festBetType,      setFestBetType]      = useState({})
   const [festSaving,       setFestSaving]       = useState(null)
   const [festLoading,      setFestLoading]      = useState(false)
 
@@ -138,12 +152,15 @@ export default function Picks() {
 
     const picksMap = {}
     const selMap   = {}
+    const betMap   = {}
     for (const p of (picks || [])) {
       picksMap[p.race_id] = p
       selMap[p.race_id]   = p.runner_id
+      betMap[p.race_id]   = p.bet_type || 'win'
     }
     setUserPicks(picksMap)
     setSelected(selMap)
+    setBetType(betMap)
 
     const origIds = (picks || []).filter(p => p.was_replaced && p.original_runner_id).map(p => p.original_runner_id)
     if (origIds.length) {
@@ -209,12 +226,14 @@ export default function Picks() {
     setFestRunners(runnersMap)
 
     const { data: picksData } = await supabase
-      .from('festival_picks').select('festival_race_id, runner_id')
+      .from('festival_picks').select('festival_race_id, runner_id, bet_type')
       .eq('user_id', userId).in('festival_race_id', raceIds)
     const picksMap = {}
-    picksData?.forEach(p => { picksMap[p.festival_race_id] = p.runner_id })
+    const betMap   = {}
+    picksData?.forEach(p => { picksMap[p.festival_race_id] = p.runner_id; betMap[p.festival_race_id] = p.bet_type || 'win' })
     setFestPicks(picksMap)
     setFestSelected(picksMap)
+    setFestBetType(betMap)
 
     const { data: scoresData } = await supabase
       .from('festival_scores').select('*').eq('user_id', userId).in('festival_race_id', raceIds)
@@ -261,24 +280,33 @@ export default function Picks() {
     const runner = (runners[raceId] || []).find(r => r.id === runnerId)
     if (runner?.is_withdrawn) return
     setSelected(prev => ({ ...prev, [raceId]: runnerId }))
+    setBetType(prev => ({ ...prev, [raceId]: 'win' }))
+  }
+
+  function handleBetTypeChange(raceId, type) {
+    setBetType(prev => ({ ...prev, [raceId]: type }))
   }
 
   async function handleSavePick(raceId) {
     const runnerId = selected[raceId]
     if (!runnerId || !user) return
+    const raceRunners  = runners[raceId] || []
+    const runner       = raceRunners.find(r => r.id === runnerId)
+    const nonWithdrawn = raceRunners.filter(r => !r.is_withdrawn).length
+    const effectiveBetType = canOfferEachWay(runner?.odds_decimal, nonWithdrawn) ? (betType[raceId] || 'win') : 'win'
     setSaving(raceId)
     const existing = userPicks[raceId]
     let error
     if (existing?.id) {
-      const res = await supabase.from('picks').update({ runner_id: runnerId }).eq('id', existing.id)
+      const res = await supabase.from('picks').update({ runner_id: runnerId, bet_type: effectiveBetType }).eq('id', existing.id)
       error = res.error
     } else {
-      const res = await supabase.from('picks').upsert({ user_id: user.id, race_id: raceId, runner_id: runnerId }, { onConflict: 'user_id,race_id' })
+      const res = await supabase.from('picks').upsert({ user_id: user.id, race_id: raceId, runner_id: runnerId, bet_type: effectiveBetType }, { onConflict: 'user_id,race_id' })
       error = res.error
     }
     setSaving(null)
     if (error) { showToast('Failed to save — ' + error.message, 'error'); return }
-    setUserPicks(prev => ({ ...prev, [raceId]: { ...(existing || {}), user_id: user.id, race_id: raceId, runner_id: runnerId } }))
+    setUserPicks(prev => ({ ...prev, [raceId]: { ...(existing || {}), user_id: user.id, race_id: raceId, runner_id: runnerId, bet_type: effectiveBetType } }))
     showToast(existing ? 'Pick updated!' : 'Pick saved!')
     setExpandedRace(null)
   }
@@ -288,21 +316,32 @@ export default function Picks() {
     const runner = (festRunners[raceId] || []).find(r => r.id === runnerId)
     if (runner?.is_withdrawn) return
     setFestSelected(prev => ({ ...prev, [raceId]: runnerId }))
+    setFestBetType(prev => ({ ...prev, [raceId]: 'win' }))
+  }
+
+  function handleFestBetTypeChange(raceId, type) {
+    setFestBetType(prev => ({ ...prev, [raceId]: type }))
   }
 
   async function handleFestSavePick(raceId) {
     const runnerId = festSelected[raceId]
     if (!runnerId || !user || festDayLocked) return
+    const raceRunners  = festRunners[raceId] || []
+    const runner       = raceRunners.find(r => r.id === runnerId)
+    const nonWithdrawn = raceRunners.filter(r => !r.is_withdrawn).length
+    const effectiveBetType = canOfferEachWay(runner?.odds_decimal, nonWithdrawn) ? (festBetType[raceId] || 'win') : 'win'
     setFestSaving(raceId)
     await supabase.from('festival_picks').upsert({
       festival_race_id: raceId,
       user_id: user.id,
       runner_id: runnerId,
+      bet_type: effectiveBetType,
       picked_at: new Date().toISOString(),
     }, { onConflict: 'festival_race_id,user_id' })
     setFestSaving(null)
     const wasAlreadyPicked = !!festPicks[raceId]
     setFestPicks(prev => ({ ...prev, [raceId]: runnerId }))
+    setFestBetType(prev => ({ ...prev, [raceId]: effectiveBetType }))
     showToast(wasAlreadyPicked ? 'Pick updated!' : 'Pick saved!')
     setFestExpandedRace(null)
   }
@@ -462,6 +501,10 @@ export default function Picks() {
                     const selRunnerId  = selected[race.id]
                     const selRunner    = raceRunners.find(r => r.id === selRunnerId)
                     const pickedRunner = raceRunners.find(r => r.id === pick?.runner_id)
+                    const nonWithdrawnCount = raceRunners.filter(r => !r.is_withdrawn).length
+                    const eachWayOffered    = selRunner ? canOfferEachWay(selRunner.odds_decimal, nonWithdrawnCount) : false
+                    const currentBetType    = eachWayOffered ? (betType[race.id] || 'win') : 'win'
+                    const preview           = selRunner ? previewPoints(currentBetType, selRunner.odds_decimal, nonWithdrawnCount) : null
                     return (
                       <div key={race.id} style={{ ...st.raceOuter, ...(isPicked ? st.raceOuterPicked : {}) }}>
                         <button style={st.raceSummaryRow} onClick={() => handleExpand(race.id)}>
@@ -518,6 +561,38 @@ export default function Picks() {
                                     />
                                   ))}
                                 </div>
+                                {!isLocked && selRunner && (
+                                  <div style={st.betPreviewPanel}>
+                                    {eachWayOffered ? (
+                                      <div style={st.betTypeToggle}>
+                                        <button
+                                          style={{ ...st.betTypeBtn, ...(currentBetType === 'win' ? st.betTypeBtnActive : {}) }}
+                                          onClick={() => handleBetTypeChange(race.id, 'win')}>
+                                          All-in Win
+                                        </button>
+                                        <button
+                                          style={{ ...st.betTypeBtn, ...(currentBetType === 'each_way' ? st.betTypeBtnActive : {}) }}
+                                          onClick={() => handleBetTypeChange(race.id, 'each_way')}>
+                                          Each-way
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      isWinOnly(selRunner.odds_decimal) ? (
+                                        <div style={st.betTypeNote}>Win only — under 4/1</div>
+                                      ) : (
+                                        <div style={st.betTypeNote}>Win only — each-way isn't offered in fields under 5 runners</div>
+                                      )
+                                    )}
+                                    {preview && (
+                                      <div style={st.previewRow}>
+                                        <span>If this wins: <strong style={{ color: '#c9a84c' }}>{preview.win} pts</strong></span>
+                                        {preview.place != null && (
+                                          <span>If it places (2nd): <strong style={{ color: '#c9a84c' }}>{preview.place} pts</strong></span>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
                                 {!isLocked && (
                                   <div style={st.saveRow}>
                                     <div style={st.selectedHint}>
@@ -645,6 +720,10 @@ export default function Picks() {
                       const selRunnerId    = festSelected[race.id]
                       const selRunner      = raceRunners.find(r => r.id === selRunnerId)
                       const pickedRunner   = raceRunners.find(r => r.id === pickedRunnerId)
+                      const nonWithdrawnCount = raceRunners.filter(r => !r.is_withdrawn).length
+                      const eachWayOffered    = selRunner ? canOfferEachWay(selRunner.odds_decimal, nonWithdrawnCount) : false
+                      const currentBetType    = eachWayOffered ? (festBetType[race.id] || 'win') : 'win'
+                      const preview           = selRunner ? previewPoints(currentBetType, selRunner.odds_decimal, nonWithdrawnCount) : null
                       return (
                         <div key={race.id} style={{ ...st.raceOuter, ...(isPicked ? st.raceOuterPicked : {}) }}>
                           <button style={st.raceSummaryRow} onClick={() => setFestExpandedRace(prev => prev === race.id ? null : race.id)}>
@@ -684,6 +763,38 @@ export default function Picks() {
                                       />
                                     ))}
                                   </div>
+                                  {!festDayLocked && selRunner && (
+                                    <div style={st.betPreviewPanel}>
+                                      {eachWayOffered ? (
+                                        <div style={st.betTypeToggle}>
+                                          <button
+                                            style={{ ...st.betTypeBtn, ...(currentBetType === 'win' ? st.betTypeBtnActive : {}) }}
+                                            onClick={() => handleFestBetTypeChange(race.id, 'win')}>
+                                            All-in Win
+                                          </button>
+                                          <button
+                                            style={{ ...st.betTypeBtn, ...(currentBetType === 'each_way' ? st.betTypeBtnActive : {}) }}
+                                            onClick={() => handleFestBetTypeChange(race.id, 'each_way')}>
+                                            Each-way
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        isWinOnly(selRunner.odds_decimal) ? (
+                                          <div style={st.betTypeNote}>Win only — under 4/1</div>
+                                        ) : (
+                                          <div style={st.betTypeNote}>Win only — each-way isn't offered in fields under 5 runners</div>
+                                        )
+                                      )}
+                                      {preview && (
+                                        <div style={st.previewRow}>
+                                          <span>If this wins: <strong style={{ color: '#c9a84c' }}>{preview.win} pts</strong></span>
+                                          {preview.place != null && (
+                                            <span>If it places (2nd): <strong style={{ color: '#c9a84c' }}>{preview.place} pts</strong></span>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
                                   {!festDayLocked && (
                                     <div style={st.saveRow}>
                                       <div style={st.selectedHint}>
@@ -854,6 +965,14 @@ const st = {
   saveBtn: { background: '#c9a84c', color: '#0a1a08', fontWeight: '700', fontSize: '0.9rem', padding: '0.75rem 1.75rem', borderRadius: '9px', border: 'none', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", whiteSpace: 'nowrap', flexShrink: 0, boxShadow: '0 4px 16px rgba(201,168,76,0.35)', transition: 'opacity 0.15s' },
   saveBtnDisabled: { background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.25)', cursor: 'not-allowed', boxShadow: 'none' },
   lockedPickDisplay: { fontSize: '0.85rem', color: '#5a8a5a', padding: '0.5rem 0', textAlign: 'center' },
+
+  // Bet type toggle + points preview
+  betPreviewPanel: { display: 'flex', flexDirection: 'column', gap: '0.6rem', padding: '0.75rem 0.9rem', background: 'rgba(201,168,76,0.05)', border: '1px solid rgba(201,168,76,0.15)', borderRadius: '8px' },
+  betTypeToggle: { display: 'flex', gap: '0.4rem' },
+  betTypeBtn: { flex: 1, textAlign: 'center', padding: '0.45rem 0.75rem', borderRadius: '7px', border: '1px solid rgba(201,168,76,0.25)', background: 'transparent', color: '#5a8a5a', fontSize: '0.8rem', fontWeight: '600', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" },
+  betTypeBtnActive: { border: '1px solid #c9a84c', background: 'rgba(201,168,76,0.12)', color: '#c9a84c' },
+  betTypeNote: { fontSize: '0.78rem', color: '#5a8a5a', fontStyle: 'italic' },
+  previewRow: { display: 'flex', gap: '1.25rem', flexWrap: 'wrap', fontSize: '0.8rem', color: '#e8f0e8' },
 
   // Festival header card
   festHeader: {

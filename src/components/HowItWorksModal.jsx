@@ -5,12 +5,11 @@
 
 import { useEffect } from 'react'
 
-const ODDS_BONUS = [
-  { range: 'Shorter than 2/1', winner: '+0',  placed: '+0' },
-  { range: '2/1 – 4/1',        winner: '+2',  placed: '+1' },
-  { range: '9/2 – 10/1',       winner: '+5',  placed: '+2' },
-  { range: '11/1 – 20/1',      winner: '+10', placed: '+3' },
-  { range: '20/1 +',           winner: '+15', placed: '+4' },
+const PLACE_TERMS = [
+  { range: '2 – 4 runners',  places: 'Win only — no each-way' },
+  { range: '5 – 7 runners',  places: 'Top 2' },
+  { range: '8 – 15 runners', places: 'Top 3' },
+  { range: '16+ runners',    places: 'Top 4' },
 ]
 
 export default function HowItWorksModal({ open, onClose }) {
@@ -65,48 +64,50 @@ export default function HowItWorksModal({ open, onClose }) {
 
           {/* 4 — Scoring */}
           <div style={m.card}>
-            <div style={m.sectionLabel}>Scoring</div>
+            <div style={m.sectionLabel}>Scoring — 2 Tokens Per Race</div>
+            <p style={m.bodyText}>
+              Every race, you get 2 tokens to back your pick with. Horses <strong>shorter than 4/1</strong> are
+              win-only — both tokens ride on the win. Horses <strong>4/1 or bigger</strong> let you choose how
+              to split them:
+            </p>
             <div style={m.scoreGrid}>
               <div style={{ ...m.scoreCard, ...m.scoreGold }}>
-                <span style={m.scorePos}>1st place</span>
-                <span style={m.scoreVal}>25 pts</span>
+                <span style={m.scorePos}>All-in Win</span>
+                <span style={m.scoreValSmall}>Both tokens on the win</span>
               </div>
               <div style={{ ...m.scoreCard, ...m.scoreSilver }}>
-                <span style={m.scorePos}>2nd place</span>
-                <span style={m.scoreVal}>15 pts</span>
-              </div>
-              <div style={{ ...m.scoreCard, ...m.scoreBronze }}>
-                <span style={m.scorePos}>3rd place</span>
-                <span style={m.scoreVal}>10 pts</span>
-              </div>
-              <div style={{ ...m.scoreCard, ...m.scoreEmpty }}>
-                <span style={m.scorePos}>Unplaced</span>
-                <span style={m.scoreVal}>0 pts</span>
+                <span style={m.scorePos}>Each-way</span>
+                <span style={m.scoreValSmall}>1 win token + 1 place token</span>
               </div>
             </div>
-            <div style={m.scoreNote}>Maximum 40 points per race &nbsp;·&nbsp; 280 points per week</div>
+            <p style={m.bodyText}>
+              <strong>All-in Win</strong> pays out only if your horse wins — but pays big: 2 × the decimal odds,
+              scaled up ×10. <strong>Each-way</strong> pays a smaller win amount, plus a place amount if your horse
+              finishes in the paid places (see below), with 2nd place worth more than 3rd, and 3rd worth more than
+              4th. The picks screen always shows you the exact points on offer before you confirm.
+            </p>
+            <div style={m.scoreNote}>No cap — the bigger the odds, the bigger the reward.</div>
           </div>
 
-          {/* 5 — Odds Bonus */}
+          {/* 5 — Each-Way Place Terms */}
           <div style={m.card}>
-            <div style={m.sectionLabel}>Odds Bonus</div>
+            <div style={m.sectionLabel}>Each-Way Place Terms</div>
             <div style={m.oddsNote}>
-              Winners earn a bonus based on their starting price (SP) · Placed horses earn ¼ of the bonus (rounded up)
+              How many places pay out on an each-way pick depends on the number of runners in the race
+              (counted at the picks deadline).
             </div>
             <table style={m.oddsTable}>
               <thead>
                 <tr>
-                  <th style={m.oddsTh}>Starting Price</th>
-                  <th style={{ ...m.oddsTh, textAlign: 'center' }}>Winner</th>
-                  <th style={{ ...m.oddsTh, textAlign: 'center' }}>Placed</th>
+                  <th style={m.oddsTh}>Field Size</th>
+                  <th style={{ ...m.oddsTh, textAlign: 'center' }}>Places Paid</th>
                 </tr>
               </thead>
               <tbody>
-                {ODDS_BONUS.map(row => (
+                {PLACE_TERMS.map(row => (
                   <tr key={row.range}>
                     <td style={m.oddsTd}>{row.range}</td>
-                    <td style={{ ...m.oddsTd, textAlign: 'center', color: '#c9a84c', fontWeight: '600' }}>{row.winner}</td>
-                    <td style={{ ...m.oddsTd, textAlign: 'center', color: '#8ab88a' }}>{row.placed}</td>
+                    <td style={{ ...m.oddsTd, textAlign: 'center', color: '#c9a84c', fontWeight: '600' }}>{row.places}</td>
                   </tr>
                 ))}
               </tbody>
@@ -226,7 +227,7 @@ const m = {
 
   // Scoring cards
   scoreGrid: {
-    display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem',
+    display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem',
     marginBottom: '0.75rem',
   },
   scoreCard: {
@@ -245,6 +246,10 @@ const m = {
   scoreVal: {
     fontFamily: "'Bebas Neue', sans-serif",
     fontSize: '1.25rem', color: '#fff', letterSpacing: '0.04em', lineHeight: 1,
+  },
+  scoreValSmall: {
+    fontSize: '0.72rem', color: 'rgba(255,255,255,0.85)', textAlign: 'center', lineHeight: 1.3,
+    fontFamily: "'DM Sans', sans-serif",
   },
   scoreNote: {
     fontSize: '11px', color: '#5a8a5a', textAlign: 'center',

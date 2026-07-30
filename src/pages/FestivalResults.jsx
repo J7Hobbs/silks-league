@@ -118,7 +118,7 @@ export default function FestivalResults() {
       // Scores
       const { data: scoresData } = await supabase
         .from('festival_scores')
-        .select('festival_race_id, base_points, bonus_points, total_points, position_achieved')
+        .select('festival_race_id, base_points, bonus_points, total_points, position_achieved, bet_type, win_token_points, place_token_points')
         .eq('user_id', userId).in('festival_race_id', raceIds)
       const scoreMap = {}
       scoresData?.forEach(s => { scoreMap[s.festival_race_id] = s })
@@ -305,20 +305,36 @@ export default function FestivalResults() {
                           </div>
                           {race.score && (
                             <div style={st.pointsRow}>
-                              <div style={st.ptItem}>
-                                <span style={st.ptLbl}>Base</span>
-                                <span style={st.ptVal}>{race.score.base_points ?? 0}</span>
-                              </div>
-                              <div style={st.ptDivider} />
-                              <div style={st.ptItem}>
-                                <span style={st.ptLbl}>Bonus</span>
-                                <span style={st.ptVal}>{race.score.bonus_points ?? 0}</span>
-                              </div>
-                              <div style={st.ptDivider} />
-                              <div style={st.ptItem}>
-                                <span style={st.ptLbl}>Total</span>
-                                <span style={{ ...st.ptVal, ...st.ptTotal }}>{race.score.total_points ?? 0}</span>
-                              </div>
+                              {race.score.bet_type ? (
+                                <>
+                                  <div style={st.ptItem}>
+                                    <span style={st.ptLbl}>{race.score.bet_type === 'each_way' ? 'Each-way' : 'Win'}</span>
+                                    <span style={st.ptVal}>{race.score.win_token_points ?? 0}{race.score.place_token_points ? ` +${race.score.place_token_points}` : ''}</span>
+                                  </div>
+                                  <div style={st.ptDivider} />
+                                  <div style={st.ptItem}>
+                                    <span style={st.ptLbl}>Total</span>
+                                    <span style={{ ...st.ptVal, ...st.ptTotal }}>{race.score.total_points ?? 0}</span>
+                                  </div>
+                                </>
+                              ) : (
+                                <>
+                                  <div style={st.ptItem}>
+                                    <span style={st.ptLbl}>Base</span>
+                                    <span style={st.ptVal}>{race.score.base_points ?? 0}</span>
+                                  </div>
+                                  <div style={st.ptDivider} />
+                                  <div style={st.ptItem}>
+                                    <span style={st.ptLbl}>Bonus</span>
+                                    <span style={st.ptVal}>{race.score.bonus_points ?? 0}</span>
+                                  </div>
+                                  <div style={st.ptDivider} />
+                                  <div style={st.ptItem}>
+                                    <span style={st.ptLbl}>Total</span>
+                                    <span style={{ ...st.ptVal, ...st.ptTotal }}>{race.score.total_points ?? 0}</span>
+                                  </div>
+                                </>
+                              )}
                             </div>
                           )}
                         </div>

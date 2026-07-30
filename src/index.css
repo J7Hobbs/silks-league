@@ -387,6 +387,13 @@ img { max-width: 100%; display: block; }
 .points-gold .points-val { color: var(--gold); }
 .points-silver .points-val { color: #c0c0c0; }
 .points-bronze .points-val { color: #c8834a; }
+.points-val-small {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.85rem;
+  color: var(--off-white);
+  text-align: right;
+  max-width: 60%;
+}
 
 .points-max-banner {
   text-align: center;

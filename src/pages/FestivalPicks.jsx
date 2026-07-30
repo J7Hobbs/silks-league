@@ -2,6 +2,18 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import RunnerCard from '../components/RunnerCard.jsx'
+import { isWinOnly, canOfferEachWay, calcTokenPoints } from '../lib/scoring.js'
+
+// "If it places" preview always shows the 2nd-place figure (the best-case
+// place payout) — exact taper depends on the actual finishing position.
+function previewPoints(betType, oddsDecimal, runnerCount) {
+  if (!oddsDecimal) return { win: null, place: null }
+  const win = calcTokenPoints({ betType, position: 1, oddsDecimal, runnerCount }).totalPoints
+  const place = betType === 'each_way'
+    ? calcTokenPoints({ betType, position: 2, oddsDecimal, runnerCount }).totalPoints
+    : null
+  return { win, place }
+}
 
 export default function FestivalPicks() {
   const navigate = useNavigate()
@@ -13,6 +25,7 @@ export default function FestivalPicks() {
   const [races,      setRaces]      = useState([])
   const [runners,    setRunners]    = useState({})  // { raceId: [...] }
   const [picks,      setPicks]      = useState({})  // { raceId: runnerId }
+  const [betType,    setBetTypeMap] = useState({})  // { raceId: 'win'|'each_way' }
   const [scores,     setScores]     = useState({})  // { raceId: score }
   const [results,    setResults]    = useState({})  // { raceId: [...] }
   const [saving,     setSaving]     = useState({})  // { raceId: bool }
@@ -80,10 +93,12 @@ export default function FestivalPicks() {
 
     // Load this user's picks for these races
     const { data: picksData } = await supabase
-      .from('festival_picks').select('festival_race_id, runner_id').eq('user_id', userId).in('festival_race_id', raceIds)
+      .from('festival_picks').select('festival_race_id, runner_id, bet_type').eq('user_id', userId).in('festival_race_id', raceIds)
     const picksMap = {}
-    picksData?.forEach(p => { picksMap[p.festival_race_id] = p.runner_id })
+    const betMap   = {}
+    picksData?.forEach(p => { picksMap[p.festival_race_id] = p.runner_id; betMap[p.festival_race_id] = p.bet_type || 'win' })
     setPicks(picksMap)
+    setBetTypeMap(betMap)
 
     // Load results
     const { data: resultsData } = await supabase
@@ -109,6 +124,7 @@ export default function FestivalPicks() {
     setRaces([])
     setRunners({})
     setPicks({})
+    setBetTypeMap({})
     setScores({})
     setResults({})
     if (entry && user) await loadDayData(day, user.id)
@@ -134,10 +150,18 @@ export default function FestivalPicks() {
       festival_race_id: raceId,
       user_id: user.id,
       runner_id: runnerId,
+      bet_type: 'win',
       picked_at: new Date().toISOString(),
     }, { onConflict: 'festival_race_id,user_id' })
     setPicks(p => ({ ...p, [raceId]: runnerId }))
+    setBetTypeMap(p => ({ ...p, [raceId]: 'win' }))
     setSaving(p => ({ ...p, [raceId]: false }))
+  }
+
+  async function changeBetType(raceId, type) {
+    if (!user || dayDeadlinePassed) return
+    setBetTypeMap(p => ({ ...p, [raceId]: type }))
+    await supabase.from('festival_picks').update({ bet_type: type }).eq('festival_race_id', raceId).eq('user_id', user.id)
   }
 
   const isDeadlinePassed = (day) => {
@@ -260,6 +284,12 @@ export default function FestivalPicks() {
           const hasResult    = raceResults.length > 0
           const isSaving     = saving[race.id]
 
+          const pickedRunner      = raceRunners.find(r => r.id === pickedId)
+          const nonWithdrawnCount = raceRunners.filter(r => !r.is_withdrawn).length
+          const eachWayOffered    = pickedRunner ? canOfferEachWay(pickedRunner.odds_decimal, nonWithdrawnCount) : false
+          const currentBetType    = eachWayOffered ? (betType[race.id] || 'win') : 'win'
+          const preview           = pickedRunner && !hasResult ? previewPoints(currentBetType, pickedRunner.odds_decimal, nonWithdrawnCount) : null
+
           return (
             <div key={race.id} style={st.raceCard}>
               {/* Race header */}
@@ -330,6 +360,38 @@ export default function FestivalPicks() {
                   )
                 })}
               </div>
+
+              {/* Bet type toggle + points preview */}
+              {preview && !dayDeadlinePassed && (
+                <div style={st.betPreviewPanel}>
+                  {eachWayOffered ? (
+                    <div style={st.betTypeToggle}>
+                      <button
+                        style={{ ...st.betTypeBtn, ...(currentBetType === 'win' ? st.betTypeBtnActive : {}) }}
+                        onClick={() => changeBetType(race.id, 'win')}>
+                        All-in Win
+                      </button>
+                      <button
+                        style={{ ...st.betTypeBtn, ...(currentBetType === 'each_way' ? st.betTypeBtnActive : {}) }}
+                        onClick={() => changeBetType(race.id, 'each_way')}>
+                        Each-way
+                      </button>
+                    </div>
+                  ) : (
+                    isWinOnly(pickedRunner.odds_decimal) ? (
+                      <div style={st.betTypeNote}>Win only — under 4/1</div>
+                    ) : (
+                      <div style={st.betTypeNote}>Win only — each-way isn't offered in fields under 5 runners</div>
+                    )
+                  )}
+                  <div style={st.previewRow}>
+                    <span>If this wins: <strong style={{ color: '#c9a84c' }}>{preview.win} pts</strong></span>
+                    {preview.place != null && (
+                      <span>If it places (2nd): <strong style={{ color: '#c9a84c' }}>{preview.place} pts</strong></span>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )
         })}
@@ -371,4 +433,12 @@ const st = {
   runnerBtnWD:     { background: 'rgba(255,255,255,0.03)', border: '2px solid rgba(239,68,68,0.3)', cursor: 'not-allowed' },
   runnerBtnWinner: { background: '#fff', border: '2px solid #4ade80' },
   runnerBtnPlaced: { background: '#fff', border: '2px solid #9ca3af' },
+
+  // Bet type toggle + points preview
+  betPreviewPanel: { display: 'flex', flexDirection: 'column', gap: '0.6rem', padding: '0.75rem 1rem', margin: '0 0.75rem 0.6rem', background: 'rgba(201,168,76,0.05)', border: '1px solid rgba(201,168,76,0.15)', borderRadius: '8px' },
+  betTypeToggle: { display: 'flex', gap: '0.4rem' },
+  betTypeBtn: { flex: 1, textAlign: 'center', padding: '0.45rem 0.75rem', borderRadius: '7px', border: '1px solid rgba(201,168,76,0.25)', background: 'transparent', color: '#5a8a5a', fontSize: '0.8rem', fontWeight: '600', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" },
+  betTypeBtnActive: { border: '1px solid #c9a84c', background: 'rgba(201,168,76,0.12)', color: '#c9a84c' },
+  betTypeNote: { fontSize: '0.78rem', color: '#5a8a5a', fontStyle: 'italic' },
+  previewRow: { display: 'flex', gap: '1.25rem', flexWrap: 'wrap', fontSize: '0.8rem', color: '#e8f0e8' },
 }

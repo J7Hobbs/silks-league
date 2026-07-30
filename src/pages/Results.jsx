@@ -139,7 +139,7 @@ export default function Results() {
     // User's scores
     const { data: scoresData } = await supabase
       .from('scores')
-      .select('race_id, base_points, bonus_points, total_points, position_achieved, score_note')
+      .select('race_id, base_points, bonus_points, total_points, position_achieved, score_note, bet_type, win_token_points, place_token_points')
       .eq('user_id', userId).in('race_id', raceIds)
     const scoresMap = {}
     scoresData?.forEach(s => { scoresMap[s.race_id] = s })
@@ -490,7 +490,23 @@ export default function Results() {
                                           {posDsp.label}
                                         </div>
                                         <div style={st.pointsChips}>
-                                          {racePoints > 0 ? (
+                                          {score.bet_type ? (
+                                            <>
+                                              <span style={st.baseChip}>{score.bet_type === 'each_way' ? 'Each-way' : 'Win'}</span>
+                                              {racePoints > 0 ? (
+                                                <>
+                                                  {score.win_token_points > 0 && (
+                                                    <span style={st.bonusChip}>{score.win_token_points} win</span>
+                                                  )}
+                                                  {score.place_token_points > 0 && (
+                                                    <span style={st.bonusChip}>{score.place_token_points} place</span>
+                                                  )}
+                                                </>
+                                              ) : (
+                                                <span style={st.zeroChip}>0 pts</span>
+                                              )}
+                                            </>
+                                          ) : racePoints > 0 ? (
                                             <>
                                               <span style={st.baseChip}>{score.base_points} base</span>
                                               {score.bonus_points > 0 && (

@@ -3,8 +3,8 @@ import './index.css'
 
 const STATS = [
   { value: '7', label: 'Races every Saturday' },
-  { value: '25pts', label: 'For a winner' },
-  { value: '280', label: 'Max points per week' },
+  { value: '2', label: 'Tokens per race' },
+  { value: 'No cap', label: 'Points on offer' },
   { value: '£0', label: 'Cost to play' },
 ]
 
@@ -35,12 +35,11 @@ const STEPS = [
   },
 ]
 
-const ODDS_BONUS = [
-  { range: 'Shorter than 2/1', winner: '+0', placed: '+0' },
-  { range: '2/1 – 4/1', winner: '+2', placed: '+1' },
-  { range: '9/2 – 10/1', winner: '+5', placed: '+2' },
-  { range: '11/1 – 20/1', winner: '+10', placed: '+3' },
-  { range: '20/1 +', winner: '+15', placed: '+4' },
+const PLACE_TERMS = [
+  { range: '2 – 4 runners', places: 'Win only' },
+  { range: '5 – 7 runners', places: 'Top 2' },
+  { range: '8 – 15 runners', places: 'Top 3' },
+  { range: '16+ runners', places: 'Top 4' },
 ]
 
 const LEADERBOARD = [
@@ -165,51 +164,44 @@ export default function App() {
             <div className="section-eyebrow">Points system</div>
             <h2 className="section-title">Simple.<br />Transparent.<br />Competitive.</h2>
             <p className="split-body">
-              Every race, every Saturday — base points go to the top three finishers.
-              Pick the winner at a big price and an odds bonus can push your score
-              all the way up to 40 points in a single race.
+              Every race, every Saturday — you get 2 tokens to back your pick with. Horses shorter
+              than 4/1 are win-only; horses 4/1 or bigger let you choose All-in Win or Each-way.
+              Pick the winner at a big price and there's no ceiling on what you can score.
             </p>
             <p className="split-body">
-              With 7 races and a maximum of 280 points on offer each week, every pick matters.
-              Silks League runs on monthly seasons — each calendar month is a fresh start, with
-              4–5 Saturdays per month. Compete for the weekly prize, the monthly title,
-              or go all out for the annual championship.
+              With 7 races and no cap on points, every pick matters. Silks League runs on monthly
+              seasons — each calendar month is a fresh start, with 4–5 Saturdays per month. Compete
+              for the weekly prize, the monthly title, or go all out for the annual championship.
             </p>
           </div>
           <div className="points-stack">
             <div className="points-card points-gold">
-              <span className="points-pos">1st place</span>
-              <span className="points-val">25 pts</span>
+              <span className="points-pos">All-in Win</span>
+              <span className="points-val-small">Both tokens on the win</span>
             </div>
             <div className="points-card points-silver">
-              <span className="points-pos">2nd place</span>
-              <span className="points-val">15 pts</span>
-            </div>
-            <div className="points-card points-bronze">
-              <span className="points-pos">3rd place</span>
-              <span className="points-val">10 pts</span>
+              <span className="points-pos">Each-way</span>
+              <span className="points-val-small">1 win token + 1 place token</span>
             </div>
 
-            {/* Odds bonus table */}
+            {/* Place terms table */}
             <div style={oddsBoxStyle}>
-              <div style={oddsTitleStyle}>Odds bonus</div>
+              <div style={oddsTitleStyle}>Each-way place terms</div>
               <div style={oddsNoteStyle}>
-                Winners get a bonus based on SP · Placed horses get ¼ of the bonus (rounded up)
+                How many places pay out depends on the number of runners in the race
               </div>
               <table style={oddsTableStyle}>
                 <thead>
                   <tr>
-                    <th style={oddsTh}>Starting price</th>
-                    <th style={{ ...oddsTh, textAlign: 'center' }}>Winner</th>
-                    <th style={{ ...oddsTh, textAlign: 'center' }}>Placed</th>
+                    <th style={oddsTh}>Field size</th>
+                    <th style={{ ...oddsTh, textAlign: 'center' }}>Places paid</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {ODDS_BONUS.map((row) => (
+                  {PLACE_TERMS.map((row) => (
                     <tr key={row.range}>
                       <td style={oddsTd}>{row.range}</td>
-                      <td style={{ ...oddsTd, textAlign: 'center', color: '#c9a84c', fontWeight: '600' }}>{row.winner}</td>
-                      <td style={{ ...oddsTd, textAlign: 'center', color: '#8ab88a' }}>{row.placed}</td>
+                      <td style={{ ...oddsTd, textAlign: 'center', color: '#c9a84c', fontWeight: '600' }}>{row.places}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -217,7 +209,7 @@ export default function App() {
             </div>
 
             <div className="points-max-banner">
-              Maximum <strong>40 points</strong> per race &nbsp;·&nbsp; <strong>280 points</strong> per week
+              No cap — the bigger the odds, the bigger the reward
             </div>
           </div>
         </div>
@@ -257,7 +249,7 @@ export default function App() {
 
           <p className="lb-note">
             Live results update automatically each Saturday after the final race.
-            Max 40 pts per race · 280 pts per week · Odds bonus applied to winners and placed horses.
+            No cap per race or per week · 2 tokens per race · Win or Each-way at 4/1 and bigger.
           </p>
         </div>
       </section>
