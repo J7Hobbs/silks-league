@@ -617,7 +617,7 @@ export default function Dashboard() {
                 <div style={s.festStrip}>
                   <div style={s.festStripCol}>
                     <div style={s.festStripLabel}>RACE DAY</div>
-                    <div style={{ ...s.festStripVal, color: '#e8f0e8' }}>
+                    <div style={{ ...s.festStripVal, color: '#ffffff' }}>
                       <span className="league-desktop-only">{festDayLabel}</span>
                       <span className="league-mobile-only">{festDayLabelShort}</span>
                     </div>
@@ -625,14 +625,14 @@ export default function Dashboard() {
                   <div style={s.festStripSep} />
                   <div style={s.festStripCol}>
                     <div style={s.festStripLabel}>PICKS CLOSE</div>
-                    <div style={{ ...s.festStripVal, color: picksClosed ? 'rgba(232,240,232,0.35)' : '#c9a84c' }}>
+                    <div style={{ ...s.festStripVal, color: picksClosed ? 'rgba(232,240,232,0.5)' : '#f5d98b' }}>
                       {picksCloseLabel}
                     </div>
                   </div>
                   <div style={s.festStripSep} />
                   <div style={s.festStripCol}>
                     <div style={s.festStripLabel}>YOUR POINTS</div>
-                    <div style={{ ...s.festStripVal, color: '#c9a84c' }}>
+                    <div style={{ ...s.festStripVal, color: '#f5d98b' }}>
                       {festivalPoints !== null ? `${festivalPoints} pts` : '0 pts'}
                     </div>
                   </div>
@@ -974,13 +974,13 @@ const s = {
   festPts: { textAlign: 'center' },
   festPtsVal: { fontFamily: "'Bebas Neue', sans-serif", fontSize: '2.4rem', color: '#c9a84c', lineHeight: 1 },
   festPtsLbl: { fontSize: '0.63rem', color: 'rgba(201,168,76,0.7)', textTransform: 'uppercase', letterSpacing: '0.1em' },
-  festJoinBtn: { background: 'rgba(201,168,76,0.15)', border: '1.5px solid #c9a84c', color: '#c9a84c', borderRadius: '8px', padding: '0.55rem 1.2rem', fontFamily: "'DM Sans', sans-serif", fontWeight: '600', fontSize: '0.875rem', cursor: 'pointer', whiteSpace: 'nowrap' },
-  festViewBtn:      { background: '#c9a84c', border: 'none', color: '#0a1a08', borderRadius: '8px', padding: '0.55rem 1.2rem', fontFamily: "'DM Sans', sans-serif", fontWeight: '700', fontSize: '0.875rem', cursor: 'pointer', whiteSpace: 'nowrap' },
+  festJoinBtn: { background: 'rgba(10,26,8,0.72)', border: '2px solid #c9a84c', color: '#f5d98b', borderRadius: '8px', padding: '0.55rem 1.2rem', fontFamily: "'DM Sans', sans-serif", fontWeight: '700', fontSize: '0.875rem', cursor: 'pointer', whiteSpace: 'nowrap', boxShadow: '0 2px 10px rgba(0,0,0,0.4)' },
+  festViewBtn:      { background: '#c9a84c', border: '1px solid rgba(10,26,8,0.5)', color: '#0a1a08', borderRadius: '8px', padding: '0.55rem 1.2rem', fontFamily: "'DM Sans', sans-serif", fontWeight: '700', fontSize: '0.875rem', cursor: 'pointer', whiteSpace: 'nowrap', boxShadow: '0 2px 10px rgba(0,0,0,0.4)' },
   festStripDivider: { height: '1px', background: 'rgba(201,168,76,0.25)' },
-  festStrip:        { display: 'grid', gridTemplateColumns: '1fr auto 1fr auto 1fr', alignItems: 'center', background: 'rgba(0,0,0,0.2)', padding: '0.85rem 2rem' },
+  festStrip:        { display: 'grid', gridTemplateColumns: '1fr auto 1fr auto 1fr', alignItems: 'center', background: 'rgba(0,0,0,0.4)', padding: '0.85rem 2rem' },
   festStripCol:     { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem', padding: '0 0.5rem' },
-  festStripLabel:   { fontSize: '0.62rem', fontWeight: '700', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(232,240,232,0.45)', fontFamily: "'DM Sans', sans-serif" },
-  festStripVal:     { fontSize: '14px', fontWeight: '700', fontFamily: "'DM Sans', sans-serif" },
+  festStripLabel:   { fontSize: '0.62rem', fontWeight: '700', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(232,240,232,0.65)', fontFamily: "'DM Sans', sans-serif" },
+  festStripVal:     { fontSize: '14px', fontWeight: '800', fontFamily: "'DM Sans', sans-serif", textShadow: '0 1px 4px rgba(0,0,0,0.55)' },
   festStripSep:     { width: '1px', height: '36px', background: 'rgba(201,168,76,0.25)' },
 
   // Stat pills
