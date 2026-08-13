@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import ProfileDropdown from '../components/ProfileDropdown.jsx'
-import PlayerPicksModal from '../components/PlayerPicksModal.jsx'
 import { Home, Target, Trophy, BarChart2, Users } from 'lucide-react'
 import eborBanner from '../assets/ebor-banner.jpg'
 
@@ -11,23 +10,22 @@ export default function Dashboard() {
   const [user, setUser]                       = useState(null)
   const [isAdmin, setIsAdmin]                 = useState(false)
   const [loading, setLoading]                 = useState(true)
-  const [races, setRaces]                     = useState([])
+  const [_races, setRaces]                    = useState([])
   const [seasonPoints, setSeasonPoints]       = useState(null)
   const [leaderboard, setLeaderboard]         = useState([])
-  const [weekLeaderboard, setWeekLeaderboard] = useState([])
-  const [leaderboardTab, setLeaderboardTab]   = useState('season')
+  const [_weekLeaderboard, setWeekLeaderboard] = useState([])
+  const [_leaderboardTab, setLeaderboardTab]  = useState('season')
   const [currentWeekNum, setCurrentWeekNum]   = useState(null)
   const [now, setNow]                         = useState(new Date())
-  const [thisWeekPicks, setThisWeekPicks]     = useState({})
-  const [lastWeekData, setLastWeekData]       = useState([])
+  const [_thisWeekPicks, setThisWeekPicks]    = useState({})
+  const [_lastWeekData, setLastWeekData]      = useState([])
   const [festival, setFestival]               = useState(null)
   const [festivalEntry, setFestivalEntry]     = useState(null)
   const [festivalPoints, setFestivalPoints]   = useState(null)
   const [joiningFestival, setJoiningFestival] = useState(false)
   const [myGroup, setMyGroup]                 = useState(null)
-  const [picksModal, setPicksModal]           = useState(null) // { userId, name, pts, rank }
   const [totalUserCount, setTotalUserCount]   = useState(0)
-  const [festLeaderboard, setFestLeaderboard] = useState([])
+  const [_festLeaderboard, setFestLeaderboard] = useState([])
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000)
@@ -485,7 +483,6 @@ export default function Dashboard() {
 
   const countdown         = getCountdownStatus()
   const myRank            = leaderboard.find(r => r.isMe)?.rank ?? null
-  const isRaceDay         = races.length > 0 // show this week whenever races are set up
   const festIsLive        = festival?.is_active === true
   const festStartDate     = festival ? new Date(festival.start_date + 'T00:00:00') : null
   const festDaysUntil     = festStartDate ? Math.ceil((festStartDate - now) / 86400000) : null
@@ -547,10 +544,6 @@ export default function Dashboard() {
   const cdHours      = Math.floor((secsToSat % 86400) / 3600)
   const cdMins       = Math.floor((secsToSat % 3600) / 60)
   const nextSatLabel = nextSatDt.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'long' })
-
-  const shownLeaderboard = leaderboardTab === 'season'   ? leaderboard
-    : leaderboardTab === 'week'     ? weekLeaderboard
-    : festLeaderboard
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
@@ -642,70 +635,6 @@ export default function Dashboard() {
           </section>
         )}
 
-        {/* Leaderboard — sits between festival banner and countdown */}
-        <div style={s.card}>
-          <div style={s.cardHeader}>
-            <span style={s.cardTitle}>Leaderboard</span>
-            <div style={s.tabRow}>
-              {festIsLive && (
-                <button
-                  style={{ ...s.tab, ...(leaderboardTab === 'festival' ? s.tabActive : {}) }}
-                  onClick={() => setLeaderboardTab('festival')}>
-                  {festival.display_name || festival.name}
-                </button>
-              )}
-              <button
-                style={{ ...s.tab, ...(leaderboardTab === 'week' ? s.tabActive : {}) }}
-                onClick={() => setLeaderboardTab('week')}>
-                This Week
-              </button>
-              <button
-                style={{ ...s.tab, ...(leaderboardTab === 'season' ? s.tabActive : {}) }}
-                onClick={() => setLeaderboardTab('season')}>
-                Season
-              </button>
-            </div>
-          </div>
-          <div style={s.leaderList}>
-            {shownLeaderboard.length === 0
-              ? <div style={s.emptyMsg}>No scores yet — results appear here once submitted.</div>
-              : shownLeaderboard.map(row => (
-                  <div key={row.rank} style={{ ...s.leaderRow, ...(row.isMe ? s.leaderRowMe : {}) }}>
-                    <div style={{ ...s.leaderRank, ...(row.rank > 3 ? { color: '#5a8a5a', fontSize: '0.82rem' } : {}) }}>
-                      {row.rank === 1 ? '🥇' : row.rank === 2 ? '🥈' : row.rank === 3 ? '🥉' : row.rank}
-                    </div>
-                    <div
-                      style={{ ...s.leaderName, cursor: 'pointer', textDecorationLine: 'underline', textDecorationStyle: 'dotted', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
-                      onClick={() => setPicksModal({
-                        userId: row.userId,
-                        name:   row.name,
-                        pts:    row.points,
-                        rank:   row.rank,
-                        ...(leaderboardTab === 'festival' && festival
-                          ? { festivalId: festival.id, festivalName: festival.display_name || festival.name }
-                          : {}),
-                      })}>
-                      {row.name}
-                      {row.isMe && <span style={s.youBadge}>You</span>}
-                      {row.midSeason && leaderboardTab === 'season' && (
-                        <span style={{ fontSize: '0.58rem', fontWeight: '700', letterSpacing: '0.06em', color: '#5a8a5a', background: 'rgba(90,138,90,0.12)', padding: '0.1rem 0.4rem', borderRadius: '3px', whiteSpace: 'nowrap' }}>mid-season</span>
-                      )}
-                    </div>
-                    <div style={s.leaderPoints}>{row.points} pts</div>
-                  </div>
-                ))
-            }
-          </div>
-          <button
-            style={s.viewAllBtn}
-            onClick={() => leaderboardTab === 'festival' && festival
-              ? navigate('/league', { state: { festivalTab: festival.id } })
-              : navigate('/league')
-            }>
-            Full leaderboard →
-          </button>
-        </div>
-
         {/* Next race day countdown */}
         <style>{`@media(min-width:768px){.nrd-mb{display:none !important}.nrd-dt{display:flex !important}}@media(max-width:767px){.dash-two-col{grid-template-columns:1fr!important;width:100%}.dash-two-col>*{min-width:0;width:100%}}`}</style>
         <div style={s.card}>
@@ -777,7 +706,8 @@ export default function Dashboard() {
         </div>
 
         {/* Stat pills */}
-        <section style={s.pillsRow}>
+        <style>{`@media(max-width:640px){.pills-row{grid-template-columns:1fr 1fr!important}.pills-row .full-lb-link{grid-column:1 / -1;text-align:center;margin-top:0.25rem}}`}</style>
+        <section style={s.pillsRow} className="pills-row">
           <div style={s.pill}>
             <span style={s.pillIcon}>⭐</span>
             <div>
@@ -797,86 +727,10 @@ export default function Dashboard() {
               <div style={s.pillLabel}>League Rank</div>
             </div>
           </div>
+          <a style={s.fullLeaderboardLink} className="full-lb-link" onClick={() => navigate('/league')}>
+            Full leaderboard →
+          </a>
         </section>
-
-        {/* Smart race card — full width at bottom */}
-        <div style={s.card}>
-          <div style={s.cardHeader}>
-            <span style={s.cardTitle}>
-              {isRaceDay ? "THIS WEEK'S RACES" : 'LAST WEEK'}
-            </span>
-            <span style={s.cardBadge}>
-              {isRaceDay
-                ? `${races.length} race${races.length !== 1 ? 's' : ''}`
-                : 'Performance'}
-            </span>
-          </div>
-
-          {/* State A — Race day */}
-          {isRaceDay && (
-            <div style={s.raceList}>
-              {races.length === 0
-                ? <div style={s.emptyMsg}>No races set up yet — check back soon.</div>
-                : races.map(r => {
-                    const picked = thisWeekPicks[r.id]
-                    return (
-                      <div key={r.id} style={s.raceRow}>
-                        <div style={s.raceTime}>{r.time || '—'}</div>
-                        <div style={s.raceInfo}>
-                          <div style={s.raceCourse}>{r.course}</div>
-                          <div style={s.raceName}>{r.race || 'Race'}</div>
-                        </div>
-                        {picked
-                          ? <div style={s.pickedBadge}>✓ Picked</div>
-                          : <button style={s.pickBtn} onClick={() => navigate('/picks')}>Pick →</button>
-                        }
-                      </div>
-                    )
-                  })
-              }
-            </div>
-          )}
-
-          {/* State B — Mid-week / Last week */}
-          {!isRaceDay && (
-            <div style={s.raceList}>
-              {lastWeekData.length === 0
-                ? <div style={s.emptyMsg}>No results available for last week yet.</div>
-                : lastWeekData.map(({ race, pick, score }) => {
-                    const pos = score?.position_achieved
-                    const pts = score?.total_points ?? null
-                    const posBadge = pos === 1 ? s.posBadgeGreen : (pos === 2 || pos === 3) ? s.posBadgeGold : s.posBadgeGrey
-                    const ptsPill  = pos === 1 ? s.ptsPillGreen  : (pos === 2 || pos === 3) ? s.ptsPillGold  : s.ptsPillGrey
-                    const posLabel = pos === 1 ? '1st' : pos === 2 ? '2nd' : pos === 3 ? '3rd' : pos ? `${pos}th` : '—'
-                    return (
-                      <div key={race.id} style={s.raceRow}>
-                        <div style={s.raceTime}>{race.race_time || '—'}</div>
-                        <div style={s.raceInfo}>
-                          <div style={s.raceCourse}>{race.venue}</div>
-                          {pick
-                            ? (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginTop: '0.1rem' }}>
-                                {pick.silkColour && (
-                                  <span style={{ width: '9px', height: '9px', borderRadius: '2px', background: pick.silkColour, display: 'inline-block', flexShrink: 0, border: '1px solid rgba(255,255,255,0.25)' }} />
-                                )}
-                                <span style={s.raceName}>{pick.horseName}</span>
-                              </div>
-                            )
-                            : <div style={s.raceName}>No pick</div>
-                          }
-                        </div>
-                        <div style={posBadge}>{posLabel}</div>
-                        {pts !== null && (
-                          <div style={ptsPill}>{pts > 0 ? `+${pts}` : pts} pts</div>
-                        )}
-                      </div>
-                    )
-                  })
-              }
-            </div>
-          )}
-        </div>
-
 
       </main>
 
@@ -900,20 +754,6 @@ export default function Dashboard() {
           <span style={s.mobileLabel}>Results</span>
         </a>
       </nav>
-
-      {/* ── Player picks modal ── */}
-      {picksModal && (
-        <PlayerPicksModal
-          userId={picksModal.userId}
-          viewerUserId={user?.id}
-          displayName={picksModal.name}
-          seasonPoints={picksModal.pts}
-          seasonRank={picksModal.rank}
-          festivalId={picksModal.festivalId || null}
-          festivalName={picksModal.festivalName || null}
-          onClose={() => setPicksModal(null)}
-        />
-      )}
 
     </div>
   )
@@ -984,12 +824,13 @@ const s = {
   festStripSep:     { width: '1px', height: '36px', background: 'rgba(201,168,76,0.25)' },
 
   // Stat pills
-  pillsRow: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' },
+  pillsRow: { display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '1rem', alignItems: 'center' },
   pill: { background: 'linear-gradient(180deg, #152e12 0%, #0a1a08 100%)', border: '1px solid #c9a84c', borderLeft: '4px solid #c9a84c', borderRadius: '8px', padding: '1.1rem 1.5rem', display: 'flex', alignItems: 'center', gap: '1rem' },
   pillIcon: { fontSize: '1.6rem', flexShrink: 0 },
   pillValue: { fontFamily: "'Bebas Neue', sans-serif", fontSize: '2.2rem', color: '#c9a84c', letterSpacing: '0.03em', lineHeight: 1 },
   pillValueSub: { fontFamily: "'DM Sans', sans-serif", fontSize: '1.1rem', color: '#5a8a5a', fontWeight: '400' },
   pillLabel: { fontSize: '0.78rem', color: '#e8f0e8', fontWeight: '500', marginTop: '0.2rem' },
+  fullLeaderboardLink: { color: '#c9a84c', fontSize: '0.85rem', fontWeight: '600', fontFamily: "'DM Sans', sans-serif", cursor: 'pointer', whiteSpace: 'nowrap', textDecoration: 'none' },
 
   // Cards
   twoCol: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' },
@@ -997,36 +838,6 @@ const s = {
   cardHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' },
   cardTitle: { fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.1rem', color: '#e8f0e8', letterSpacing: '0.08em' },
   cardBadge: { background: 'rgba(201,168,76,0.12)', color: '#c9a84c', fontSize: '0.72rem', fontWeight: '600', padding: '0.2rem 0.6rem', borderRadius: '999px', whiteSpace: 'nowrap' },
-  emptyMsg: { color: '#5a8a5a', fontSize: '0.83rem', padding: '0.25rem 0' },
-
-  // Race rows
-  raceList: { display: 'flex', flexDirection: 'column', gap: '0.55rem' },
-  raceRow: { display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.6rem 0.75rem', background: 'rgba(201,168,76,0.04)', borderRadius: '6px', border: '1px solid rgba(201,168,76,0.14)' },
-  raceTime: { fontFamily: "'Bebas Neue', sans-serif", fontSize: '0.92rem', color: '#c9a84c', letterSpacing: '0.05em', minWidth: '36px' },
-  raceInfo: { flex: 1, minWidth: 0 },
-  raceCourse: { fontSize: '0.82rem', fontWeight: '600', color: '#e8f0e8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
-  raceName: { fontSize: '0.71rem', color: '#5a8a5a', marginTop: '0.08rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
-  pickedBadge: { background: 'rgba(74,222,128,0.1)', border: '1px solid rgba(74,222,128,0.3)', color: '#4ade80', borderRadius: '6px', padding: '0.28rem 0.55rem', fontSize: '0.73rem', fontWeight: '700', whiteSpace: 'nowrap', flexShrink: 0 },
-  pickBtn: { background: '#c9a84c', color: '#0a1a08', border: 'none', borderRadius: '6px', padding: '0.28rem 0.6rem', fontSize: '0.73rem', fontWeight: '700', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", whiteSpace: 'nowrap', flexShrink: 0 },
-  posBadgeGreen: { background: 'rgba(74,222,128,0.12)', border: '1px solid rgba(74,222,128,0.3)', color: '#4ade80', borderRadius: '5px', padding: '0.22rem 0.45rem', fontSize: '0.7rem', fontWeight: '700', flexShrink: 0, whiteSpace: 'nowrap' },
-  posBadgeGold:  { background: 'rgba(201,168,76,0.12)', border: '1px solid rgba(201,168,76,0.3)', color: '#c9a84c', borderRadius: '5px', padding: '0.22rem 0.45rem', fontSize: '0.7rem', fontWeight: '700', flexShrink: 0, whiteSpace: 'nowrap' },
-  posBadgeGrey:  { background: 'rgba(90,138,90,0.08)', border: '1px solid rgba(90,138,90,0.2)', color: '#5a8a5a', borderRadius: '5px', padding: '0.22rem 0.45rem', fontSize: '0.7rem', fontWeight: '700', flexShrink: 0, whiteSpace: 'nowrap' },
-  ptsPillGreen: { background: 'rgba(74,222,128,0.1)', color: '#4ade80', borderRadius: '4px', padding: '0.18rem 0.4rem', fontSize: '0.7rem', fontWeight: '700', flexShrink: 0, whiteSpace: 'nowrap' },
-  ptsPillGold:  { background: 'rgba(201,168,76,0.1)', color: '#c9a84c', borderRadius: '4px', padding: '0.18rem 0.4rem', fontSize: '0.7rem', fontWeight: '700', flexShrink: 0, whiteSpace: 'nowrap' },
-  ptsPillGrey:  { background: 'rgba(90,138,90,0.08)', color: '#5a8a5a', borderRadius: '4px', padding: '0.18rem 0.4rem', fontSize: '0.7rem', fontWeight: '700', flexShrink: 0, whiteSpace: 'nowrap' },
-
-  // Leaderboard tabs
-  tabRow: { display: 'flex', gap: '0.35rem' },
-  tab: { background: 'none', border: '1px solid rgba(201,168,76,0.2)', color: '#5a8a5a', borderRadius: '6px', padding: '0.28rem 0.65rem', fontSize: '0.73rem', fontWeight: '600', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" },
-  tabActive: { background: 'rgba(201,168,76,0.12)', border: '1px solid rgba(201,168,76,0.4)', color: '#c9a84c' },
-  leaderList: { display: 'flex', flexDirection: 'column', gap: '0.45rem' },
-  leaderRow: { display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.55rem 0.7rem', borderRadius: '6px', background: 'rgba(201,168,76,0.04)', border: '1px solid rgba(201,168,76,0.14)' },
-  leaderRowMe: { background: 'rgba(201,168,76,0.1)', border: '1px solid rgba(201,168,76,0.4)' },
-  leaderRank: { fontSize: '0.9rem', minWidth: '24px', textAlign: 'center' },
-  leaderName: { flex: 1, fontSize: '0.84rem', fontWeight: '500', color: '#e8f0e8', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-  leaderPoints: { fontSize: '0.84rem', fontWeight: '600', color: '#c9a84c' },
-  viewAllBtn: { background: 'none', border: '1px solid rgba(201,168,76,0.2)', color: '#c9a84c', borderRadius: '8px', padding: '0.55rem 1rem', fontSize: '0.82rem', fontWeight: '600', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", width: '100%', textAlign: 'center', marginTop: 'auto' },
-  youBadge: { fontSize: '0.55rem', fontWeight: '700', letterSpacing: '0.08em', textTransform: 'uppercase', color: '#0a1a08', background: '#c9a84c', padding: '0.1rem 0.35rem', borderRadius: '3px', whiteSpace: 'nowrap', textDecorationLine: 'none' },
 
   // Countdown blocks
   cdRow: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', padding: '0.25rem 0' },
