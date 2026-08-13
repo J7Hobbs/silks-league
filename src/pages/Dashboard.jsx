@@ -522,10 +522,13 @@ export default function Dashboard() {
   })()
   const msToClose      = picksDeadline - now
   const picksClosed    = msToClose <= 0
+  const picksCloseD    = picksClosed ? 0 : Math.floor(msToClose / 86400000)
   const picksCloseH    = picksClosed ? 0 : Math.floor(msToClose / 3600000)
+  const picksCloseHRem = picksClosed ? 0 : Math.floor((msToClose % 86400000) / 3600000)
   const picksCloseM    = picksClosed ? 0 : Math.floor((msToClose % 3600000) / 60000)
   const picksCloseLabel = picksClosed
     ? 'Closed'
+    : msToClose >= 86400000 ? `${picksCloseD}d ${picksCloseHRem}h`
     : picksCloseH > 0 ? `${picksCloseH}h ${picksCloseM}m` : `${picksCloseM}m`
 
   // Countdown blocks
