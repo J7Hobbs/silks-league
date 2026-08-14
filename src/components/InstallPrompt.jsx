@@ -1,39 +1,39 @@
 import { useState, useEffect } from 'react'
 
-const DISMISSED_KEY = 'silks_install_dismissed'
+const DISMISSED_KEY = 'silks_install_dismissed' // Android/desktop — permanent
+const IOS_DISMISSED_AT_KEY = 'silks_ios_a2hs_dismissed_at' // iOS — timestamp, re-shown after 7 days
+const IOS_REPROMPT_MS = 7 * 24 * 60 * 60 * 1000
+const IOS_SHOW_DELAY_MS = 10000
 
 export default function InstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState(null)
   const [visible, setVisible] = useState(false)
 
   useEffect(() => {
-    // Don't show if already dismissed or already installed as PWA
-    if (localStorage.getItem(DISMISSED_KEY)) return
-
     // Already running in standalone mode — already installed
     if (window.matchMedia('(display-mode: standalone)').matches) return
     if (window.navigator.standalone === true) return // iOS standalone
 
-    // Listen for the browser's install prompt event (Chrome / Android)
+    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent)
+
+    if (isIOS) {
+      // Safari doesn't fire beforeinstallprompt — show the banner manually,
+      // but not on first paint, and re-show every 7 days if dismissed
+      const dismissedAt = localStorage.getItem(IOS_DISMISSED_AT_KEY)
+      if (dismissedAt && Date.now() - Number(dismissedAt) < IOS_REPROMPT_MS) return
+
+      const timer = setTimeout(() => setVisible(true), IOS_SHOW_DELAY_MS)
+      return () => clearTimeout(timer)
+    }
+
+    // Android/desktop — listen for the browser's install prompt event
+    if (localStorage.getItem(DISMISSED_KEY)) return
     const handler = e => {
       e.preventDefault()
       setDeferredPrompt(e)
       setVisible(true)
     }
     window.addEventListener('beforeinstallprompt', handler)
-
-    // On iOS, Safari doesn't fire beforeinstallprompt — show the banner manually
-    // after a short delay so it doesn't flash on first load
-    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent)
-    const isInStandalone = window.navigator.standalone
-    if (isIOS && !isInStandalone) {
-      const timer = setTimeout(() => setVisible(true), 2000)
-      return () => {
-        clearTimeout(timer)
-        window.removeEventListener('beforeinstallprompt', handler)
-      }
-    }
-
     return () => window.removeEventListener('beforeinstallprompt', handler)
   }, [])
 
@@ -51,7 +51,11 @@ export default function InstallPrompt() {
 
   const dismiss = () => {
     setVisible(false)
-    localStorage.setItem(DISMISSED_KEY, '1')
+    if (/iphone|ipad|ipod/i.test(navigator.userAgent)) {
+      localStorage.setItem(IOS_DISMISSED_AT_KEY, String(Date.now()))
+    } else {
+      localStorage.setItem(DISMISSED_KEY, '1')
+    }
   }
 
   if (!visible) return null
@@ -65,7 +69,7 @@ export default function InstallPrompt() {
         <div style={st.text}>
           <span style={st.msg}>
             {isIOS
-              ? <>Add <strong style={st.strong}>Silks League</strong> to your home screen for the best experience</>
+              ? <>Add <strong style={st.strong}>Silks League</strong> to your home screen for notifications and a faster, app-like experience</>
               : <>Add <strong style={st.strong}>Silks League</strong> to your home screen for the best experience</>
             }
           </span>
