@@ -1,7 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { OneSignal, oneSignalReady } from '../lib/oneSignal'
 import ProfileDropdown from '../components/ProfileDropdown.jsx'
+
+const IS_IOS = /iphone|ipad|ipod/i.test(navigator.userAgent)
+const IS_IOS_STANDALONE = window.navigator.standalone === true
 
 const USERNAME_REGEX = /^[a-zA-Z0-9]{3,20}$/
 
@@ -29,6 +33,12 @@ export default function Account() {
 
   // ── Toast ─────────────────────────────────────────────────────
   const [toast, setToast] = useState(null)
+
+  // ── Notifications ──────────────────────────────────────────────
+  const [notifSupported, setNotifSupported] = useState(false)
+  const [notifPermission, setNotifPermission] = useState('default') // 'default' | 'granted' | 'denied'
+  const [notifOptedIn, setNotifOptedIn] = useState(false)
+  const [notifLoading, setNotifLoading] = useState(false)
 
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data: { user } }) => {
@@ -62,6 +72,65 @@ export default function Account() {
   function showToast(text, ok = true) {
     setToast({ text, ok })
     setTimeout(() => setToast(null), 3000)
+  }
+
+  // ── Notification status ─────────────────────────────────────────
+  useEffect(() => {
+    let cancelled = false
+
+    function syncStatus() {
+      const supported = OneSignal.Notifications.isPushSupported()
+      setNotifSupported(supported)
+      if (!supported) return
+      setNotifPermission(OneSignal.Notifications.permissionNative)
+      setNotifOptedIn(!!OneSignal.User.PushSubscription.optedIn)
+    }
+
+    oneSignalReady().then(() => {
+      if (cancelled) return
+      syncStatus()
+      OneSignal.Notifications.addEventListener('permissionChange', syncStatus)
+      OneSignal.User.PushSubscription.addEventListener('change', syncStatus)
+    })
+
+    return () => {
+      cancelled = true
+      if (OneSignal.Notifications?.removeEventListener) {
+        OneSignal.Notifications.removeEventListener('permissionChange', syncStatus)
+        OneSignal.User.PushSubscription.removeEventListener('change', syncStatus)
+      }
+    }
+  }, [])
+
+  async function toggleNotifications() {
+    if (notifLoading) return
+
+    if (notifOptedIn) {
+      setNotifLoading(true)
+      await OneSignal.User.PushSubscription.optOut()
+      setNotifOptedIn(false)
+      setNotifLoading(false)
+      showToast('Notifications turned off')
+      return
+    }
+
+    if (notifPermission === 'denied') {
+      showToast('Notifications are blocked — enable them in your browser settings first.', false)
+      return
+    }
+
+    setNotifLoading(true)
+    const granted = await OneSignal.Notifications.requestPermission()
+    setNotifPermission(OneSignal.Notifications.permissionNative)
+    if (granted) {
+      await OneSignal.User.PushSubscription.optIn()
+      setNotifOptedIn(true)
+      showToast('Notifications enabled')
+    } else {
+      setNotifOptedIn(false)
+      showToast('Notifications weren\'t enabled', false)
+    }
+    setNotifLoading(false)
   }
 
   // ── Save username ─────────────────────────────────────────────
@@ -210,6 +279,44 @@ export default function Account() {
           </form>
         </section>
 
+        {/* ── Notifications section ── */}
+        <section style={st.card}>
+          <h2 style={st.cardTitle}>Notifications</h2>
+          <p style={st.cardSub}>
+            {notifSupported
+              ? 'Get a reminder before Saturday picks close.'
+              : IS_IOS && !IS_IOS_STANDALONE
+                ? 'Add Silks League to your home screen first, then come back here to enable notifications.'
+                : 'Notifications aren\'t supported in this browser.'}
+          </p>
+
+          {notifSupported && (
+            <div style={st.switchRow}>
+              <div>
+                <div style={st.switchLabel}>Enable picks reminders</div>
+                {notifPermission === 'denied' && (
+                  <div style={st.hintRed}>Blocked in your browser settings</div>
+                )}
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={notifOptedIn}
+                aria-label="Enable picks reminders"
+                onClick={toggleNotifications}
+                disabled={notifLoading || notifPermission === 'denied'}
+                style={{
+                  ...st.switchTrack,
+                  ...(notifOptedIn ? st.switchTrackOn : {}),
+                  ...((notifLoading || notifPermission === 'denied') ? st.switchDisabled : {}),
+                }}
+              >
+                <span style={{ ...st.switchThumb, ...(notifOptedIn ? st.switchThumbOn : {}) }} />
+              </button>
+            </div>
+          )}
+        </section>
+
       </main>
     </div>
   )
@@ -243,6 +350,13 @@ const st = {
   saveBtnOff: { background: 'rgba(201,168,76,0.4)', cursor: 'not-allowed' },
   hintMuted:  { fontSize: '0.78rem', color: '#5a8a5a' },
   hintGreen:  { fontSize: '0.78rem', color: '#4ade80' },
-  hintRed:    { fontSize: '0.78rem', color: '#f87171' },
+  hintRed:    { fontSize: '0.78rem', color: '#f87171', marginTop: '0.2rem' },
   inlineMsg:  { fontSize: '0.82rem', lineHeight: 1.4 },
+  switchRow:    { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' },
+  switchLabel:  { fontSize: '0.9rem', fontWeight: '600', color: '#e8f0e8' },
+  switchTrack:  { width: '46px', height: '26px', borderRadius: '13px', background: 'rgba(201,168,76,0.15)', border: '1px solid rgba(201,168,76,0.3)', position: 'relative', cursor: 'pointer', padding: 0, flexShrink: 0, transition: 'background 0.15s ease' },
+  switchTrackOn: { background: '#c9a84c', borderColor: '#c9a84c' },
+  switchThumb:  { position: 'absolute', top: '2px', left: '2px', width: '20px', height: '20px', borderRadius: '50%', background: '#e8f0e8', transition: 'transform 0.15s ease' },
+  switchThumbOn: { transform: 'translateX(20px)', background: '#0a1a08' },
+  switchDisabled: { opacity: 0.5, cursor: 'not-allowed' },
 }
