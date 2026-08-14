@@ -18,6 +18,7 @@ import FestivalPicks       from './pages/FestivalPicks.jsx'
 import FestivalLeaderboard from './pages/FestivalLeaderboard.jsx'
 import FestivalResults     from './pages/FestivalResults.jsx'
 import InstallPrompt       from './components/InstallPrompt.jsx'
+import OneSignalInit       from './components/OneSignalInit.jsx'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
@@ -40,6 +41,7 @@ createRoot(document.getElementById('root')).render(
         <Route path="/results/festival/:festivalId" element={<FestivalResults />}              />
       </Routes>
       <InstallPrompt />
+      <OneSignalInit />
     </BrowserRouter>
   </StrictMode>,
 )

@@ -26,11 +26,11 @@
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
 
-    <!-- Register service worker -->
+    <!-- Register service worker (combined app + OneSignal worker — see public/OneSignalSDKWorker.js) -->
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js')
+          navigator.serviceWorker.register('/OneSignalSDKWorker.js')
             .then(reg => console.log('[SW] Registered, scope:', reg.scope))
             .catch(err => console.warn('[SW] Registration failed:', err))
         })
