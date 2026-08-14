@@ -76,6 +76,7 @@ export default function Account() {
 
   // ── Notification status ─────────────────────────────────────────
   useEffect(() => {
+    if (!user) return
     let cancelled = false
 
     function syncStatus() {
@@ -86,7 +87,11 @@ export default function Account() {
       setNotifOptedIn(!!OneSignal.User.PushSubscription.optedIn)
     }
 
-    oneSignalReady().then(() => {
+    oneSignalReady().then(async () => {
+      if (cancelled) return
+      // Tag this OneSignal subscription with our Supabase user ID (External ID)
+      // so send-notification can target this person specifically.
+      await OneSignal.login(user.id)
       if (cancelled) return
       syncStatus()
       OneSignal.Notifications.addEventListener('permissionChange', syncStatus)
@@ -100,7 +105,7 @@ export default function Account() {
         OneSignal.User.PushSubscription.removeEventListener('change', syncStatus)
       }
     }
-  }, [])
+  }, [user])
 
   async function toggleNotifications() {
     if (notifLoading) return
