@@ -75,7 +75,7 @@ export default function InstallPrompt() {
           </span>
           {isIOS && (
             <span style={st.iosHint}>
-              Tap <span style={st.shareIcon}>⎋</span> then "Add to Home Screen"
+              Tap the Share icon <span style={st.shareIcon}>⎋</span>, then scroll down to "Add to Home Screen"
             </span>
           )}
         </div>
