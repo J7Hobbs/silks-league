@@ -115,7 +115,10 @@ Deno.serve(async req => {
     contents: { en: body },
     ...(url ? { url } : {}),
     ...(broadcast
-      ? { included_segments: ['Subscribed Users'] }
+      // "Subscribed Users" is an older OneSignal segment name that no longer
+      // exists on newer apps — this app's actual default segment for any
+      // active push/email/SMS subscriber is "Active Subscriptions".
+      ? { included_segments: ['Active Subscriptions'] }
       : { include_aliases: { external_id: userIds } }),
   }
 
