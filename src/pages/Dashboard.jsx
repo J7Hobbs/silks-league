@@ -10,15 +10,15 @@ export default function Dashboard() {
   const [user, setUser]                       = useState(null)
   const [isAdmin, setIsAdmin]                 = useState(false)
   const [loading, setLoading]                 = useState(true)
-  const [_races, setRaces]                    = useState([])
+  const [races, setRaces]                     = useState([])
   const [seasonPoints, setSeasonPoints]       = useState(null)
   const [leaderboard, setLeaderboard]         = useState([])
   const [_weekLeaderboard, setWeekLeaderboard] = useState([])
   const [_leaderboardTab, setLeaderboardTab]  = useState('season')
   const [currentWeekNum, setCurrentWeekNum]   = useState(null)
   const [now, setNow]                         = useState(new Date())
-  const [_thisWeekPicks, setThisWeekPicks]    = useState({})
-  const [_lastWeekData, setLastWeekData]      = useState([])
+  const [thisWeekPicks, setThisWeekPicks]     = useState({})
+  const [lastWeekData, setLastWeekData]       = useState([])
   const [festival, setFestival]               = useState(null)
   const [festivalEntry, setFestivalEntry]     = useState(null)
   const [festivalPoints, setFestivalPoints]   = useState(null)
@@ -545,6 +545,12 @@ export default function Dashboard() {
   const cdMins       = Math.floor((secsToSat % 3600) / 60)
   const nextSatLabel = nextSatDt.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'long' })
 
+  // Picks status strip
+  const pickedCount   = races.filter(r => thisWeekPicks[r.id]).length
+  const lastWeekPoints = lastWeekData.length
+    ? lastWeekData.reduce((sum, d) => sum + (d.score?.total_points || 0), 0)
+    : null
+
   // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
@@ -703,34 +709,67 @@ export default function Dashboard() {
 
           </div>
 
+          {/* ── Stats grid — points / rank / last week / full leaderboard ── */}
+          <div style={s.cardDivider} />
+          <div style={s.slStatsGrid}>
+            <div style={s.slStatCell}>
+              <span style={s.slStatIcon}>⭐</span>
+              <div>
+                <div style={s.slStatValue}>{seasonPoints !== null ? seasonPoints : '—'}</div>
+                <div style={s.slStatLabel}>Points this season</div>
+              </div>
+            </div>
+            <div style={s.slStatCell}>
+              <span style={s.slStatIcon}>🏆</span>
+              <div>
+                <div style={s.slStatValue}>
+                  {myRank ? `#${myRank}` : '—'}
+                  {myRank && totalUserCount > 0 && (
+                    <span style={s.slStatValueSub}> / {totalUserCount}</span>
+                  )}
+                </div>
+                <div style={s.slStatLabel}>League rank</div>
+              </div>
+            </div>
+            <div style={s.slStatCell}>
+              <span style={s.slStatIcon}>📅</span>
+              <div>
+                <div style={s.slStatValue}>{lastWeekPoints !== null ? lastWeekPoints : '—'}</div>
+                <div style={s.slStatLabel}>Last week's points</div>
+              </div>
+            </div>
+            <div style={{ ...s.slStatCell, justifyContent: 'center' }}>
+              <a style={s.fullLeaderboardLink} onClick={() => navigate('/league')}>
+                Full leaderboard →
+              </a>
+            </div>
+          </div>
+
         </div>
 
-        {/* Stat pills */}
-        <style>{`@media(max-width:640px){.pills-row{grid-template-columns:1fr 1fr!important}.pills-row .full-lb-link{grid-column:1 / -1;text-align:center;margin-top:0.25rem}}`}</style>
-        <section style={s.pillsRow} className="pills-row">
-          <div style={s.pill}>
-            <span style={s.pillIcon}>⭐</span>
-            <div>
-              <div style={s.pillValue}>{seasonPoints !== null ? seasonPoints : '—'}</div>
-              <div style={s.pillLabel}>My Points this season</div>
+        {/* Picks status strip */}
+        {races.length > 0 && (
+          <div style={s.card}>
+            <div style={s.cardHeader}>
+              <span style={s.cardTitle}>YOUR PICKS · {nextSatLabel}</span>
+              <span style={s.cardBadge}>{pickedCount} of {races.length} picked</span>
+            </div>
+            <div style={s.picksSlotRow}>
+              {races.map(r => {
+                const picked = !!thisWeekPicks[r.id]
+                return (
+                  <button
+                    key={r.id}
+                    style={picked ? s.picksSlotFilled : s.picksSlotEmpty}
+                    onClick={() => navigate('/picks')}
+                    title={picked ? `Race ${r.number} — picked` : `Race ${r.number} — pick now`}>
+                    {r.number}
+                  </button>
+                )
+              })}
             </div>
           </div>
-          <div style={s.pill}>
-            <span style={s.pillIcon}>🏆</span>
-            <div>
-              <div style={s.pillValue}>
-                {myRank ? `#${myRank}` : '—'}
-                {myRank && totalUserCount > 0 && (
-                  <span style={s.pillValueSub}> / {totalUserCount}</span>
-                )}
-              </div>
-              <div style={s.pillLabel}>League Rank</div>
-            </div>
-          </div>
-          <a style={s.fullLeaderboardLink} className="full-lb-link" onClick={() => navigate('/league')}>
-            Full leaderboard →
-          </a>
-        </section>
+        )}
 
       </main>
 
@@ -823,14 +862,20 @@ const s = {
   festStripVal:     { fontSize: '14px', fontWeight: '800', fontFamily: "'DM Sans', sans-serif", textShadow: '0 1px 4px rgba(0,0,0,0.55)' },
   festStripSep:     { width: '1px', height: '36px', background: 'rgba(201,168,76,0.25)' },
 
-  // Stat pills
-  pillsRow: { display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '1rem', alignItems: 'center' },
-  pill: { background: 'linear-gradient(180deg, #152e12 0%, #0a1a08 100%)', border: '1px solid #c9a84c', borderLeft: '4px solid #c9a84c', borderRadius: '8px', padding: '1.1rem 1.5rem', display: 'flex', alignItems: 'center', gap: '1rem' },
-  pillIcon: { fontSize: '1.6rem', flexShrink: 0 },
-  pillValue: { fontFamily: "'Bebas Neue', sans-serif", fontSize: '2.2rem', color: '#c9a84c', letterSpacing: '0.03em', lineHeight: 1 },
-  pillValueSub: { fontFamily: "'DM Sans', sans-serif", fontSize: '1.1rem', color: '#5a8a5a', fontWeight: '400' },
-  pillLabel: { fontSize: '0.78rem', color: '#e8f0e8', fontWeight: '500', marginTop: '0.2rem' },
-  fullLeaderboardLink: { color: '#c9a84c', fontSize: '0.85rem', fontWeight: '600', fontFamily: "'DM Sans', sans-serif", cursor: 'pointer', whiteSpace: 'nowrap', textDecoration: 'none' },
+  // Saturday League card — stats grid (points / rank / last week / leaderboard link)
+  cardDivider: { height: '1px', background: 'rgba(201,168,76,0.15)' },
+  slStatsGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem 1.5rem' },
+  slStatCell: { display: 'flex', alignItems: 'center', gap: '0.75rem' },
+  slStatIcon: { fontSize: '1.4rem', flexShrink: 0 },
+  slStatValue: { fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.8rem', color: '#c9a84c', letterSpacing: '0.03em', lineHeight: 1 },
+  slStatValueSub: { fontFamily: "'DM Sans', sans-serif", fontSize: '0.95rem', color: '#5a8a5a', fontWeight: '400' },
+  slStatLabel: { fontSize: '0.75rem', color: '#e8f0e8', fontWeight: '500', marginTop: '0.15rem' },
+  fullLeaderboardLink: { color: '#c9a84c', fontSize: '0.9rem', fontWeight: '600', fontFamily: "'DM Sans', sans-serif", cursor: 'pointer', whiteSpace: 'nowrap', textDecoration: 'none' },
+
+  // Picks status strip
+  picksSlotRow: { display: 'flex', gap: '0.5rem', flexWrap: 'wrap' },
+  picksSlotFilled: { width: '42px', height: '42px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(201,168,76,0.18)', border: '1.5px solid #c9a84c', color: '#c9a84c', fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.1rem', cursor: 'pointer', flexShrink: 0 },
+  picksSlotEmpty: { width: '42px', height: '42px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: '1.5px dashed rgba(201,168,76,0.3)', color: '#5a8a5a', fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.1rem', cursor: 'pointer', flexShrink: 0 },
 
   // Cards
   twoCol: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' },
