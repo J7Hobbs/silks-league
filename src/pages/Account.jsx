@@ -125,6 +125,12 @@ export default function Account() {
     }
 
     setNotifLoading(true)
+    // Re-assert the External ID right before the subscription is created —
+    // the page-load login() can end up in a different OneSignal identity
+    // context than the one that actually owns the subscription (e.g. iOS
+    // home-screen PWAs use storage isolated from regular Safari tabs), so
+    // this is the one guaranteed to be co-located with optIn() below.
+    await OneSignal.login(user.id)
     const granted = await OneSignal.Notifications.requestPermission()
     setNotifPermission(OneSignal.Notifications.permissionNative)
     if (granted) {
