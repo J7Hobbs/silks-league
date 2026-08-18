@@ -398,6 +398,49 @@ export default function Admin() {
     setDeleteConfirm({ title, body, onConfirm, confirmLabel: opts.confirmLabel, confirmStyle: opts.confirmStyle })
   }
 
+  // ── Picks-open notification (explicit admin action, not tied to import) ──
+  async function notifyPicksOpen(kind) {
+    const target = kind === 'week' ? currentWeek : selectedDay
+    if (!target) return
+
+    const send = async () => {
+      const table = kind === 'week' ? 'race_weeks' : 'festival_days'
+      const label = kind === 'week'
+        ? `Saturday's races (Week ${currentWeek.week_number})`
+        : `${selectedFestival?.display_name || selectedFestival?.name || 'Festival'} — Day ${selectedDay.day_number}`
+      const url = kind === 'week' ? `${APP_ORIGIN}/picks` : `${APP_ORIGIN}/festival-picks`
+
+      setLoading(true)
+      try {
+        const { error } = await supabase.functions.invoke('send-notification', {
+          body: { broadcast: true, title: 'Picks are open!', body: `${label} are live — make your picks`, url },
+        })
+        if (error) throw error
+        const notifiedAt = new Date().toISOString()
+        const { error: updateErr } = await supabase.from(table).update({ picks_open_notified_at: notifiedAt }).eq('id', target.id)
+        if (updateErr) throw updateErr
+        if (kind === 'week') setCurrentWeek(prev => ({ ...prev, picks_open_notified_at: notifiedAt }))
+        else setSelectedDay(prev => ({ ...prev, picks_open_notified_at: notifiedAt }))
+        showToast('success', 'Notification sent — picks are open!')
+      } catch (err) {
+        console.error('[Admin] notifyPicksOpen failed:', err)
+        showToast('error', `Notification failed to send: ${err.message || err}`)
+      }
+      setLoading(false)
+    }
+
+    if (target.picks_open_notified_at) {
+      confirm(
+        'Send picks-open notification again?',
+        `This was already sent on ${new Date(target.picks_open_notified_at).toLocaleString('en-GB')}. Everyone subscribed will be notified again.`,
+        send,
+        { confirmLabel: 'Yes, send again', confirmStyle: st.btnGold },
+      )
+    } else {
+      send()
+    }
+  }
+
   // ── Complete week ────────────────────────────────────────────
   function completeWeek(week) {
     confirm(
@@ -2345,7 +2388,14 @@ export default function Admin() {
                         <div style={st.infoCardSub}>Picks deadline: {currentWeek.picks_deadline?.slice(11, 16) || '12:00'} · {races.length}/7 races</div>
                       </div>
                       {!isCurrentPastWeek && (
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                          {races.length > 0 && (
+                            currentWeek.picks_open_notified_at
+                              ? <button style={{ ...st.btnSmallGhost, color: '#4ade80', borderColor: 'rgba(74,222,128,0.35)' }}
+                                  title={`Sent ${new Date(currentWeek.picks_open_notified_at).toLocaleString('en-GB')} — click to resend`}
+                                  onClick={() => notifyPicksOpen('week')} disabled={loading}>✓ Notified</button>
+                              : <button style={st.btnSmallGhost} onClick={() => notifyPicksOpen('week')} disabled={loading}>🔔 Notify: Picks Open</button>
+                          )}
                           <button style={st.btnSmallGhost} onClick={startEditWeek}>Edit</button>
                           <button style={st.btnSmallDanger} onClick={deleteRaceWeek}>Delete Week</button>
                         </div>
@@ -3307,6 +3357,15 @@ runners: 6`}</code>
                               )
                             })()}
                             <div style={{ display: 'flex', gap: '0.5rem' }}>
+                              {/* Picks-open notification — explicit admin action, not tied to import */}
+                              {festivalRaces.length > 0 && (
+                                selectedDay.picks_open_notified_at
+                                  ? <button style={{ ...st.btnSmall, color: '#4ade80', borderColor: 'rgba(74,222,128,0.35)' }}
+                                      title={`Sent ${new Date(selectedDay.picks_open_notified_at).toLocaleString('en-GB')} — click to resend`}
+                                      onClick={() => notifyPicksOpen('festivalDay')} disabled={loading}>✓ Notified</button>
+                                  : <button style={{ ...st.btnSmall, borderColor: '#5a8a5a', color: '#5a8a5a' }}
+                                      onClick={() => notifyPicksOpen('festivalDay')} disabled={loading}>🔔 Notify: Picks Open</button>
+                              )}
                               {/* Lock Picks button — stamps runner_count_at_lock for each-way scoring */}
                               {festivalRaces.length > 0 && (
                                 <button
