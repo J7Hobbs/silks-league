@@ -20,7 +20,10 @@
 //
 // Caller must be an authenticated Supabase user with is_admin = true on
 // their profile — this function can message every subscribed user, so it
-// isn't left open to any logged-in account.
+// isn't left open to any logged-in account. The one exception is the
+// project's own service-role key, used for trusted server-to-server calls
+// from other Edge Functions (e.g. picks-deadline-reminder) — that key is
+// never exposed to any client, only to Supabase's own Edge Runtime.
 //
 // Secrets required (set via `supabase secrets set`, see deploy notes):
 //   ONESIGNAL_REST_API_KEY
@@ -61,28 +64,35 @@ Deno.serve(async req => {
   const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!
   const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
-  let user: { id: string }
   let isAdmin = false
-  try {
-    const supabaseAuth = createClient(supabaseUrl, supabaseAnonKey)
-    const { data: { user: authUser }, error: userErr } = await supabaseAuth.auth.getUser(token)
-    if (userErr || !authUser) {
-      console.error('[send-notification] Invalid session:', userErr?.message)
-      return json({ error: 'Invalid or expired session' }, 401)
-    }
-    user = authUser
+  let callerLabel = 'unknown'
 
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
-    const { data: profile, error: profileErr } = await supabaseAdmin
-      .from('profiles').select('is_admin').eq('id', user.id).single()
-    if (profileErr) throw profileErr
-    isAdmin = !!profile?.is_admin
-  } catch (err) {
-    console.error('[send-notification] Auth/admin check failed:', err)
-    return json({ error: 'Failed to verify caller' }, 500)
+  if (token === supabaseServiceKey) {
+    isAdmin = true
+    callerLabel = 'internal service-role call'
+  } else {
+    try {
+      const supabaseAuth = createClient(supabaseUrl, supabaseAnonKey)
+      const { data: { user: authUser }, error: userErr } = await supabaseAuth.auth.getUser(token)
+      if (userErr || !authUser) {
+        console.error('[send-notification] Invalid session:', userErr?.message)
+        return json({ error: 'Invalid or expired session' }, 401)
+      }
+      callerLabel = authUser.id
+
+      const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
+      const { data: profile, error: profileErr } = await supabaseAdmin
+        .from('profiles').select('is_admin').eq('id', authUser.id).single()
+      if (profileErr) throw profileErr
+      isAdmin = !!profile?.is_admin
+    } catch (err) {
+      console.error('[send-notification] Auth/admin check failed:', err)
+      return json({ error: 'Failed to verify caller' }, 500)
+    }
   }
+
   if (!isAdmin) {
-    console.error('[send-notification] Non-admin caller rejected:', user.id)
+    console.error('[send-notification] Non-admin caller rejected:', callerLabel)
     return json({ error: 'Admin access required' }, 403)
   }
 
