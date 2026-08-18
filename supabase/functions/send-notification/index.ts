@@ -35,14 +35,27 @@ import { createClient } from 'npm:@supabase/supabase-js@2'
 const ONESIGNAL_APP_ID = 'eedcef3b-5612-48ad-ac57-5e1e9f19abbc' // public, non-secret — matches client-side OneSignalInit.jsx
 const ONESIGNAL_API_URL = 'https://api.onesignal.com/notifications'
 
+// This function is called both server-to-server (cron, service-role) and
+// directly from the browser (admin panel after a results save) — the
+// latter needs CORS headers or the browser blocks the request before it's
+// ever sent.
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+}
+
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
   })
 }
 
 Deno.serve(async req => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: CORS_HEADERS })
+  }
   if (req.method !== 'POST') {
     return json({ error: 'Method not allowed' }, 405)
   }

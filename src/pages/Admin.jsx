@@ -63,6 +63,21 @@ import RunnerCard from '../components/RunnerCard.jsx'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { calcPoints, calcTokenPoints } from '../lib/scoring.js'
 
+const APP_ORIGIN = 'https://silks-league.vercel.app'
+
+// Broadcasts a "results are in" push via send-notification. Never blocks or
+// fails the results save it's called from — logs and swallows any error.
+async function notifyResultsIn(body, url) {
+  try {
+    const { error } = await supabase.functions.invoke('send-notification', {
+      body: { broadcast: true, title: 'Results are in!', body, url },
+    })
+    if (error) console.error('[Admin] notifyResultsIn failed:', error)
+  } catch (err) {
+    console.error('[Admin] notifyResultsIn failed:', err)
+  }
+}
+
 // ── Points calculation ───────────────────────────────────────
 function parseFractionalOdds(str) {
   if (!str) return null
@@ -1237,6 +1252,9 @@ export default function Admin() {
     const { error: resErr } = await supabase.from('results').insert(resultRows)
     if (resErr) { showToast('error', `Save results failed: ${resErr.message}`); setLoading(false); return }
 
+    const raceLabel = race.venue ? `Race ${race.race_number} at ${race.venue}` : `Race ${race.race_number}`
+    notifyResultsIn(`${raceLabel} results are in — see how you did`, `${APP_ORIGIN}/results`)
+
     // ── Step 3: calculate scores ────────────────────────────────
     const result = await calculateScoresForRace(race.id, race.race_number)
 
@@ -1850,6 +1868,11 @@ export default function Admin() {
     if (o4) festResultRows.push({ festival_race_id: race.id, position: 4, horse_name: form.horse4, starting_price_display: o4.oddsDisplay })
     const { error: resErr } = await supabase.from('festival_results').insert(festResultRows)
     if (resErr) { showToast('error', `Results save failed: ${resErr.message}`); setLoading(false); return }
+
+    if (selectedFestival) {
+      const raceLabel = race.venue ? `Race ${race.race_number} at ${race.venue}` : `Race ${race.race_number}`
+      notifyResultsIn(`${raceLabel} results are in — see how you did`, `${APP_ORIGIN}/results/festival/${selectedFestival.id}`)
+    }
 
     // Calculate scores for all picks on this race
     const { data: picks } = await supabase
