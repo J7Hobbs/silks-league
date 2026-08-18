@@ -80,11 +80,16 @@ export default function Dashboard() {
 
     const raceIds = raceData.map(r => r.id)
 
-    const { data: picksData } = await supabase
+    // Disambiguated: picks has two FKs into runners (runner_id and
+    // original_runner_id, for withdrawal replacements) — a bare `runners(...)`
+    // embed is ambiguous and PostgREST rejects it (PGRST201), silently
+    // leaving every pick unmatched since this wasn't previously error-checked.
+    const { data: picksData, error: picksError } = await supabase
       .from('picks')
-      .select('race_id, runner_id, runners(horse_name, silk_colour)')
+      .select('race_id, runner_id, runners!picks_runner_id_fkey(horse_name, silk_colour)')
       .eq('user_id', userId)
       .in('race_id', raceIds)
+    if (picksError) console.error('[Dashboard] Failed to load this week\'s picks:', picksError)
 
     const picksMap = {}
     picksData?.forEach(p => {
