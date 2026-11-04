@@ -1,0 +1,16 @@
+/* Placeholder blocks shown while a tab's data loads (src/components/Skeletons.jsx). */
+.sk {
+  background: linear-gradient(90deg, var(--surface) 0%, rgba(242, 239, 228, 0.07) 50%, var(--surface) 100%);
+  background-size: 200% 100%;
+  border-radius: 12px;
+  animation: sk-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes sk-shimmer {
+  from { background-position: 100% 0; }
+  to   { background-position: -100% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sk { animation: none; }
+}
+.sk-row { display: flex; align-items: center; gap: 8px; }
+.sk-col { display: flex; flex-direction: column; }

@@ -7,9 +7,6 @@
   font-family: var(--font-body);
   padding-bottom: 3rem;
 }
-.lg-loading { min-height: 60vh; display: grid; place-items: center; background: var(--bg); }
-.lg-loading__dot { width: 12px; height: 12px; border-radius: 50%; background: var(--gold); }
-.lg-loading--inline { min-height: 160px; }
 
 .lg__main {
   max-width: 560px;

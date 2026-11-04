@@ -23,6 +23,7 @@ import RaceHeader from '../components/picks/RaceHeader.jsx'
 import RunnerRow from '../components/picks/RunnerRow.jsx'
 import JoinCard from '../components/picks/JoinCard.jsx'
 import EmptyState from '../components/picks/EmptyState.jsx'
+import { PicksSkeleton, RunnerRowsSkeleton } from '../components/Skeletons.jsx'
 import '../styles/picks.css'
 
 // "If it places" preview always shows the 2nd-place figure (the best-case
@@ -362,7 +363,7 @@ export default function Picks() {
 
   // ── Loading ───────────────────────────────────────────────────
   if (loading) {
-    return <div className="pk-loading"><div className="pk-loading__dot" /></div>
+    return <PicksSkeleton />
   }
 
   // ── What's on screen: the Saturday League or the selected festival ──
@@ -453,7 +454,7 @@ export default function Picks() {
           <DaySwitch days={dayChoices} activeId={festDay?.id} onSelect={handleFestDaySwitch} />
         )}
 
-        {isFest && festLoading && <div className="pk-loading" style={{ minHeight: 160 }}><div className="pk-loading__dot" /></div>}
+        {isFest && festLoading && <RunnerRowsSkeleton />}
 
         {isFest && !festLoading && !festEntry && (
           <JoinCard name={selFest.display_name || selFest.name} onJoin={() => handleJoin(selFest)} />

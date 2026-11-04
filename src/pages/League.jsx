@@ -22,6 +22,7 @@ import ViewToggle from '../components/league/ViewToggle.jsx'
 import PositionCard from '../components/league/PositionCard.jsx'
 import NotInCard from '../components/league/NotInCard.jsx'
 import StandingsRow from '../components/league/StandingsRow.jsx'
+import { LeagueSkeleton, StandingsRowsSkeleton } from '../components/Skeletons.jsx'
 import '../styles/picks.css'
 import '../styles/league.css'
 
@@ -523,7 +524,7 @@ export default function League() {
 
   // ── Loading ───────────────────────────────────────────────────
   if (loading) {
-    return <div className="lg-loading"><div className="lg-loading__dot" /></div>
+    return <LeagueSkeleton />
   }
 
   // ── Rows for whatever is selected ─────────────────────────────
@@ -619,7 +620,7 @@ export default function League() {
 
         {annualShown ? (
           annualLoading ? (
-            <div className="lg-loading lg-loading--inline"><div className="lg-loading__dot" /></div>
+            <StandingsRowsSkeleton />
           ) : (
             <AnnualLeagueTable
               rows={annualRows}
@@ -632,7 +633,7 @@ export default function League() {
             {showToggle && <ViewToggle items={VIEWS} value={view} onChange={setView} />}
 
             {busy ? (
-              <div className="lg-loading lg-loading--inline"><div className="lg-loading__dot" /></div>
+              <StandingsRowsSkeleton />
             ) : (
               <>
                 {selFest && !me ? (

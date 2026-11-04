@@ -21,6 +21,7 @@ import PeriodSelector from '../components/results/PeriodSelector.jsx'
 import SummaryTiles from '../components/results/SummaryTiles.jsx'
 import RaceCard from '../components/results/RaceCard.jsx'
 import EmptyState from '../components/results/EmptyState.jsx'
+import { ResultsSkeleton, ResultsBodySkeleton } from '../components/Skeletons.jsx'
 import '../styles/picks.css'
 import '../styles/results.css'
 
@@ -130,7 +131,7 @@ export default function Results() {
   }
 
   if (loading) {
-    return <div className="rs-loading"><div className="rs-loading__dot" /></div>
+    return <ResultsSkeleton />
   }
 
   return (
@@ -166,7 +167,7 @@ export default function Results() {
                 <button type="button" className="rs-retry" onClick={() => { setBadId(null); setTryAgain(a => a + 1) }}>Try again</button>
               </>
             ) : !current ? (
-              <div className="rs-loading--inline"><div className="rs-loading__dot" /></div>
+              <ResultsBodySkeleton />
             ) : (
               <>
                 {current.summary.played ? (

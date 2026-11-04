@@ -8,6 +8,7 @@ import { greetingFor } from '../lib/format.js'
 import CompetitionCard from '../components/home/CompetitionCard.jsx'
 import ComingUp from '../components/home/ComingUp.jsx'
 import RaceDayCard from '../components/home/RaceDayCard.jsx'
+import { HomeSkeleton } from '../components/Skeletons.jsx'
 import '../styles/home.css'
 
 export default function Dashboard() {
@@ -40,7 +41,7 @@ export default function Dashboard() {
   )
 
   if (!data) {
-    return <div className="home-loading"><div className="home-loading__dot" /></div>
+    return <HomeSkeleton />
   }
 
   const when = new Date(now)
