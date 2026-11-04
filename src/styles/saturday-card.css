@@ -7,6 +7,7 @@
   overflow: hidden;
 }
 .sc--gold { border-color: rgba(201, 168, 76, 0.35); }
+.sc--soft { border-color: rgba(201, 168, 76, 0.22); }
 
 /* ── Header band ── */
 .sc-head {
@@ -209,6 +210,8 @@
   transition: opacity 0.15s ease;
 }
 .sc-btn:hover { opacity: 0.9; }
+.sc-btn:disabled { opacity: 0.6; cursor: default; }
+.sc-note { margin: -4px 0 0; font-size: 12px; line-height: 1.45; color: var(--text-muted); }
 .sc-btn--solid { background: var(--gold); color: #0a1a08; border: 1px solid var(--gold); }
 .sc-btn--outline { background: transparent; color: var(--gold); border: 1px solid rgba(201, 168, 76, 0.5); }
 .sc-btn:focus-visible, .sc-spot--link:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }

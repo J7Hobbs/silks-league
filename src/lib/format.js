@@ -134,3 +134,19 @@ export function formatLockCountdown(ms) {
   const s = total % 60
   return [h, m, s].map(n => String(n).padStart(2, '0')).join(':')
 }
+
+// ── Date words for the "race day announced" state ──
+const WEEKDAYS_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+
+// "2026-11-07" -> "Saturday"
+export function weekdayLong(dateStr) { return WEEKDAYS_LONG[new Date(dateStr + 'T12:00:00Z').getUTCDay()] }
+
+// "2026-11-07" -> "Nov"
+export function monthAbbr(dateStr) { return monthLong(dateStr).slice(0, 3) }
+
+// The first Wednesday after a date (YYYY-MM-DD), as YYYY-MM-DD.
+export function wednesdayAfter(dateStr) {
+  const d = new Date(dateStr + 'T12:00:00Z')
+  do { d.setUTCDate(d.getUTCDate() + 1) } while (d.getUTCDay() !== 3)
+  return d.toISOString().slice(0, 10)
+}

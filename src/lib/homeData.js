@@ -15,6 +15,7 @@ function groupBy(rows, key) {
 // open     picks are open now (a race week with races and a future deadline)
 // closed   it's race day and the deadline has passed
 // lastWeek last week's result, up to 14 days after that race week
+// announced the next race week exists but has no races yet
 // returns  nothing recent: "returns soon" with the position in the active season
 // The card itself (homeCards.js) works out what to show from this, as the clock moves on.
 const RACE_COLS = 'id, race_week_id, race_number, race_time, venue, race_name'
@@ -31,6 +32,16 @@ async function loadWeekDetail(userId, races, season, referenceWeekId) {
     season ? seasonTable(userId, season.id, referenceWeekId) : Promise.resolve(null),
   ])
   return { races, runners, picks, results, scores, table }
+}
+
+// The next race week (today or later) when it has no races yet, else null.
+async function findAnnouncedWeek(weeks, today, exceptId) {
+  const next = weeks
+    .filter(w => w.saturday_date >= today && w.id !== exceptId)
+    .sort((a, b) => (a.saturday_date < b.saturday_date ? -1 : 1))[0]
+  if (!next) return null
+  const { data: races } = await supabase.from('races').select('id').eq('race_week_id', next.id).limit(1)
+  return races?.length ? null : { id: next.id, saturday_date: next.saturday_date }
 }
 
 async function loadSaturday(userId, today, nowMs) {
@@ -76,10 +87,16 @@ async function loadSaturday(userId, today, nowMs) {
   if (last && daysBetween(last.saturday_date, today) <= 14) {
     const { data: races } = await supabase.from('races').select(RACE_COLS).eq('race_week_id', last.id)
     if (races?.length) {
-      const detail = await loadWeekDetail(userId, races, seasonInfo, last.id)
+      // The next week, if it has been announced without races, takes over from the
+      // results card on the Wednesday after race day; the card decides when.
+      const [detail, nextWeek] = await Promise.all([
+        loadWeekDetail(userId, races, seasonInfo, last.id),
+        findAnnouncedWeek(all, today, last.id),
+      ])
       return {
         state: 'lastWeek',
         week: last,
+        nextWeek,
         deadline: last.picks_deadline || `${last.saturday_date}T12:00:00`,
         season: seasonInfo,
         seasonRank: detail.table?.rank || null,
@@ -88,7 +105,11 @@ async function loadSaturday(userId, today, nowMs) {
     }
   }
 
-  const table = season ? await seasonTable(userId, season.id) : null
+  const [table, announced] = await Promise.all([
+    season ? seasonTable(userId, season.id) : Promise.resolve(null),
+    findAnnouncedWeek(all, today, null),
+  ])
+  if (announced) return { state: 'announced', week: announced, season: seasonInfo, table }
   return { state: 'returns', season: seasonInfo, seasonPos: table?.rank || null, table }
 }
 

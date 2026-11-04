@@ -1,5 +1,6 @@
-import { useLayoutEffect, useRef } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import Silk from '../Silk.jsx'
+import { pushStatus, watchPush, enablePush, needsHomeScreen } from '../../lib/notifications.js'
 import '../../styles/saturday-card.css'
 
 // The Saturday League card on Home. All the content comes ready-made from
@@ -128,10 +129,62 @@ function Table({ table }) {
   )
 }
 
+// The button on the "race day announced" card. It starts as the plain outline button and
+// only becomes "Get notified" once we know this device can be, and isn't yet, subscribed.
+function NotifyButton({ card, onAction }) {
+  const [status, setStatus] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [note, setNote] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+    const sync = () => pushStatus().then(s => { if (!cancelled) setStatus(s) }).catch(() => {})
+    sync()
+    const stop = watchPush(sync)
+    return () => { cancelled = true; stop() }
+  }, [])
+
+  const canEnable = status?.supported && !status.optedIn && status.permission !== 'denied'
+  const needsInstall = status && !status.supported && needsHomeScreen()
+
+  async function onTap() {
+    if (needsInstall) {
+      setNote('Add Silks League to your home screen first: tap the Share icon, then "Add to Home Screen". Open it from there and come back to turn notifications on.')
+      return
+    }
+    setBusy(true)
+    setNote('')
+    try {
+      const granted = await enablePush(card.notify.userId)
+      if (!granted) setNote("Notifications weren't turned on.")
+      setStatus(await pushStatus())
+    } catch {
+      setNote("Notifications couldn't be turned on. Try again from your Account page.")
+    }
+    setBusy(false)
+  }
+
+  if (!canEnable && !needsInstall) {
+    return (
+      <button type="button" className="sc-btn sc-btn--outline" onClick={() => onAction(card)}>
+        {card.button.label}
+      </button>
+    )
+  }
+  return (
+    <>
+      <button type="button" className="sc-btn sc-btn--solid" onClick={onTap} disabled={busy}>
+        {busy ? 'Turning on…' : card.notify.label}
+      </button>
+      {note && <p className="sc-note" role="status">{note}</p>}
+    </>
+  )
+}
+
 export default function SaturdayCard({ card, onAction }) {
   const { eyebrow, big, ring, spotlight, table, button } = card
   return (
-    <article className={`sc${card.gold ? ' sc--gold' : ''}`} aria-label={`Saturday League, ${eyebrow.text.toLowerCase()}`}>
+    <article className={`sc${card.gold ? ' sc--gold' : ''}${card.soft ? ' sc--soft' : ''}`} aria-label={`Saturday League, ${eyebrow.text.toLowerCase()}`}>
       <header className="sc-head">
         <div className="sc-top">
           <span className="sc-eyebrow"><Marker kind={eyebrow.kind} />{eyebrow.text}</span>
@@ -155,13 +208,17 @@ export default function SaturdayCard({ card, onAction }) {
           />
         )}
         {table && <Table table={table} />}
-        <button
-          type="button"
-          className={`sc-btn ${button.outline ? 'sc-btn--outline' : 'sc-btn--solid'}`}
-          onClick={() => onAction(card)}
-        >
-          {button.label}
-        </button>
+        {card.notify ? (
+          <NotifyButton card={card} onAction={onAction} />
+        ) : (
+          <button
+            type="button"
+            className={`sc-btn ${button.outline ? 'sc-btn--outline' : 'sc-btn--solid'}`}
+            onClick={() => onAction(card)}
+          >
+            {button.label}
+          </button>
+        )}
       </div>
     </article>
   )

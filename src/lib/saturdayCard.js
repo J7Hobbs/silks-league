@@ -7,6 +7,7 @@ import { calcTokenPoints } from './scoring.js'
 import { buildRaceRows, summarise } from './resultsView.js'
 import {
   ordinal, monthLong, clockText, ukClock, ukDateStr, ukWallToMs, formatLockCountdown, deadlineMs,
+  daysBetween, weekdayLong, monthAbbr, wednesdayAfter,
 } from './format.js'
 
 const MAX_TABLE_ROWS = 3
@@ -119,8 +120,39 @@ function backSoonCard(sat, base) {
   }
 }
 
+// "Race day announced": the next week exists but its racecard isn't in yet.
+function announcedCard(sat, week, nowMs, base) {
+  const days = daysBetween(ukDateStr(nowMs), week.saturday_date)
+  const dayOfMonth = String(Number(week.saturday_date.slice(8, 10)))
+  const month = monthAbbr(week.saturday_date)
+  return {
+    ...base,
+    state: 'announced',
+    phase: 'announced',
+    gold: false,
+    soft: true,
+    faint: false,
+    eyebrow: { kind: 'gold', text: 'RACE DAY ANNOUNCED' },
+    headline: `${weekdayLong(week.saturday_date)} ${dayOfMonth} ${month}`,
+    sub: '',
+    big: { text: days <= 0 ? 'Today' : days === 1 ? 'Tomorrow' : `${days} days` },
+    label: "Racecard out soon · picks open once it's in",
+    ring: { segments: Array.from({ length: FALLBACK_SEGMENTS }, () => 'dim'), centre: dayOfMonth, centreLabel: month },
+    spotlight: null,
+    table: tableView(sat.table, sat.season, sat.userId, false),
+    button: { label: 'View leaderboard', outline: true, action: { to: '/league' } },
+    notify: { label: 'Get notified when picks open', userId: sat.userId },
+  }
+}
+
 export function saturdayCard(sat, nowMs) {
   const base = { key: 'saturday', kind: 'saturday', tag: 'SATURDAY LEAGUE', competition: { type: 'saturday', id: null } }
+  // F takes over from the results card on the Wednesday after race day (UK date).
+  const announcedWeek = sat.state === 'announced' ? sat.week
+    : sat.state === 'lastWeek' && sat.nextWeek && ukDateStr(nowMs) >= wednesdayAfter(sat.week.saturday_date) ? sat.nextWeek
+    : null
+  if (announcedWeek) return announcedCard(sat, announcedWeek, nowMs, base)
+
   const phase = satPhase(sat, nowMs)
   if (phase === 'back') return backSoonCard(sat, base)
 

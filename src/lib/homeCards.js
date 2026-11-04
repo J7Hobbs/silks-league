@@ -42,7 +42,7 @@ function festivalCard(fest, nowMs) {
 // picks aren't open (festival first), then "returns soon".
 function sortOrder(card) {
   if (card.state === 'open') return 0
-  if (card.state === 'returns') return 2
+  if (card.state === 'returns' || card.state === 'announced') return 2
   return 1
 }
 
@@ -58,5 +58,5 @@ export function buildCards(data, nowMs) {
     return (a.kind === 'festival' ? 0 : 1) - (b.kind === 'festival' ? 0 : 1)
   })
 
-  return { cards, liveCount: cards.filter(c => c.state !== 'returns').length }
+  return { cards, liveCount: cards.filter(c => c.state !== 'returns' && c.state !== 'announced').length }
 }
