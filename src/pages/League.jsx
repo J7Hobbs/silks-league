@@ -6,7 +6,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import ProfileDropdown from '../components/ProfileDropdown.jsx'
+import TopNav from '../components/TopNav.jsx'
 import BottomNav from '../components/BottomNav.jsx'
 import PlayerPicksModal from '../components/PlayerPicksModal.jsx'
 
@@ -566,23 +566,10 @@ export default function League() {
 
   // ── Render ────────────────────────────────────────────────────
   return (
-    <div style={st.page} onClick={() => seasonPickerOpen && setSeasonPickerOpen(false)}>
+    <div className="app-page" style={st.page} onClick={() => seasonPickerOpen && setSeasonPickerOpen(false)}>
 
       {/* ── Nav ── */}
-      <nav style={st.nav}>
-        <div style={st.navInner}>
-          <a href="/" style={st.navLogo}>Silks League</a>
-          <div style={st.navLinks} className="app-nav-links">
-            <a href="/dashboard" style={st.navLink}>Dashboard</a>
-            <a href="/picks"     style={st.navLink}>My Picks</a>
-            <a href="/league"    style={{ ...st.navLink, ...st.navLinkActive }}>League</a>
-            <a href="/results"   style={st.navLink}>Results</a>
-          </div>
-          <div style={st.navRight}>
-            <ProfileDropdown user={user} isAdmin={isAdmin} />
-          </div>
-        </div>
-      </nav>
+      <TopNav user={user} isAdmin={isAdmin} />
 
       {/* ── Main ── */}
       <main style={st.main} className="app-main-pad">
@@ -1248,13 +1235,6 @@ const st = {
   loadingInline: { textAlign: 'center', color: '#5a8a5a', padding: '2.5rem 1rem', fontSize: '0.875rem' },
 
   // Nav
-  nav: { background: '#0d1f0d', borderBottom: '1px solid rgba(201,168,76,0.15)', position: 'sticky', top: 0, zIndex: 100 },
-  navInner: { maxWidth: '900px', margin: '0 auto', padding: '0 1.5rem', height: '60px', display: 'flex', alignItems: 'center', gap: '2rem' },
-  navLogo: { fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.3rem', color: '#c9a84c', letterSpacing: '0.1em', textDecoration: 'none', flexShrink: 0 },
-  navLinks: { display: 'flex', gap: '0.25rem', flex: 1 },
-  navLink: { padding: '0.4rem 0.85rem', borderRadius: '6px', fontSize: '0.875rem', fontWeight: '500', color: '#5a8a5a', textDecoration: 'none' },
-  navLinkActive: { color: '#e8f0e8', background: 'rgba(201,168,76,0.1)' },
-  navRight: { marginLeft: 'auto', position: 'relative' },
 
   // Main
   main: { maxWidth: '900px', margin: '0 auto', padding: '2rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' },

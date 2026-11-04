@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import ProfileDropdown from '../components/ProfileDropdown.jsx'
+import TopNav from '../components/TopNav.jsx'
 import BottomNav from '../components/BottomNav.jsx'
 
 export default function FestivalResults() {
@@ -198,23 +198,10 @@ export default function FestivalResults() {
   const activeDayRows = dayCache[activeDay] || null
 
   return (
-    <div style={st.page}>
+    <div className="app-page" style={st.page}>
 
       {/* ── Nav ── */}
-      <nav style={st.nav}>
-        <div style={st.navInner}>
-          <a href="/" style={st.navLogo}>Silks League</a>
-          <div style={st.navLinks} className="app-nav-links">
-            <a href="/dashboard" style={st.navLink}>Dashboard</a>
-            <a href="/picks"     style={st.navLink}>My Picks</a>
-            <a href="/league"    style={st.navLink}>League</a>
-            <a href="/results"   style={{ ...st.navLink, ...st.navLinkActive }}>Results</a>
-          </div>
-          <div style={st.navRight}>
-            <ProfileDropdown user={user} isAdmin={isAdmin} />
-          </div>
-        </div>
-      </nav>
+      <TopNav user={user} isAdmin={isAdmin} />
 
       <main style={st.main} className="app-main-pad">
 
@@ -372,13 +359,6 @@ const st = {
   spinner: { display: 'flex', justifyContent: 'center', padding: '3rem' },
 
   // Nav
-  nav: { background: '#0d1f0d', borderBottom: '1px solid rgba(201,168,76,0.15)', position: 'sticky', top: 0, zIndex: 100 },
-  navInner: { maxWidth: '900px', margin: '0 auto', padding: '0 1.5rem', height: '60px', display: 'flex', alignItems: 'center', gap: '1.5rem' },
-  navLogo: { fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.3rem', color: '#c9a84c', letterSpacing: '0.1em', textDecoration: 'none', flexShrink: 0 },
-  navLinks: { display: 'flex', gap: '0.2rem', flex: 1 },
-  navLink: { padding: '0.4rem 0.75rem', borderRadius: '6px', fontSize: '0.85rem', fontWeight: '500', color: '#5a8a5a', textDecoration: 'none' },
-  navLinkActive: { color: '#e8f0e8', background: 'rgba(201,168,76,0.1)' },
-  navRight: { marginLeft: 'auto', position: 'relative' },
 
   // Layout
   main: { maxWidth: '900px', margin: '0 auto', padding: '2rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' },

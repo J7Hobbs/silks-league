@@ -6,7 +6,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import ProfileDropdown from '../components/ProfileDropdown.jsx'
+import TopNav from '../components/TopNav.jsx'
 import BottomNav from '../components/BottomNav.jsx'
 import RunnerCard from '../components/RunnerCard.jsx'
 import { isWinOnly, canOfferEachWay, calcTokenPoints } from '../lib/scoring.js'
@@ -360,26 +360,12 @@ export default function Picks() {
 
   // ── Render ────────────────────────────────────────────────────
   return (
-    <div style={st.page}>
+    <div className="app-page" style={st.page}>
 
       <style>{`@keyframes silksPulse { 0%,100% { opacity:1 } 50% { opacity:0.3 } }`}</style>
 
       {/* Nav */}
-      <nav style={st.nav}>
-        <div style={st.navInner}>
-          <a href="/" style={st.navLogo}>Silks League</a>
-          <div style={st.navLinks} className="app-nav-links">
-            <a href="/dashboard" style={st.navLink}>Dashboard</a>
-            <a href="/picks"     style={{ ...st.navLink, ...st.navLinkActive }}>My Picks</a>
-            <a href="/league"    style={st.navLink}>League</a>
-            <a href="/results"   style={st.navLink}>Results</a>
-            <a href="/groups"    style={st.navLink}>Groups</a>
-          </div>
-          <div style={st.navRight}>
-            <ProfileDropdown user={user} isAdmin={isAdmin} />
-          </div>
-        </div>
-      </nav>
+      <TopNav user={user} isAdmin={isAdmin} />
 
       {/* Toast */}
       {toast && (
@@ -848,13 +834,6 @@ const st = {
   loadingText: { color: '#5a8a5a', fontSize: '0.9rem' },
 
   // Nav
-  nav: { background: '#0d1f0d', borderBottom: '1px solid rgba(201,168,76,0.15)', position: 'sticky', top: 0, zIndex: 100 },
-  navInner: { maxWidth: '1100px', margin: '0 auto', padding: '0 1.5rem', height: '60px', display: 'flex', alignItems: 'center', gap: '2rem' },
-  navLogo: { fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.3rem', color: '#c9a84c', letterSpacing: '0.1em', textDecoration: 'none', flexShrink: 0 },
-  navLinks: { display: 'flex', gap: '0.25rem', flex: 1 },
-  navLink: { padding: '0.4rem 0.85rem', borderRadius: '6px', fontSize: '0.875rem', fontWeight: '500', color: '#5a8a5a', textDecoration: 'none' },
-  navLinkActive: { color: '#e8f0e8', background: 'rgba(201,168,76,0.1)' },
-  navRight: { marginLeft: 'auto', position: 'relative' },
 
   // Toast
   toast: { position: 'fixed', top: '1.25rem', right: '1.25rem', padding: '0.75rem 1.25rem', borderRadius: '9px', fontSize: '0.875rem', fontWeight: '500', zIndex: 9999, fontFamily: "'DM Sans', sans-serif", boxShadow: '0 8px 32px rgba(0,0,0,0.4)' },

@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import './styles/tokens.css'
 import './index.css'
 import App            from './App.jsx'
 import Auth           from './pages/Auth.jsx'
@@ -19,29 +20,32 @@ import FestivalLeaderboard from './pages/FestivalLeaderboard.jsx'
 import FestivalResults     from './pages/FestivalResults.jsx'
 import InstallPrompt       from './components/InstallPrompt.jsx'
 import OneSignalInit       from './components/OneSignalInit.jsx'
+import { CompetitionProvider } from './context/CompetitionContext.jsx'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <BrowserRouter>
-      <Routes>
-        <Route path="/"          element={<App />}       />
-        <Route path="/auth"      element={<Auth />}      />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/admin"     element={<Admin />}     />
-        <Route path="/picks"     element={<Picks />}     />
-        <Route path="/league"    element={<League />}    />
-        <Route path="/races"     element={<Races />}     />
-        <Route path="/results"   element={<Results />}   />
-        <Route path="/profile"   element={<Profile />}   />
-        <Route path="/groups"              element={<Groups />}      />
-        <Route path="/player-picks/:userId"    element={<PlayerPicks />}         />
-        <Route path="/account"               element={<Account />}             />
-        <Route path="/festival-picks"        element={<FestivalPicks />}       />
-        <Route path="/festival-leaderboard"        element={<FestivalLeaderboard />}           />
-        <Route path="/results/festival/:festivalId" element={<FestivalResults />}              />
-      </Routes>
-      <InstallPrompt />
-      <OneSignalInit />
+      <CompetitionProvider>
+        <Routes>
+          <Route path="/"          element={<App />}       />
+          <Route path="/auth"      element={<Auth />}      />
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/admin"     element={<Admin />}     />
+          <Route path="/picks"     element={<Picks />}     />
+          <Route path="/league"    element={<League />}    />
+          <Route path="/races"     element={<Races />}     />
+          <Route path="/results"   element={<Results />}   />
+          <Route path="/profile"   element={<Profile />}   />
+          <Route path="/groups"              element={<Groups />}      />
+          <Route path="/player-picks/:userId"    element={<PlayerPicks />}         />
+          <Route path="/account"               element={<Account />}             />
+          <Route path="/festival-picks"        element={<FestivalPicks />}       />
+          <Route path="/festival-leaderboard"        element={<FestivalLeaderboard />}           />
+          <Route path="/results/festival/:festivalId" element={<FestivalResults />}              />
+        </Routes>
+        <InstallPrompt />
+        <OneSignalInit />
+      </CompetitionProvider>
     </BrowserRouter>
   </StrictMode>,
 )

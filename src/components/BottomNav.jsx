@@ -1,18 +1,11 @@
 import { useState, useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { Home, Target, Trophy, BarChart2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { NAV_TABS, activeTabIndex } from '../lib/navTabs.js'
 
 // Mobile bottom nav — floating champagne glass bar. Shown on mobile only
 // (styles in src/index.css, .glass-nav). The active tab comes from the
 // current route, so pages just render <BottomNav /> with no props.
-
-const TABS = [
-  { to: '/dashboard', label: 'Home',    Icon: Home },
-  { to: '/picks',     label: 'Picks',   Icon: Target },
-  { to: '/league',    label: 'League',  Icon: Trophy },
-  { to: '/results',   label: 'Results', Icon: BarChart2 },
-]
 
 // Each page mounts its own copy of the bar, so remember the last active tab
 // and start the lens there — it then springs across to the new tab.
@@ -61,7 +54,7 @@ function usePicksLeft() {
 
 export default function BottomNav() {
   const { pathname } = useLocation()
-  const active = TABS.findIndex(t => pathname === t.to || pathname.startsWith(t.to + '/'))
+  const active = activeTabIndex(pathname)
   const [shown, setShown] = useState(lastActive ?? Math.max(active, 0))
   const picksLeft = usePicksLeft()
 
@@ -75,7 +68,7 @@ export default function BottomNav() {
   return (
     <nav className="glass-nav" aria-label="Main navigation" style={{ '--i': shown }}>
       <span className={`glass-lens${active < 0 ? ' glass-lens--off' : ''}`} aria-hidden="true" />
-      {TABS.map((tab, n) => {
+      {NAV_TABS.map((tab, n) => {
         const { to, label } = tab
         const Icon = tab.Icon
         const isActive = n === active

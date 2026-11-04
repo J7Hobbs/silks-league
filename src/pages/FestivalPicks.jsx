@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import TopNav from '../components/TopNav.jsx'
+import BottomNav from '../components/BottomNav.jsx'
 import RunnerCard from '../components/RunnerCard.jsx'
 import { isWinOnly, canOfferEachWay, calcTokenPoints } from '../lib/scoring.js'
 
@@ -203,8 +205,9 @@ export default function FestivalPicks() {
   }
 
   return (
-    <div style={st.page}>
+    <div className="app-page" style={st.page}>
       {/* Nav */}
+      <TopNav desktopOnly user={user} />
       <nav style={st.nav}>
         <div style={st.navInner}>
           <button style={st.backBtn} onClick={() => navigate('/dashboard')}>← Dashboard</button>
@@ -396,6 +399,7 @@ export default function FestivalPicks() {
           )
         })}
       </main>
+      <BottomNav />
     </div>
   )
 }

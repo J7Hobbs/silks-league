@@ -1,0 +1,20 @@
+/* Silks League design tokens — used by the app shell (nav, avatar) and by
+   the screen rebuilds to come. Existing pages keep their own colours for now.
+   The landing page's old gold-tinted border now lives in --border-gold (index.css). */
+:root {
+  --bg:            #0a1a08;
+  --surface:       #12260f;                 /* cards */
+  --surface-deep:  #0d1f0b;                 /* inset tiles, silk squares, nav background */
+  --text:          #f2efe4;
+  --text-muted:    #a8b8a2;
+  --nav-inactive:  #8a9a85;
+  --gold:          #c9a84c;
+  --gold-tint:     rgba(201, 168, 76, 0.14); /* selected rows */
+  --win:           #8fe09c;
+  --border:        rgba(242, 239, 228, 0.08);
+  --radius-card:   18px;
+  --radius-inner:  12px;
+
+  --font-heading:  'Archivo', system-ui, -apple-system, sans-serif;
+  --font-body:     'Inter', system-ui, -apple-system, sans-serif;
+}

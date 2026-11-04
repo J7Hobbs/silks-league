@@ -1,9 +1,9 @@
 /* ============================================================
    Silks League — Landing Page Styles
-   Fonts: Bebas Neue (headings) · DM Sans (body)
+   Fonts: Bebas Neue · DM Sans (existing pages) · Archivo (headings) · Inter (body) — see styles/tokens.css
    ============================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Archivo:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap');
 
 /* ── CSS Variables ── */
 :root {
@@ -13,7 +13,7 @@
   --gold-lt:   #e8c96a;
   --green-mid: #5a8a5a;
   --off-white: #e8f0e8;
-  --border:    rgba(201, 168, 76, 0.15);
+  --border-gold: rgba(201, 168, 76, 0.15);
   --border-lg: rgba(201, 168, 76, 0.25);
   --shadow:    0 8px 32px rgba(0, 0, 0, 0.4);
   --radius:    12px;
@@ -31,7 +31,7 @@ html {
 }
 
 body {
-  font-family: 'DM Sans', sans-serif;
+  font-family: var(--font-body);
   background: var(--bg);
   color: var(--off-white);
   line-height: 1.6;
@@ -97,7 +97,7 @@ img { max-width: 100%; display: block; }
   z-index: 100;
   background: rgba(10, 26, 8, 0.92);
   backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-gold);
 }
 .nav-inner {
   max-width: 1200px;
@@ -213,15 +213,15 @@ img { max-width: 100%; display: block; }
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   background: var(--card);
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
+  border-top: 1px solid var(--border-gold);
+  border-bottom: 1px solid var(--border-gold);
 }
 .stat-item {
   display: flex;
   flex-direction: column;
   align-items: center;
   padding: 2rem 1rem;
-  border-right: 1px solid var(--border);
+  border-right: 1px solid var(--border-gold);
   text-align: center;
 }
 .stat-item:last-child { border-right: none; }
@@ -242,7 +242,7 @@ img { max-width: 100%; display: block; }
 }
 @media (max-width: 600px) {
   .stats-strip { grid-template-columns: repeat(2, 1fr); }
-  .stat-item { border-bottom: 1px solid var(--border); }
+  .stat-item { border-bottom: 1px solid var(--border-gold); }
 }
 
 /* ── Sections ── */
@@ -251,8 +251,8 @@ img { max-width: 100%; display: block; }
 }
 .section-alt {
   background: var(--card);
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
+  border-top: 1px solid var(--border-gold);
+  border-bottom: 1px solid var(--border-gold);
 }
 .section-inner {
   max-width: 1100px;
@@ -307,7 +307,7 @@ img { max-width: 100%; display: block; }
 }
 .step-card {
   background: var(--card);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-gold);
   border-radius: var(--radius-lg);
   padding: 2rem 1.5rem;
   position: relative;
@@ -409,7 +409,7 @@ img { max-width: 100%; display: block; }
 /* ── Leaderboard ── */
 .lb-card {
   background: var(--card);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-gold);
   border-radius: var(--radius-lg);
   overflow: hidden;
 }
@@ -421,7 +421,7 @@ img { max-width: 100%; display: block; }
   text-transform: uppercase;
   color: var(--gold);
   background: rgba(201, 168, 76, 0.06);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-gold);
 }
 .lb-table { display: flex; flex-direction: column; }
 .lb-head, .lb-row {
@@ -434,7 +434,7 @@ img { max-width: 100%; display: block; }
 .lb-head {
   padding-top: 0.75rem;
   padding-bottom: 0.75rem;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-gold);
 }
 .lb-row {
   padding-top: 0.9rem;
@@ -592,7 +592,7 @@ img { max-width: 100%; display: block; }
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 0.5rem;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--border-gold);
   padding-top: 1.25rem;
 }
 .group-stat {
@@ -643,7 +643,7 @@ img { max-width: 100%; display: block; }
 /* ── Footer ── */
 .footer {
   background: var(--card);
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--border-gold);
   padding: 3rem 2rem;
   text-align: center;
 }
@@ -747,7 +747,7 @@ img { max-width: 100%; display: block; }
   padding: 3px;
   gap: 3px;
   margin-bottom: 1.5rem;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-gold);
 }
 .toggle-btn {
   flex: 1;
@@ -767,7 +767,7 @@ img { max-width: 100%; display: block; }
 .modal-form { display: flex; flex-direction: column; gap: 0.85rem; }
 .modal-input {
   background: rgba(0,0,0,0.3);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-gold);
   border-radius: 8px;
   padding: 0.85rem 1rem;
   font-family: 'DM Sans', sans-serif;
@@ -806,6 +806,54 @@ img { max-width: 100%; display: block; }
 }
 @media (max-width: 768px) {
   .app-nav-links { display: none !important; }
+}
+
+/* ── Top nav (src/components/TopNav.jsx): logo, four tabs on desktop, avatar ── */
+.top-nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: var(--surface-deep);
+  border-bottom: 1px solid var(--border);
+}
+.top-nav--desktop-only { position: relative; }
+.top-nav__inner {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+}
+.top-nav__logo {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 1.05rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+.top-nav__links { display: flex; flex: 1; justify-content: center; gap: 0.25rem; }
+.top-nav__link {
+  font-family: var(--font-body);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 0.45rem 0.9rem;
+  border-radius: var(--radius-inner);
+  transition: color 0.2s ease, background 0.2s ease;
+}
+.top-nav__link:hover { color: var(--text); }
+.top-nav__link[aria-current="page"] { color: var(--gold); background: var(--gold-tint); }
+.top-nav__link:focus-visible, .top-nav__logo:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.top-nav__right { margin-left: auto; }
+@media (max-width: 768px) {
+  .top-nav__inner { padding: 0 1rem; }
+  .top-nav__links { display: none; }
+  .top-nav--desktop-only { display: none; }
+  /* Pages with the bottom nav: content sits just above it (replaces each page's own bottom padding) */
+  .app-page { padding-bottom: calc(86px + env(safe-area-inset-bottom, 0px)) !important; }
 }
 
 /* ── Mobile bottom nav: floating champagne glass. Hidden desktop, visible mobile.
@@ -873,10 +921,10 @@ img { max-width: 100%; display: block; }
     transition: color 0.25s ease;
     -webkit-tap-highlight-color: transparent;
   }
-  .glass-tab[aria-current="page"] { color: #e4c46e; }
-  .glass-tab:focus-visible { outline: 2px solid #e4c46e; outline-offset: -2px; border-radius: 28px; }
+  .glass-tab[aria-current="page"] { color: var(--gold); }
+  .glass-tab:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; border-radius: 28px; }
   .glass-tab svg { display: block; transition: fill-opacity 0.25s ease; }
-  .glass-tab__label { font-size: 10px; font-weight: 600; letter-spacing: 0.01em; }
+  .glass-tab__label { font-size: 11px; font-weight: 600; letter-spacing: 0; }
   .glass-badge {
     position: absolute;
     top: 5px;

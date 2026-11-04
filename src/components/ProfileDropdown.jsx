@@ -8,6 +8,13 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import HowItWorksModal from './HowItWorksModal.jsx'
 
+// "Jack Hobbs" -> "JH", "Jack" -> "J". Empty when there's no name.
+function initialsOf(name) {
+  const parts = (name || '').trim().split(/\s+/).filter(Boolean)
+  if (!parts.length) return ''
+  return (parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase()
+}
+
 export default function ProfileDropdown({ user, isAdmin }) {
   const navigate = useNavigate()
   const ref      = useRef(null)
@@ -17,7 +24,7 @@ export default function ProfileDropdown({ user, isAdmin }) {
 
   useEffect(() => {
     if (!user?.id) return
-    supabase.from('profiles').select('username').eq('id', user.id).single()
+    supabase.from('profiles').select('username, full_name').eq('id', user.id).single()
       .then(({ data }) => { if (data) setProfile(data) })
   }, [user?.id])
 
@@ -29,8 +36,8 @@ export default function ProfileDropdown({ user, isAdmin }) {
     return () => document.removeEventListener('mousedown', handleClick)
   }, [open])
 
-  const initial = (profile?.username || user?.user_metadata?.full_name || user?.email || '?')
-    .charAt(0).toUpperCase()
+  const initials = initialsOf(profile?.full_name) || initialsOf(user?.user_metadata?.full_name)
+    || (profile?.username || user?.email || '?').charAt(0).toUpperCase()
 
   async function handleSignOut() {
     await supabase.auth.signOut()
@@ -39,9 +46,10 @@ export default function ProfileDropdown({ user, isAdmin }) {
 
   return (
     <div ref={ref} style={ds.wrap}>
-      <div style={ds.avatar} onClick={() => setOpen(o => !o)}>
-        {initial}
-      </div>
+      <button type="button" style={ds.avatar} onClick={() => setOpen(o => !o)}
+        aria-label="Account menu" aria-haspopup="menu" aria-expanded={open}>
+        {initials}
+      </button>
 
       {open && (
         <div style={ds.dropdown}>
@@ -63,7 +71,7 @@ export default function ProfileDropdown({ user, isAdmin }) {
           </button>
 
           <button style={ds.item} onClick={() => { setOpen(false); navigate('/groups') }}>
-            My Groups
+            Groups
           </button>
 
           {isAdmin && (
@@ -90,7 +98,7 @@ export default function ProfileDropdown({ user, isAdmin }) {
 
 const ds = {
   wrap:     { position: 'relative', flexShrink: 0 },
-  avatar:   { width: '36px', height: '36px', borderRadius: '50%', background: 'rgba(201,168,76,0.15)', border: '1.5px solid rgba(201,168,76,0.5)', color: '#c9a84c', fontSize: '0.875rem', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', userSelect: 'none', fontFamily: "'DM Sans', sans-serif" },
+  avatar:   { width: '40px', height: '40px', padding: 0, borderRadius: '50%', background: 'var(--surface)', border: '1px solid var(--gold)', color: 'var(--gold)', fontFamily: 'var(--font-heading)', fontSize: '0.875rem', fontWeight: '700', letterSpacing: '0.02em', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', userSelect: 'none' },
   dropdown: { position: 'absolute', top: 'calc(100% + 10px)', right: 0, minWidth: '220px', background: '#162a1a', border: '1px solid #c9a84c', borderRadius: '10px', boxShadow: '0 12px 40px rgba(0,0,0,0.5)', zIndex: 9999, overflow: 'hidden', fontFamily: "'DM Sans', sans-serif" },
   header:   { padding: '0.9rem 1rem 0.75rem' },
   username: { fontSize: '0.95rem', fontWeight: '700', color: '#c9a84c', lineHeight: 1.2 },

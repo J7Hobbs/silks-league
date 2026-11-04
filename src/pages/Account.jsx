@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { OneSignal, oneSignalReady } from '../lib/oneSignal'
-import ProfileDropdown from '../components/ProfileDropdown.jsx'
+import TopNav from '../components/TopNav.jsx'
 
 const IS_IOS = /iphone|ipad|ipod/i.test(navigator.userAgent)
 const IS_IOS_STANDALONE = window.navigator.standalone === true
@@ -201,20 +201,7 @@ export default function Account() {
       )}
 
       {/* Nav */}
-      <nav style={st.nav}>
-        <div style={st.navInner}>
-          <a href="/" style={st.navLogo}>Silks League</a>
-          <div style={st.navLinks} className="app-nav-links">
-            <a href="/dashboard" style={st.navLink}>Dashboard</a>
-            <a href="/picks"     style={st.navLink}>My Picks</a>
-            <a href="/league"    style={st.navLink}>League</a>
-            <a href="/results"   style={st.navLink}>Results</a>
-          </div>
-          <div style={st.navRight}>
-            <ProfileDropdown user={user} isAdmin={isAdmin} />
-          </div>
-        </div>
-      </nav>
+      <TopNav user={user} isAdmin={isAdmin} />
 
       <main style={st.main} className="app-main-pad">
 
@@ -338,12 +325,6 @@ const st = {
   toast:      { position: 'fixed', top: '1.25rem', right: '1.25rem', padding: '0.75rem 1.25rem', borderRadius: '9px', fontSize: '0.875rem', fontWeight: '600', zIndex: 9999, fontFamily: "'DM Sans', sans-serif", boxShadow: '0 8px 32px rgba(0,0,0,0.4)' },
   toastOk:    { background: '#162a1a', border: '1px solid rgba(74,222,128,0.4)', color: '#4ade80' },
   toastErr:   { background: '#2a1212', border: '1px solid rgba(239,68,68,0.4)',  color: '#f87171' },
-  nav:        { background: '#0d1f0d', borderBottom: '1px solid rgba(201,168,76,0.15)' },
-  navInner:   { maxWidth: '900px', margin: '0 auto', padding: '0 1.5rem', height: '56px', display: 'flex', alignItems: 'center', gap: '1rem' },
-  navLogo:    { fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.2rem', color: '#c9a84c', letterSpacing: '0.1em', textDecoration: 'none' },
-  navLinks:   { display: 'flex', gap: '0.25rem', flex: 1, justifyContent: 'center' },
-  navLink:    { fontSize: '0.85rem', color: '#7a9e85', textDecoration: 'none', padding: '0.3rem 0.6rem', borderRadius: '5px' },
-  navRight:   { marginLeft: 'auto' },
   main:       { maxWidth: '580px', margin: '0 auto', padding: '2rem 1.5rem' },
   pageHead:   { marginBottom: '2rem' },
   backBtn:    { background: 'none', border: 'none', color: '#5a8a5a', cursor: 'pointer', fontSize: '0.85rem', fontFamily: "'DM Sans', sans-serif", padding: 0, marginBottom: '0.75rem', display: 'block' },

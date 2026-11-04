@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import TopNav from '../components/TopNav.jsx'
+import BottomNav from '../components/BottomNav.jsx'
 import RunnerCard from '../components/RunnerCard.jsx'
 
 // ── Deadline: 12:00pm each Saturday ──────────────────────────────────────────
@@ -156,9 +158,10 @@ export default function PlayerPicks() {
   const posLabel = (p) => p === 1 ? '1st' : p === 2 ? '2nd' : p === 3 ? '3rd' : null
 
   return (
-    <div style={st.page} onClick={() => seasonPickerOpen && setSeasonPickerOpen(false)}>
+    <div className="app-page" style={st.page} onClick={() => seasonPickerOpen && setSeasonPickerOpen(false)}>
 
       {/* Nav */}
+      <TopNav desktopOnly />
       <nav style={st.nav}>
         <div style={st.navInner}>
           <button style={st.backBtn} onClick={() => navigate(-1)}>← Back</button>
@@ -306,6 +309,7 @@ export default function PlayerPicks() {
           </>
         )}
       </main>
+      <BottomNav />
     </div>
   )
 }
