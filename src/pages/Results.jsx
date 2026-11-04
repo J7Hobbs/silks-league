@@ -1,938 +1,209 @@
-import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+/**
+ * Silks League — Results Page
+ * Your results for the Saturday League (week by week) and for festivals that
+ * have results (day by day). This replaces the old My Results page and the
+ * Festival Results page. Points are read from scores / festival_scores as
+ * stored, never recalculated; nothing on this page writes to the database.
+ */
+
+import { useState, useEffect, useRef } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import RunnerCard from '../components/RunnerCard.jsx'
+import { useCompetition } from '../context/competition.js'
+import {
+  loadWeekIndex, loadFestivalIndex, loadWeekPeriod, loadFestivalPeriod,
+} from '../lib/resultsData.js'
+import {
+  weekPeriods, festivalList, defaultPeriodIndex, pillItems, activePillKey, buildRaceRows, summarise,
+} from '../lib/resultsView.js'
 import TopNav from '../components/TopNav.jsx'
 import BottomNav from '../components/BottomNav.jsx'
-import PlayerPicksModal from '../components/PlayerPicksModal.jsx'
+import CompetitionPills from '../components/picks/CompetitionPills.jsx'
+import PeriodSelector from '../components/results/PeriodSelector.jsx'
+import SummaryTiles from '../components/results/SummaryTiles.jsx'
+import RaceCard from '../components/results/RaceCard.jsx'
+import EmptyState from '../components/results/EmptyState.jsx'
+import '../styles/picks.css'
+import '../styles/results.css'
 
 export default function Results() {
   const navigate = useNavigate()
-  const [user, setUser]         = useState(null)
-  const [isAdmin, setIsAdmin]   = useState(false)
-  const [menuOpen, setMenuOpen] = useState(false)
-  const [pageLoading, setPageLoading] = useState(true)
-  const [weekLoading, setWeekLoading] = useState(false)
+  const { festivalId: linkedId } = useParams()   // set on the old /results/festival/:festivalId link
+  const { competition, setCompetition } = useCompetition()
 
-  // Week navigation
-  const [weeks, setWeeks]         = useState([])
-  const [weekIndex, setWeekIndex] = useState(0)
+  const [user,    setUser]    = useState(null)
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [failed,  setFailed]  = useState(false)   // the week / festival lists could not be read
+  const [attempt, setAttempt] = useState(0)   // bumped to re-read the lists
+  const [tryAgain, setTryAgain] = useState(0)   // bumped to re-read one period
 
-  // Week data
-  const [races, setRaces]           = useState([])
-  const [results, setResults]       = useState({})  // { race_id: [{position, horse_name, sp_display}] }
-  const [myPicks, setMyPicks]       = useState({})  // { race_id: { horse_name, silk_colour, jockey, trainer } }
-  const [myScores, setMyScores]     = useState({})  // { race_id: { base_points, bonus_points, total_points, position_achieved } }
-  const [weeklyPosition, setWeeklyPosition] = useState(null)
-  const [totalPlayers, setTotalPlayers]     = useState(0)
+  const [weeks,     setWeeks]     = useState([])  // Saturday periods, oldest first
+  const [festivals, setFestivals] = useState([])  // each with its day periods
 
-  // UI
-  const [expandedRaces, setExpandedRaces] = useState(new Set())
-  const [weekStandings, setWeekStandings] = useState([])    // [{ userId, name, points, isMe }]
-  const [picksModal,    setPicksModal]    = useState(null)  // { userId, name, pts, rank }
+  const [chosen, setChosen] = useState({})        // { [competition key]: period index } picked with the arrows
+  const [loaded, setLoaded] = useState({})        // { [period id]: { rows, summary } }
+  const [badId,  setBadId]  = useState(null)      // period whose data could not be read
+  const [open,   setOpen]   = useState(() => new Set())
+  const linkApplied = useRef(null)
 
-  // Festivals
-  const [myFestivals, setMyFestivals] = useState([])
-  const [festLoading, setFestLoading] = useState(false)
-
+  // ── Who is signed in, then the lists of weeks and festivals ────
   useEffect(() => {
-    supabase.auth.getUser().then(async ({ data: { user } }) => {
+    let cancelled = false
+    async function init() {
+      const { data: { user } } = await supabase.auth.getUser()
       if (!user) { navigate('/auth'); return }
+      if (cancelled) return
       setUser(user)
-      const { data: profile } = await supabase
-        .from('profiles').select('is_admin').eq('id', user.id).single()
+      const [{ data: profile }, indexes] = await Promise.all([
+        supabase.from('profiles').select('is_admin').eq('id', user.id).single(),
+        Promise.all([loadWeekIndex(), loadFestivalIndex()]).catch(() => null),
+      ])
+      if (cancelled) return
       setIsAdmin(profile?.is_admin || false)
-      await Promise.all([init(user.id), loadMyFestivals(user.id)])
-      setPageLoading(false)
-    })
-  }, [navigate])
-
-  // ── Init: load all weeks, pick the default ──────────────────
-  async function init(userId) {
-    const { data: season } = await supabase
-      .from('seasons').select('id').eq('is_active', true).single()
-    if (!season) return
-
-    const { data: weeksData } = await supabase
-      .from('race_weeks')
-      .select('id, week_number, saturday_date')
-      .eq('season_id', season.id)
-      .order('saturday_date', { ascending: false })
-    if (!weeksData?.length) return
-
-    // Default to most recent week that has races (not just results)
-    const allWeekIds = weeksData.map(w => w.id)
-    const { data: allRaces } = await supabase
-      .from('races').select('id, race_week_id').in('race_week_id', allWeekIds)
-
-    let defaultIdx = 0
-    if (allRaces?.length) {
-      const weeksWithRaces = new Set(allRaces.map(r => r.race_week_id))
-      for (let i = 0; i < weeksData.length; i++) {
-        if (weeksWithRaces.has(weeksData[i].id)) { defaultIdx = i; break }
+      if (indexes) {
+        const [w, f] = indexes
+        setWeeks(weekPeriods(w.weeks, w.races, w.won))
+        setFestivals(festivalList(f.festivals, f.days, f.races, f.won))
+        setFailed(false)
+      } else {
+        setFailed(true)
       }
+      setLoading(false)
     }
+    init()
+    return () => { cancelled = true }
+  }, [navigate, attempt])
 
-    setWeeks(weeksData)
-    setWeekIndex(defaultIdx)
-    await loadWeekData(userId, weeksData[defaultIdx])
+  // The old festival link selects that festival, once.
+  useEffect(() => {
+    if (!linkedId || linkApplied.current === linkedId || !festivals.some(f => f.id === linkedId)) return
+    linkApplied.current = linkedId
+    setCompetition('festival', linkedId)
+  }, [linkedId, festivals, setCompetition])
+
+  // ── What's on screen ───────────────────────────────────────────
+  // A group, or a festival without results, shows the Saturday League; the saved selection is left alone.
+  const items     = pillItems(festivals, linkedId)
+  const activeKey = activePillKey(competition, linkedId, items)
+  const festival  = festivals.find(f => f.id === activeKey) || null
+  const periods   = festival ? festival.periods : weeks
+  const idx       = chosen[activeKey] ?? defaultPeriodIndex(periods)
+  const period    = idx >= 0 ? periods[idx] : null
+  const unit      = festival ? 'day' : 'week'
+  const current   = period ? loaded[period.id] : null
+
+  // ── Load the player's picks, scores and results for the period ──
+  useEffect(() => {
+    if (!user || !period || loaded[period.id]) return
+    let cancelled = false
+    const fetchPeriod = festival ? loadFestivalPeriod : loadWeekPeriod
+    fetchPeriod(user.id, period).then(bundle => {
+      if (cancelled) return
+      const rows = buildRaceRows(bundle, festival?.venue || '')
+      setLoaded(prev => ({ ...prev, [period.id]: { rows, summary: summarise(rows) } }))
+      setBadId(null)
+    }).catch(() => { if (!cancelled) setBadId(period.id) })
+    return () => { cancelled = true }
+  }, [user, period, festival, loaded, tryAgain])
+
+  function selectPill(item) {
+    setOpen(new Set())
+    if (item.key === 'saturday') setCompetition('saturday')
+    else setCompetition('festival', item.key)
+    if (linkedId) navigate('/results', { replace: true })
   }
 
-  // ── Load all data for a specific week ───────────────────────
-  async function loadWeekData(userId, week) {
-    if (!week) return
-    setWeekLoading(true)
-    setExpandedRaces(new Set())
-
-    // Races for this week
-    const { data: racesData } = await supabase
-      .from('races')
-      .select('id, race_number, race_time, venue, race_name')
-      .eq('race_week_id', week.id)
-      .order('race_number')
-
-    setRaces(racesData || [])
-
-    if (!racesData?.length) {
-      setResults({}); setMyPicks({}); setMyScores({})
-      setWeeklyPosition(null); setTotalPlayers(0)
-      setWeekLoading(false); return
-    }
-
-    const raceIds = racesData.map(r => r.id)
-
-    // Results
-    const { data: resultsData } = await supabase
-      .from('results')
-      .select('race_id, position, horse_name, starting_price_display, starting_price_decimal')
-      .in('race_id', raceIds)
-    const resultsMap = {}
-    resultsData?.forEach(r => {
-      if (!resultsMap[r.race_id]) resultsMap[r.race_id] = []
-      resultsMap[r.race_id].push(r)
-    })
-    Object.values(resultsMap).forEach(arr => arr.sort((a, b) => a.position - b.position))
-    setResults(resultsMap)
-
-    // User's picks → runner details (no FK join — fetch separately)
-    const { data: picksData } = await supabase
-      .from('picks').select('race_id, runner_id, was_replaced, original_runner_id').eq('user_id', userId).in('race_id', raceIds)
-    const picksMap = {}
-    if (picksData?.length) {
-      const runnerIds = [...new Set(picksData.map(p => p.runner_id).filter(Boolean))]
-      const { data: runnersData } = await supabase
-        .from('runners').select('id, horse_name, silk_colour, silk_colour_secondary, jockey, trainer, is_withdrawn').in('id', runnerIds)
-      const runnerMap = {}
-      runnersData?.forEach(r => { runnerMap[r.id] = r })
-      picksData.forEach(p => {
-        if (p.runner_id && runnerMap[p.runner_id]) {
-          picksMap[p.race_id] = {
-            ...runnerMap[p.runner_id],
-            was_replaced: p.was_replaced,
-            original_runner_id: p.original_runner_id,
-          }
-        }
-      })
-    }
-    setMyPicks(picksMap)
-
-    // User's scores
-    const { data: scoresData } = await supabase
-      .from('scores')
-      .select('race_id, base_points, bonus_points, total_points, position_achieved, score_note, bet_type, win_token_points, place_token_points')
-      .eq('user_id', userId).in('race_id', raceIds)
-    const scoresMap = {}
-    scoresData?.forEach(s => { scoresMap[s.race_id] = s })
-    setMyScores(scoresMap)
-
-    // Weekly position + standings — compare all users
-    const { data: allScores } = await supabase
-      .from('scores').select('user_id, total_points').in('race_id', raceIds)
-    if (allScores?.length) {
-      const byUser = {}
-      allScores.forEach(s => { byUser[s.user_id] = (byUser[s.user_id] || 0) + (s.total_points || 0) })
-      const myTotal = byUser[userId] || 0
-      const myPos = Object.values(byUser).filter(t => t > myTotal).length + 1
-      setWeeklyPosition(myPos)
-      setTotalPlayers(Object.keys(byUser).length)
-
-      const allUserIds = [...new Set([...Object.keys(byUser), userId])]
-      const { data: profData } = await supabase
-        .rpc('get_user_names', { user_ids: allUserIds })
-      const nameMap = {}
-      profData?.forEach(p => { nameMap[p.id] = p.username || p.full_name || null })
-      const standings = Object.keys(byUser)
-        .map(uid => ({
-          userId:  uid,
-          name:    nameMap[uid] || 'Player',
-          points:  byUser[uid],
-          isMe:    uid === userId,
-        }))
-        .sort((a, b) => b.points - a.points || a.name.localeCompare(b.name))
-        .map((r, i) => ({ ...r, rank: i + 1 }))
-      setWeekStandings(standings)
-    } else {
-      setWeeklyPosition(null); setTotalPlayers(0); setWeekStandings([])
-    }
-
-    setWeekLoading(false)
+  function step(delta) {
+    const next = idx + delta
+    if (next < 0 || next >= periods.length) return
+    setOpen(new Set())
+    setChosen(prev => ({ ...prev, [activeKey]: next }))
   }
 
-  // ── Week navigation ──────────────────────────────────────────
-  async function goToWeek(newIdx) {
-    if (newIdx < 0 || newIdx >= weeks.length || !user) return
-    setWeekIndex(newIdx)
-    await loadWeekData(user.id, weeks[newIdx])
-  }
-
-  // ── Festival entries ─────────────────────────────────────────
-  async function loadMyFestivals(userId) {
-    setFestLoading(true)
-    try {
-      const { data: entries } = await supabase
-        .from('festival_entries')
-        .select('festival_id, starting_points, festivals(*)')
-        .eq('user_id', userId)
-      if (!entries?.length) { setMyFestivals([]); return }
-
-      const results = await Promise.all(entries.map(async entry => {
-        const fest = entry.festivals
-        if (!fest) return null
-
-        const { data: days } = await supabase
-          .from('festival_days').select('id').eq('festival_id', fest.id)
-        const dayIds = (days || []).map(d => d.id)
-
-        let userTotal = entry.starting_points || 0
-        let rank = 1
-        let totalEntrants = 1
-
-        if (dayIds.length) {
-          const { data: races } = await supabase
-            .from('festival_races').select('id').in('festival_day_id', dayIds)
-          const raceIds = (races || []).map(r => r.id)
-          if (raceIds.length) {
-            const [{ data: myScores }, { data: allEntries }, { data: allScores }] = await Promise.all([
-              supabase.from('festival_scores').select('total_points').eq('user_id', userId).in('festival_race_id', raceIds),
-              supabase.from('festival_entries').select('user_id, starting_points').eq('festival_id', fest.id),
-              supabase.from('festival_scores').select('user_id, total_points').in('festival_race_id', raceIds),
-            ])
-            userTotal += (myScores || []).reduce((s, sc) => s + (sc.total_points || 0), 0)
-            const byUser = {}
-            ;(allEntries || []).forEach(e => { byUser[e.user_id] = e.starting_points || 0 })
-            ;(allScores  || []).forEach(s => { if (byUser[s.user_id] !== undefined) byUser[s.user_id] += s.total_points || 0 })
-            totalEntrants = Object.keys(byUser).length
-            rank = Object.values(byUser).filter(t => t > userTotal).length + 1
-          }
-        }
-
-        return {
-          id: fest.id, name: fest.display_name || fest.name,
-          startDate: fest.start_date, endDate: fest.end_date,
-          isActive: fest.is_active, userTotal, rank, totalEntrants,
-        }
-      }))
-      setMyFestivals(results.filter(Boolean))
-    } finally {
-      setFestLoading(false)
-    }
-  }
-
-  // ── Helpers ──────────────────────────────────────────────────
-  function formatWeekLabel(week) {
-    if (!week) return ''
-    const date = new Date(week.saturday_date + 'T12:00:00') // noon avoids TZ issues
-    const dayStr = date.toLocaleDateString('en-GB', {
-      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-    })
-    const q = `Q${Math.ceil((date.getMonth() + 1) / 3)} ${date.getFullYear()}`
-    return `Week ${week.week_number} · ${dayStr} · ${q}`
-  }
-
-  function circleStyle(raceId) {
-    const sc = myScores[raceId]
-    if (!sc) return { bg: 'rgba(90,138,90,0.15)', color: '#5a8a5a', border: '2px solid rgba(90,138,90,0.2)' }
-    if (sc.position_achieved === 1) return { bg: '#c9a84c', color: '#0a1a08', border: '2px solid #c9a84c' }
-    if (sc.position_achieved === 2 || sc.position_achieved === 3)
-      return { bg: 'rgba(201,168,76,0.22)', color: '#e8c96a', border: '2px solid rgba(201,168,76,0.4)' }
-    return { bg: 'rgba(90,138,90,0.1)', color: '#5a8a5a', border: '2px solid rgba(90,138,90,0.15)' }
-  }
-
-  function positionDisplay(pos) {
-    if (!pos) return null
-    if (pos === 1) return { label: '1st', color: '#c9a84c', medal: '🥇' }
-    if (pos === 2) return { label: '2nd', color: '#b0bec5', medal: '🥈' }
-    if (pos === 3) return { label: '3rd', color: '#cd9060', medal: '🥉' }
-    return { label: 'Unplaced', color: '#5a8a5a', medal: null }
-  }
-
-  function toggleRace(raceId) {
-    setExpandedRaces(prev => {
+  function toggle(raceId) {
+    setOpen(prev => {
       const next = new Set(prev)
       if (next.has(raceId)) next.delete(raceId); else next.add(raceId)
       return next
     })
   }
 
-  function fmtDate(ds) {
-    if (!ds) return ''
-    try {
-      return new Date(ds + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
-    } catch { return ds }
+  function retry() {
+    setBadId(null)
+    setFailed(false)
+    setLoading(true)
+    setAttempt(a => a + 1)
   }
 
-  const handleSignOut = async () => { await supabase.auth.signOut(); navigate('/auth') }
-  const getFirstName = () => {
-    const full = user?.user_metadata?.full_name || user?.email || ''
-    return full.split(' ')[0] || 'there'
+  if (loading) {
+    return <div className="rs-loading"><div className="rs-loading__dot" /></div>
   }
-
-  // ── Summary stats ────────────────────────────────────────────
-  const weekScoreValues = Object.values(myScores)
-  const totalWeekPts = weekScoreValues.reduce((s, sc) => s + (sc.total_points || 0), 0)
-  const horsesPlaced = weekScoreValues.filter(sc => sc.position_achieved && sc.position_achieved <= 3).length
-  const bonusTotal   = weekScoreValues.reduce((s, sc) => s + (sc.bonus_points || 0), 0)
-  const hasAnyResults = Object.keys(results).length > 0
-
-  if (pageLoading) {
-    return (
-      <div style={st.loadingPage}>
-        <div style={st.loadingDot} />
-      </div>
-    )
-  }
-
-  const selectedWeek = weeks[weekIndex]
 
   return (
-    <div className="app-page" style={st.page}>
-
-      {/* ── Nav ── */}
+    <div className="app-page rs">
       <TopNav user={user} isAdmin={isAdmin} />
 
-      {/* ── Main ── */}
-      <main style={st.main} className="app-main-pad">
+      <main className="rs__main">
+        <h1 className="rs-title">Results</h1>
 
-        {/* Back + heading */}
-        <div style={st.pageTop}>
-          <button style={st.backBtn} onClick={() => navigate('/dashboard')}>← Dashboard</button>
-          <h1 style={st.heading}>My Results</h1>
-          <p style={st.sub}>How your picks performed each week</p>
-        </div>
+        {items.length > 1 && (
+          <CompetitionPills items={items} activeKey={activeKey} onSelect={selectPill} />
+        )}
 
-        {/* Section heading */}
-        <h2 style={st.sectionHeading}>SATURDAY LEAGUE</h2>
-
-        {/* Week selector */}
-        {weeks.length === 0 ? (
-          <div style={st.emptyCard}>No race weeks set up yet.</div>
+        {failed ? (
+          <>
+            <p className="rs-msg rs-msg--error">Couldn't load your results. Check your connection and try again.</p>
+            <button type="button" className="rs-retry" onClick={retry}>Try again</button>
+          </>
+        ) : !period ? (
+          <EmptyState />
         ) : (
           <>
-            <div style={st.weekSelector}>
-              <button
-                style={{ ...st.arrowBtn, ...(weekIndex >= weeks.length - 1 ? st.arrowBtnDisabled : {}) }}
-                onClick={() => goToWeek(weekIndex + 1)}
-                disabled={weekIndex >= weeks.length - 1}
-              >
-                ←
-              </button>
-              <div style={st.weekLabel}>
-                {weekLoading ? 'Loading…' : formatWeekLabel(selectedWeek)}
-              </div>
-              <button
-                style={{ ...st.arrowBtn, ...(weekIndex <= 0 ? st.arrowBtnDisabled : {}) }}
-                onClick={() => goToWeek(weekIndex - 1)}
-                disabled={weekIndex <= 0}
-              >
-                →
-              </button>
-            </div>
+            <PeriodSelector
+              label={period.label}
+              unit={unit}
+              canBack={idx > 0}
+              canForward={idx < periods.length - 1}
+              onBack={() => step(-1)}
+              onForward={() => step(1)}
+            />
 
-            {/* Week content */}
-            {weekLoading ? (
-              <div style={st.weekSpinner}>
-                <div style={st.loadingDot} />
-              </div>
-            ) : !hasAnyResults ? (
-              <div style={st.emptyCard}>
-                <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>🏇</div>
-                <div style={{ fontWeight: '600', color: '#e8f0e8', marginBottom: '0.35rem' }}>No results yet for this week</div>
-                <div style={{ fontSize: '0.85rem', color: '#5a8a5a' }}>Check back after race day once results have been entered.</div>
-              </div>
+            {badId === period.id ? (
+              <>
+                <p className="rs-msg rs-msg--error">Couldn't load this {unit}. Check your connection and try again.</p>
+                <button type="button" className="rs-retry" onClick={() => { setBadId(null); setTryAgain(a => a + 1) }}>Try again</button>
+              </>
+            ) : !current ? (
+              <div className="rs-loading--inline"><div className="rs-loading__dot" /></div>
             ) : (
               <>
-                {/* ── Summary strip ── */}
-                <section style={st.summaryStrip} className="app-grid-4">
-                  {[
-                    { icon: '⭐', value: totalWeekPts,  label: 'Points',   sub: 'this week' },
-                    { icon: '🏆', value: weeklyPosition ? `#${weeklyPosition}` : '—', label: 'Position', sub: totalPlayers ? `of ${totalPlayers}` : 'this week' },
-                    { icon: '🎯', value: `${horsesPlaced}/${races.length}`, label: 'Placed', sub: 'horses in top 3' },
-                    { icon: '✨', value: bonusTotal,    label: 'Bonus pts', sub: 'earned this week' },
-                  ].map(card => (
-                    <div key={card.label} style={st.summaryCard}>
-                      <div style={st.summaryIcon}>{card.icon}</div>
-                      <div style={st.summaryValue}>{card.value}</div>
-                      <div style={st.summaryLabel}>{card.label}</div>
-                      <div style={st.summarySub}>{card.sub}</div>
-                    </div>
-                  ))}
-                </section>
-
-                {/* ── This week's standings ── */}
-                {weekStandings.length > 0 && (
-                  <section style={st.standingsCard}>
-                    <div style={st.standingsTitle}>THIS WEEK'S STANDINGS</div>
-                    {weekStandings.map(row => (
-                      <div
-                        key={row.userId}
-                        style={{ ...st.standingRow, ...(row.isMe ? st.standingRowMe : {}) }}
-                      >
-                        <span style={st.standingRank}>
-                          {row.rank === 1 ? '🥇' : row.rank === 2 ? '🥈' : row.rank === 3 ? '🥉' : `#${row.rank}`}
-                        </span>
-                        <span
-                          style={{ ...st.standingName, display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
-                          onClick={() => setPicksModal({ userId: row.userId, name: row.name, pts: row.points, rank: row.rank })}
-                        >
-                          {row.name}
-                          {row.isMe && <span style={st.youBadge}>You</span>}
-                        </span>
-                        <span style={st.standingPts}>{row.points} pts</span>
-                      </div>
-                    ))}
-                  </section>
+                {current.summary.played ? (
+                  <SummaryTiles
+                    points={current.summary.points}
+                    winners={current.summary.winners}
+                    placed={current.summary.placed}
+                  />
+                ) : (
+                  <p className="rs-msg">You didn't play this {unit}</p>
                 )}
 
-                {/* ── Race cards ── */}
-                <section style={st.raceList}>
-                  {races.map(race => {
-                    const raceResults   = results[race.id] || []
-                    const pick          = myPicks[race.id]
-                    const score         = myScores[race.id]
-                    const isExpanded    = expandedRaces.has(race.id)
-                    const hasResults    = raceResults.length > 0
-                    const cs            = circleStyle(race.id)
-                    const racePoints    = score?.total_points ?? 0
-                    const posDsp        = score?.position_achieved ? positionDisplay(score.position_achieved) : null
-                    const isWithdrawn   = !!pick?.is_withdrawn
-                    const wasReplaced   = !!pick?.was_replaced
-
-                    return (
-                      <div key={race.id} style={st.raceCard}>
-
-                        {/* ── Card header (always visible) ── */}
-                        <div style={st.raceCardHeader} onClick={() => toggleRace(race.id)}>
-
-                          {/* Number circle */}
-                          <div style={{
-                            ...st.raceCircle,
-                            background: cs.bg, color: cs.color, border: cs.border,
-                          }}>
-                            {race.race_number}
-                          </div>
-
-                          {/* Venue + time */}
-                          <div style={st.raceHeaderInfo}>
-                            <div style={st.raceVenue}>{race.venue}</div>
-                            <div style={st.raceTimeName}>
-                              {race.race_time}{race.race_name ? ` · ${race.race_name}` : ''}
-                            </div>
-                          </div>
-
-                          {/* Points + chevron */}
-                          <div style={st.raceHeaderRight}>
-                            {hasResults ? (
-                              <div style={racePoints > 0 ? st.racePointsGold : st.racePointsGrey}>
-                                {racePoints} <span style={{ fontSize: '0.65em', opacity: 0.7 }}>pts</span>
-                              </div>
-                            ) : (
-                              <span style={st.pendingBadge}>Pending</span>
-                            )}
-                            <span style={{
-                              ...st.chevron,
-                              transform: isExpanded ? 'rotate(180deg)' : 'none',
-                            }}>▾</span>
-                          </div>
-                        </div>
-
-                        {/* ── Expanded body ── */}
-                        {isExpanded && (
-                          <div style={st.raceCardBody}>
-
-                            {/* MY PICK */}
-                            <div style={st.pickSection}>
-                              <div style={st.sectionLabel}>MY PICK</div>
-                              {pick ? (
-                                <>
-                                <RunnerCard
-                                  runner={pick}
-                                  rightContent={
-                                    <div style={{ textAlign: 'right' }}>
-                                    {!hasResults ? (
-                                      <span style={st.awaitingText}>Awaiting result</span>
-                                    ) : posDsp ? (
-                                      <>
-                                        <div style={{ ...st.positionLabel, color: posDsp.color }}>
-                                          {posDsp.medal && <span style={{ marginRight: '0.25rem' }}>{posDsp.medal}</span>}
-                                          {posDsp.label}
-                                        </div>
-                                        <div style={st.pointsChips}>
-                                          {score.bet_type ? (
-                                            <>
-                                              <span style={st.baseChip}>{score.bet_type === 'each_way' ? 'Each-way' : 'Win'}</span>
-                                              {racePoints > 0 ? (
-                                                <>
-                                                  {score.win_token_points > 0 && (
-                                                    <span style={st.bonusChip}>{score.win_token_points} win</span>
-                                                  )}
-                                                  {score.place_token_points > 0 && (
-                                                    <span style={st.bonusChip}>{score.place_token_points} place</span>
-                                                  )}
-                                                </>
-                                              ) : (
-                                                <span style={st.zeroChip}>0 pts</span>
-                                              )}
-                                            </>
-                                          ) : racePoints > 0 ? (
-                                            <>
-                                              <span style={st.baseChip}>{score.base_points} base</span>
-                                              {score.bonus_points > 0 && (
-                                                <span style={st.bonusChip}>+{score.bonus_points} bonus</span>
-                                              )}
-                                            </>
-                                          ) : (
-                                            <span style={st.zeroChip}>0 pts</span>
-                                          )}
-                                        </div>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <div style={{ ...st.positionLabel, color: '#5a8a5a' }}>Unplaced</div>
-                                        <div style={st.pointsChips}>
-                                          <span style={st.zeroChip}>0 pts</span>
-                                        </div>
-                                      </>
-                                    )}
-                                  </div>
-                                  }
-                                />
-                                {wasReplaced && (
-                                  <div style={{ fontSize: '0.72rem', color: '#9ca3af', marginTop: '0.35rem', paddingLeft: '0.25rem', fontStyle: 'italic' }}>
-                                    Auto-replaced — original pick scratched
-                                  </div>
-                                )}
-                                </>
-                              ) : (
-                                <div style={st.noPickNote}>No pick made for this race</div>
-                              )}
-                            </div>
-
-                            {/* TOP 3 FINISHERS */}
-                            {hasResults && (
-                              <div style={st.finishersSection}>
-                                <div style={st.sectionLabel}>TOP 3 FINISHERS</div>
-                                {raceResults.map(r => {
-                                  const isMyPick  = pick?.horse_name === r.horse_name
-                                  const posD      = positionDisplay(r.position)
-                                  return (
-                                    <div
-                                      key={r.position}
-                                      style={{
-                                        ...st.finisherRow,
-                                        ...(isMyPick ? st.finisherRowMyPick : {}),
-                                      }}
-                                    >
-                                      <span style={{ ...st.finisherPosBadge, color: posD?.color }}>
-                                        {posD?.label}
-                                      </span>
-                                      <span style={st.finisherName}>{r.horse_name}</span>
-                                      {isMyPick && <span style={st.yourPickBadge}>Your pick</span>}
-                                      {r.starting_price_display && (
-                                        <span style={st.finisherSP}>
-                                          <span style={{ color: '#5a8a5a', fontSize: '0.68rem', marginRight: '0.2rem' }}>Opening odds</span>
-                                          {r.starting_price_display}
-                                        </span>
-                                      )}
-                                    </div>
-                                  )
-                                })}
-                              </div>
-                            )}
-
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                </section>
+                {current.rows.length === 0 ? (
+                  <p className="rs-msg">No races in this {unit} yet.</p>
+                ) : (
+                  <div className="rs-list">
+                    {current.rows.map(row => (
+                      <RaceCard key={row.id} row={row} open={open.has(row.id)} onToggle={() => toggle(row.id)} />
+                    ))}
+                  </div>
+                )}
               </>
             )}
           </>
         )}
-        {/* ── RACING FESTIVALS ── */}
-        <h2 style={st.sectionHeading}>RACING FESTIVALS</h2>
-
-        {festLoading ? (
-          <div style={st.weekSpinner}><div style={st.loadingDot} /></div>
-        ) : myFestivals.length === 0 ? (
-          <div style={st.emptyMuted}>No festivals entered yet.</div>
-        ) : (
-          myFestivals.map(f => (
-            <div key={f.id} style={st.festCard}>
-              <div style={st.festCardTop}>
-                <div>
-                  <div style={st.festCardBadge}>
-                    👑 {f.isActive ? 'Live Now' : 'Completed'}
-                  </div>
-                  <div style={st.festCardName}>{f.name}</div>
-                  <div style={st.festCardDates}>{fmtDate(f.startDate)} — {fmtDate(f.endDate)}</div>
-                </div>
-                <div style={st.festCardStats}>
-                  <div style={st.festStatBlock}>
-                    <div style={st.festStatVal}>{f.userTotal}</div>
-                    <div style={st.festStatLbl}>pts</div>
-                  </div>
-                  <div style={st.festStatDivider} />
-                  <div style={st.festStatBlock}>
-                    <div style={st.festStatVal}>#{f.rank}</div>
-                    <div style={st.festStatLbl}>of {f.totalEntrants}</div>
-                  </div>
-                </div>
-              </div>
-              <div style={st.festCardFooter}>
-                <button
-                  style={st.festViewBtn}
-                  onClick={() => navigate(`/results/festival/${f.id}`)}>
-                  View Results →
-                </button>
-              </div>
-            </div>
-          ))
-        )}
-
       </main>
 
-      {/* ── Mobile bar ── */}
       <BottomNav />
-
-      {/* ── Player picks modal ── */}
-      {picksModal && (
-        <PlayerPicksModal
-          userId={picksModal.userId}
-          viewerUserId={user?.id}
-          displayName={picksModal.name}
-          seasonPoints={picksModal.pts}
-          seasonRank={picksModal.rank}
-          onClose={() => setPicksModal(null)}
-        />
-      )}
-
     </div>
   )
-}
-
-// ── Styles ──────────────────────────────────────────────────────
-const st = {
-  page: {
-    minHeight: '100vh', background: '#0a1a08',
-    fontFamily: "'DM Sans', sans-serif", color: '#e8f0e8', paddingBottom: '5rem',
-  },
-  loadingPage: {
-    minHeight: '100vh', background: '#0a1a08',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-  },
-  loadingDot: { width: '12px', height: '12px', borderRadius: '50%', background: '#c9a84c' },
-  weekSpinner: {
-    display: 'flex', justifyContent: 'center', padding: '3rem',
-  },
-
-  // Nav
-  avatar: {
-    width: '36px', height: '36px', borderRadius: '50%', background: '#c9a84c',
-    color: '#0a1a08', fontWeight: '700', fontSize: '0.9rem',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    cursor: 'pointer', userSelect: 'none',
-  },
-  dropdownMenu: {
-    position: 'absolute', top: 'calc(100% + 0.5rem)', right: 0,
-    background: '#0d1f0d', border: '1px solid rgba(201,168,76,0.2)',
-    borderRadius: '10px', padding: '0.5rem 0', minWidth: '200px',
-    boxShadow: '0 16px 48px rgba(0,0,0,0.5)', zIndex: 200,
-  },
-  dropdownEmail:   { padding: '0.5rem 1rem 0.75rem', fontSize: '0.78rem', color: '#5a8a5a' },
-  dropdownDivider: { border: 'none', borderTop: '1px solid rgba(201,168,76,0.1)', margin: '0.25rem 0' },
-  dropdownItem: {
-    display: 'block', width: '100%', padding: '0.55rem 1rem', textAlign: 'left',
-    background: 'none', border: 'none', color: '#e8f0e8', fontSize: '0.875rem',
-    cursor: 'pointer', fontFamily: "'DM Sans', sans-serif",
-  },
-
-  // Page layout
-  main: {
-    maxWidth: '900px', margin: '0 auto', padding: '2rem 1.5rem',
-    display: 'flex', flexDirection: 'column', gap: '1.5rem',
-  },
-  pageTop: { display: 'flex', flexDirection: 'column', gap: '0.25rem' },
-  backBtn: {
-    background: 'none', border: 'none', color: '#5a8a5a', fontSize: '0.82rem',
-    cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", padding: 0,
-    textAlign: 'left', width: 'fit-content', marginBottom: '0.35rem',
-  },
-  heading: {
-    fontFamily: "'Bebas Neue', sans-serif", fontSize: '2.6rem',
-    color: '#e8f0e8', letterSpacing: '0.03em', margin: 0, lineHeight: 1,
-  },
-  sub: { color: '#5a8a5a', fontSize: '0.9rem', margin: 0 },
-
-  // Week selector
-  weekSelector: {
-    display: 'flex', alignItems: 'center', gap: '1rem',
-    background: '#162a1a', border: '1px solid #c9a84c', borderLeft: '4px solid #c9a84c',
-    borderRadius: '8px', padding: '0.85rem 1.25rem',
-  },
-  arrowBtn: {
-    background: 'rgba(201,168,76,0.1)', border: '1px solid rgba(201,168,76,0.2)',
-    color: '#c9a84c', borderRadius: '8px', width: '36px', height: '36px',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    cursor: 'pointer', fontSize: '1rem', fontWeight: '700',
-    flexShrink: 0, fontFamily: "'DM Sans', sans-serif",
-  },
-  arrowBtnDisabled: {
-    opacity: 0.3, cursor: 'not-allowed',
-  },
-  weekLabel: {
-    flex: 1, textAlign: 'center', fontSize: '0.9rem', fontWeight: '600',
-    color: '#e8f0e8', letterSpacing: '0.01em',
-  },
-
-  // Empty / error states
-  emptyCard: {
-    background: '#162a1a', border: '1px solid #c9a84c', borderLeft: '4px solid #c9a84c',
-    borderRadius: '8px', padding: '3rem 2rem', textAlign: 'center',
-    color: '#5a8a5a', fontSize: '0.9rem',
-  },
-
-  // This week's standings
-  standingsCard: {
-    background: 'linear-gradient(180deg, #152e12 0%, #0a1a08 100%)',
-    border: '1px solid rgba(201,168,76,0.2)', borderLeft: '4px solid rgba(201,168,76,0.4)',
-    borderRadius: '8px', overflow: 'hidden',
-  },
-  standingsTitle: {
-    fontSize: '0.65rem', fontWeight: '800', letterSpacing: '0.1em',
-    textTransform: 'uppercase', color: '#5a8a5a',
-    padding: '0.7rem 1.25rem 0.55rem',
-    borderBottom: '1px solid rgba(201,168,76,0.08)',
-  },
-  standingRow: {
-    display: 'flex', alignItems: 'center', gap: '0.75rem',
-    padding: '0.65rem 1.25rem',
-    borderBottom: '1px solid rgba(201,168,76,0.06)',
-  },
-  standingRowMe: {
-    background: 'rgba(201,168,76,0.07)',
-    borderLeft: '3px solid #c9a84c',
-    paddingLeft: 'calc(1.25rem - 3px)',
-  },
-  standingRank: {
-    minWidth: '32px', fontSize: '0.88rem', textAlign: 'center',
-    color: '#5a8a5a',
-  },
-  standingName: {
-    flex: 1, fontSize: '0.9rem', fontWeight: '500', color: '#e8f0e8',
-    cursor: 'pointer', textDecoration: 'underline dotted',
-    textUnderlineOffset: '2px',
-  },
-  standingPts: {
-    fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.1rem',
-    color: '#c9a84c', letterSpacing: '0.03em',
-  },
-  youBadge: {
-    fontSize: '0.55rem', fontWeight: '700', letterSpacing: '0.08em', textTransform: 'uppercase',
-    color: '#0a1a08', background: '#c9a84c', padding: '0.1rem 0.35rem',
-    borderRadius: '3px', whiteSpace: 'nowrap', flexShrink: 0,
-  },
-
-  // Summary strip
-  summaryStrip: {
-    display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem',
-  },
-  summaryCard: {
-    background: '#162a1a', border: '1px solid #c9a84c', borderLeft: '4px solid #c9a84c',
-    borderRadius: '8px', padding: '1.1rem 1rem',
-    display: 'flex', flexDirection: 'column', gap: '0.2rem',
-  },
-  summaryIcon:  { fontSize: '1.2rem', marginBottom: '0.2rem' },
-  summaryValue: {
-    fontFamily: "'Bebas Neue', sans-serif", fontSize: '2rem',
-    color: '#c9a84c', letterSpacing: '0.03em', lineHeight: 1,
-  },
-  summaryLabel: {
-    fontSize: '0.75rem', fontWeight: '700', color: '#e8f0e8',
-    letterSpacing: '0.05em', textTransform: 'uppercase',
-  },
-  summarySub: { fontSize: '0.7rem', color: '#5a8a5a' },
-
-  // Race cards
-  raceList: { display: 'flex', flexDirection: 'column', gap: '0.75rem' },
-  raceCard: {
-    background: '#162a1a', border: '1px solid #c9a84c', borderLeft: '4px solid #c9a84c',
-    borderRadius: '8px', overflow: 'hidden',
-  },
-
-  // Card header
-  raceCardHeader: {
-    display: 'flex', alignItems: 'center', gap: '1rem',
-    padding: '1.1rem 1.5rem', cursor: 'pointer', userSelect: 'none',
-  },
-  raceCircle: {
-    width: '40px', height: '40px', borderRadius: '50%', flexShrink: 0,
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.1rem', letterSpacing: '0.03em',
-  },
-  raceHeaderInfo: { flex: 1 },
-  raceVenue:    { fontSize: '0.95rem', fontWeight: '600', color: '#e8f0e8' },
-  raceTimeName: { fontSize: '0.78rem', color: '#5a8a5a', marginTop: '0.1rem' },
-  raceHeaderRight: {
-    display: 'flex', alignItems: 'center', gap: '0.75rem', flexShrink: 0,
-  },
-  racePointsGold: {
-    fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.6rem',
-    color: '#c9a84c', letterSpacing: '0.03em', lineHeight: 1,
-  },
-  racePointsGrey: {
-    fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.6rem',
-    color: '#5a8a5a', letterSpacing: '0.03em', lineHeight: 1,
-  },
-  pendingBadge: {
-    fontSize: '0.72rem', fontWeight: '600', padding: '0.2rem 0.55rem',
-    borderRadius: '999px', background: 'rgba(90,138,90,0.12)', color: '#5a8a5a',
-  },
-  chevron: {
-    fontSize: '0.75rem', color: '#5a8a5a',
-    transition: 'transform 0.2s', flexShrink: 0,
-  },
-
-  // Expanded body
-  raceCardBody: {
-    borderTop: '1px solid rgba(201,168,76,0.1)',
-    padding: '1.25rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem',
-  },
-  sectionLabel: {
-    fontSize: '0.65rem', fontWeight: '800', letterSpacing: '0.1em',
-    textTransform: 'uppercase', color: '#5a8a5a', marginBottom: '0.65rem',
-  },
-
-  // Pick section
-  pickSection: {},
-  pickRow: {
-    display: 'flex', alignItems: 'center', gap: '1rem',
-    background: 'rgba(201,168,76,0.05)', borderRadius: '6px',
-    padding: '0.9rem 1rem', border: '1px solid rgba(201,168,76,0.25)',
-  },
-  silkBar: {
-    width: '10px', height: '52px', borderRadius: '4px', flexShrink: 0,
-    border: '1px solid rgba(255,255,255,0.1)',
-  },
-  pickInfo: { flex: 1 },
-  pickHorseName: { fontSize: '1rem', fontWeight: '700', color: '#e8f0e8' },
-  pickMeta: {
-    fontSize: '0.75rem', color: '#5a8a5a', marginTop: '0.2rem',
-    display: 'flex', gap: '0.75rem',
-  },
-  pickRight: { display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.4rem' },
-  positionLabel: {
-    fontSize: '0.9rem', fontWeight: '700', display: 'flex', alignItems: 'center',
-  },
-  pointsChips: { display: 'flex', gap: '0.35rem', flexWrap: 'wrap', justifyContent: 'flex-end' },
-  baseChip: {
-    fontSize: '0.72rem', fontWeight: '600', padding: '0.2rem 0.55rem',
-    borderRadius: '5px', background: 'rgba(90,138,90,0.2)', color: '#e8f0e8',
-  },
-  bonusChip: {
-    fontSize: '0.72rem', fontWeight: '700', padding: '0.2rem 0.55rem',
-    borderRadius: '5px', background: 'rgba(201,168,76,0.18)', color: '#c9a84c',
-  },
-  zeroChip: {
-    fontSize: '0.72rem', fontWeight: '600', padding: '0.2rem 0.55rem',
-    borderRadius: '5px', background: 'rgba(90,138,90,0.1)', color: '#5a8a5a',
-  },
-  awaitingText: { fontSize: '0.78rem', color: '#5a8a5a' },
-  noPickNote: {
-    fontSize: '0.85rem', color: '#5a8a5a', padding: '0.75rem 0',
-    fontStyle: 'italic',
-  },
-
-  // Top 3 finishers
-  finishersSection: {},
-  finisherRow: {
-    display: 'flex', alignItems: 'center', gap: '0.75rem',
-    padding: '0.65rem 0.85rem', borderRadius: '6px',
-    background: 'rgba(201,168,76,0.04)', border: '1px solid rgba(201,168,76,0.2)',
-    marginBottom: '0.4rem',
-  },
-  finisherRowMyPick: {
-    background: 'rgba(201,168,76,0.1)', border: '1px solid rgba(201,168,76,0.4)',
-  },
-  finisherPosBadge: {
-    fontSize: '0.8rem', fontWeight: '700', minWidth: '48px',
-  },
-  finisherName: { flex: 1, fontSize: '0.875rem', fontWeight: '500', color: '#e8f0e8' },
-  yourPickBadge: {
-    fontSize: '0.65rem', fontWeight: '700', padding: '0.15rem 0.45rem',
-    borderRadius: '4px', background: 'rgba(201,168,76,0.18)', color: '#c9a84c',
-    whiteSpace: 'nowrap',
-  },
-  finisherSP: { fontSize: '0.78rem', color: '#5a8a5a', minWidth: '36px', textAlign: 'right' },
-
-  // Section headings
-  sectionHeading: {
-    fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.5rem',
-    color: '#e8f0e8', letterSpacing: '0.08em', margin: 0,
-    paddingBottom: '0.25rem', borderBottom: '1px solid rgba(201,168,76,0.15)',
-  },
-
-  // Festival cards
-  emptyMuted: {
-    color: '#5a8a5a', fontSize: '0.9rem', fontStyle: 'italic',
-    padding: '1.5rem 0',
-  },
-  festCard: {
-    background: 'linear-gradient(135deg, #162a1a 0%, #0e200e 100%)',
-    border: '1px solid rgba(201,168,76,0.25)', borderLeft: '4px solid #c9a84c',
-    borderRadius: '10px', overflow: 'hidden',
-  },
-  festCardTop: {
-    display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
-    padding: '1.25rem 1.5rem', gap: '1rem', flexWrap: 'wrap',
-  },
-  festCardBadge: {
-    fontSize: '0.65rem', fontWeight: '700', letterSpacing: '0.1em',
-    textTransform: 'uppercase', color: '#c9a84c', marginBottom: '0.35rem',
-  },
-  festCardName: {
-    fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.6rem',
-    color: '#fff', letterSpacing: '0.04em', lineHeight: 1.1,
-  },
-  festCardDates: { fontSize: '0.8rem', color: 'rgba(232,240,232,0.5)', marginTop: '0.2rem' },
-  festCardStats: { display: 'flex', alignItems: 'center', gap: '1rem', flexShrink: 0 },
-  festStatBlock: { textAlign: 'center' },
-  festStatVal: {
-    fontFamily: "'Bebas Neue', sans-serif", fontSize: '2rem',
-    color: '#c9a84c', lineHeight: 1,
-  },
-  festStatLbl: { fontSize: '0.62rem', color: 'rgba(201,168,76,0.6)', textTransform: 'uppercase', letterSpacing: '0.08em' },
-  festStatDivider: { width: '1px', height: '40px', background: 'rgba(201,168,76,0.2)' },
-  festCardFooter: {
-    padding: '0.75rem 1.5rem',
-    borderTop: '1px solid rgba(201,168,76,0.1)',
-    background: 'rgba(0,0,0,0.1)',
-  },
-  festViewBtn: {
-    background: '#c9a84c', border: 'none', color: '#0a1a08',
-    borderRadius: '7px', padding: '0.5rem 1.1rem',
-    fontFamily: "'DM Sans', sans-serif", fontWeight: '700', fontSize: '0.875rem',
-    cursor: 'pointer',
-  },
-
 }

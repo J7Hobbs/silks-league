@@ -1,0 +1,122 @@
+/* Results (/results). Built on the tokens in tokens.css. The competition pills
+   and the empty state reuse .pk-scroll / .pk-pill / .pk-empty from picks.css. */
+
+.rs {
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  padding-bottom: 3rem;
+}
+.rs-loading { min-height: 100vh; display: grid; place-items: center; background: var(--bg); }
+.rs-loading__dot { width: 12px; height: 12px; border-radius: 50%; background: var(--gold); }
+.rs-loading--inline { min-height: 160px; display: grid; place-items: center; }
+
+.rs__main {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.rs-title { margin: 0; font-family: var(--font-heading); font-weight: 700; font-size: 26px; line-height: 1.15; letter-spacing: 0; color: var(--text); }
+
+.rs-msg { margin: 0; font-size: 14px; line-height: 1.45; color: var(--text-muted); }
+.rs-msg--error { color: #f87171; }
+.rs-retry { align-self: flex-start; height: 40px; padding: 0 18px; border-radius: 10px; border: 1px solid rgba(242, 239, 228, 0.18); background: transparent; color: var(--text); font-family: var(--font-body); font-size: 14px; font-weight: 600; cursor: pointer; }
+
+/* ── Period selector ── */
+.rs-period { display: flex; align-items: center; gap: 12px; }
+.rs-period__label { flex: 1; min-width: 0; text-align: center; font-size: 15px; font-weight: 600; }
+.rs-arrow {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+.rs-arrow:disabled { opacity: 0.4; cursor: default; }
+
+/* ── Summary tiles ── */
+.rs-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.rs-tile { background: var(--surface); border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.rs-tile__label { font-size: 11px; color: var(--text-muted); }
+.rs-tile__value { font-family: var(--font-heading); font-weight: 800; font-size: 24px; line-height: 1.1; letter-spacing: 0; font-variant-numeric: tabular-nums; }
+.rs-tile__value--gold { color: var(--gold); }
+
+/* ── Race list ── */
+.rs-list { display: flex; flex-direction: column; gap: 14px; }
+.rs-card { background: var(--surface); border-radius: 16px; overflow: hidden; }
+.rs-card__hit {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  padding: 14px;
+  background: none;
+  border: 0;
+  color: var(--text);
+  font-family: var(--font-body);
+  text-align: left;
+  cursor: pointer;
+}
+.rs-card__hit--static { cursor: default; }
+
+.rs-card__top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; font-size: 12px; color: var(--text-muted); }
+.rs-card__where { flex: none; }
+.rs-card__win { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
+
+.rs-card__main { display: flex; align-items: center; gap: 10px; }
+.rs-card__pick { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.rs-card__label { font-size: 11px; color: var(--text-muted); }
+.rs-card__name { font-size: 15px; font-weight: 600; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rs-card__name--none { color: var(--text-muted); }
+.rs-card__note { font-size: 12px; line-height: 1.4; color: var(--text-muted); }
+
+.rs-badge {
+  flex: none;
+  padding: 4px 8px;
+  border-radius: 7px;
+  border: 1px solid rgba(242, 239, 228, 0.14);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--text);
+}
+.rs-badge--ew { color: var(--text-muted); }
+
+.rs-pts {
+  flex: none;
+  min-width: 56px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  text-align: center;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 1.2;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+.rs-pts--win { background: rgba(111, 207, 127, 0.16); color: #8fe09c; }
+.rs-pts--placed { background: rgba(201, 168, 76, 0.16); color: #e2c46a; }
+.rs-pts--none { background: rgba(242, 239, 228, 0.06); color: var(--text-muted); }
+
+/* ── Full placings (expanded) ── */
+.rs-places { list-style: none; margin: 0; padding: 0 14px 14px; display: flex; flex-direction: column; gap: 4px; border-top: 1px solid var(--border); padding-top: 10px; }
+.rs-place { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; font-size: 14px; }
+.rs-place--mine { background: var(--gold-tint); }
+.rs-place__pos { flex: none; width: 30px; font-family: var(--font-heading); font-weight: 700; font-size: 13px; color: var(--text-muted); }
+.rs-place__name { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; font-weight: 600; }
+.rs-place__tag { flex: none; font-size: 11px; font-weight: 600; color: var(--gold); }
+.rs-place__sp { flex: none; font-size: 13px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+.rs-arrow:focus-visible, .rs-card__hit:focus-visible, .rs-retry:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }

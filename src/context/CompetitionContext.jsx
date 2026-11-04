@@ -23,7 +23,8 @@ export function CompetitionProvider({ children }) {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)) } catch { /* storage blocked */ }
   }, [])
 
-  // If the remembered festival is no longer active, fall back to Saturday.
+  // If the remembered festival no longer exists, fall back to Saturday. (Finished festivals stay
+  // selectable so Results can show them; Picks and Leaderboard only offer running ones.)
   // Needs a session to read festivals, so it waits until someone is signed in.
   useEffect(() => {
     if (competition.type !== 'festival') return
@@ -31,7 +32,7 @@ export function CompetitionProvider({ children }) {
     async function verify() {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session || cancelled) return
-      const { data, error } = await supabase.from('festivals').select('id').eq('is_active', true)
+      const { data, error } = await supabase.from('festivals').select('id')
       if (cancelled || error) return
       if (!(data || []).some(f => f.id === competition.id)) setCompetition('saturday')
     }
