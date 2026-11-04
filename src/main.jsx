@@ -18,6 +18,7 @@ import Account             from './pages/Account.jsx'
 import FestivalPicks       from './pages/FestivalPicks.jsx'
 import FestivalLeaderboard from './pages/FestivalLeaderboard.jsx'
 import RaceDay             from './pages/RaceDay.jsx'
+import Festivals           from './pages/Festivals.jsx'
 import TabLayout           from './components/TabLayout.jsx'
 import InstallPrompt       from './components/InstallPrompt.jsx'
 import OneSignalInit       from './components/OneSignalInit.jsx'
@@ -35,6 +36,7 @@ createRoot(document.getElementById('root')).render(
             <Route path="/picks"     element={<Picks />}     />
             <Route path="/league"    element={<League />}    />
             <Route path="/results"   element={<Results />}   />
+            <Route path="/festivals" element={<Festivals />} />
             <Route path="/results/festival/:festivalId" element={<Results />} />
           </Route>
           <Route path="/admin"     element={<Admin />}     />

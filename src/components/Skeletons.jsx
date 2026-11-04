@@ -105,3 +105,21 @@ export function ResultsSkeleton() {
     </div>
   )
 }
+
+export function FestivalsSkeleton() {
+  return (
+    <div className="app-page fx">
+      <main className="fx__main">
+        <span className="fx-back">‹ Home</span>
+        <header className="fx-head">
+          <h1 className="fx-title">Racing festivals</h1>
+        </header>
+        <Busy className="sk-col">
+          <Block h={12} w={90} r={6} />
+          <Block h={236} r={18} />
+          <Block h={96} r={16} />
+        </Busy>
+      </main>
+    </div>
+  )
+}

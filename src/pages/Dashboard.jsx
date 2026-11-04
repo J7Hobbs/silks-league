@@ -105,7 +105,7 @@ export default function Dashboard() {
           : <CompetitionCard key={card.key} card={card} isTop={i === 0} onAction={openCard} />
         ))}
 
-        <ComingUp festivals={data.upcoming} nowMs={now} />
+        <ComingUp next={data.nextFestival} />
         <RaceDayCard />
       </main>
 

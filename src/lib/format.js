@@ -150,3 +150,6 @@ export function wednesdayAfter(dateStr) {
   do { d.setUTCDate(d.getUTCDate() + 1) } while (d.getUTCDay() !== 3)
   return d.toISOString().slice(0, 10)
 }
+
+// "2026-11-13" -> "Fri"
+export function weekdayShort(dateStr) { return weekdayLong(dateStr).slice(0, 3) }

@@ -1,6 +1,7 @@
 import { supabase } from './supabase'
 import { seasonTable, festivalRank } from './standings'
 import { localDateStr, daysBetween, deadlineMs } from './format'
+import { loadUpcomingFestivals, pickNextFestival } from './festivalData.js'
 
 // Everything the Home page needs, in one read-only load. A failing part is
 // logged and left empty so the rest of the page still renders.
@@ -165,13 +166,6 @@ async function loadFestival(userId, today, nowMs) {
   }
 }
 
-async function loadUpcoming(today) {
-  const { data } = await supabase.from('festivals')
-    .select('id, name, display_name, start_date, end_date, venue')
-    .gt('start_date', today).order('start_date', { ascending: true }).limit(5)
-  return data || []
-}
-
 export async function loadHomeData(user) {
   const nowMs = Date.now()
   const today = localDateStr(new Date(nowMs))
@@ -183,13 +177,13 @@ export async function loadHomeData(user) {
     safe('profile', async () => (await supabase.from('profiles').select('is_admin, full_name, username').eq('id', user.id).single()).data, null),
     safe('saturday', async () => ({ ...(await loadSaturday(user.id, today, nowMs)), userId: user.id }), null),
     safe('festival', () => loadFestival(user.id, today, nowMs), null),
-    safe('upcoming', () => loadUpcoming(today), []),
+    safe('upcoming', () => loadUpcomingFestivals(nowMs), null),
   ])
 
   return {
     profile,
     saturday,
     festival,
-    upcoming: upcoming.filter(f => f.id !== festival?.festival.id).slice(0, 4),
+    nextFestival: pickNextFestival(upcoming, festival?.festival.id),
   }
 }
