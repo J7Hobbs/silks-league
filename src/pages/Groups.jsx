@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import ProfileDropdown from '../components/ProfileDropdown.jsx'
-import { Home, Target, Trophy, BarChart2, Users } from 'lucide-react'
+import BottomNav from '../components/BottomNav.jsx'
 
 export default function Groups() {
   const navigate = useNavigate()
@@ -494,24 +494,7 @@ export default function Groups() {
       </main>
 
       {/* ── Mobile bottom bar ── */}
-      <nav style={st.mobileBar} className="app-mobile-bar">
-        <a href="/dashboard" style={st.mobileBarItem}>
-          <Home size={22} strokeWidth={1.5} />
-          <span style={st.mobileBarLabel}>Home</span>
-        </a>
-        <a href="/picks" style={st.mobileBarItem}>
-          <Target size={22} strokeWidth={1.5} />
-          <span style={st.mobileBarLabel}>Picks</span>
-        </a>
-        <a href="/league" style={st.mobileBarItem}>
-          <Trophy size={22} strokeWidth={1.5} />
-          <span style={st.mobileBarLabel}>League</span>
-        </a>
-        <a href="/results" style={st.mobileBarItem}>
-          <BarChart2 size={22} strokeWidth={1.5} />
-          <span style={st.mobileBarLabel}>Results</span>
-        </a>
-      </nav>
+      <BottomNav />
 
     </div>
   )
@@ -607,10 +590,4 @@ const st = {
   youBadge:   { fontSize: '0.55rem', fontWeight: '700', letterSpacing: '0.08em', textTransform: 'uppercase', color: '#0a1a08', background: '#c9a84c', padding: '0.1rem 0.35rem', borderRadius: '3px', whiteSpace: 'nowrap', flexShrink: 0 },
   lbPoints:   { fontSize: '0.875rem', color: '#c9a84c', fontWeight: '700', fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.05rem', letterSpacing: '0.04em' },
 
-  // Mobile bar
-  mobileBar:        { position: 'fixed', bottom: 0, left: 0, right: 0, background: '#0d1f0d', borderTop: '1px solid rgba(201,168,76,0.15)', display: 'none', justifyContent: 'space-around', alignItems: 'center', padding: '0.5rem 0', zIndex: 100 },
-  mobileBarItem: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', padding: '0.3rem 0', color: 'rgba(232,220,200,0.4)', textDecoration: 'none', flex: 1 },
-  mobileBarItemActive: { color: '#c9a84c' },
-  mobileBarLabel: { fontSize: '10px', fontWeight: '500' },
-  mobileDot: { width: '4px', height: '4px', borderRadius: '50%', background: '#c9a84c', marginTop: '1px' },
 }

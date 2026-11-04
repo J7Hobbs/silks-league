@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import ProfileDropdown from '../components/ProfileDropdown.jsx'
-import { Home, Target, Trophy, BarChart2, Users } from 'lucide-react'
+import BottomNav from '../components/BottomNav.jsx'
 import eborBanner from '../assets/ebor-banner.jpg'
 
 export default function Dashboard() {
@@ -779,25 +779,7 @@ export default function Dashboard() {
       </main>
 
       {/* ── Mobile bottom bar ── */}
-      <nav style={s.mobileBar} className="app-mobile-bar">
-        <a href="/dashboard" style={{ ...s.mobileItem, ...s.mobileItemActive }}>
-          <Home size={22} strokeWidth={1.5} />
-          <span style={s.mobileLabel}>Home</span>
-          <span style={s.mobileDot} />
-        </a>
-        <a href="/picks" style={s.mobileItem}>
-          <Target size={22} strokeWidth={1.5} />
-          <span style={s.mobileLabel}>Picks</span>
-        </a>
-        <a href="/league" style={s.mobileItem}>
-          <Trophy size={22} strokeWidth={1.5} />
-          <span style={s.mobileLabel}>League</span>
-        </a>
-        <a href="/results" style={s.mobileItem}>
-          <BarChart2 size={22} strokeWidth={1.5} />
-          <span style={s.mobileLabel}>Results</span>
-        </a>
-      </nav>
+      <BottomNav />
 
     </div>
   )
@@ -897,10 +879,4 @@ const s = {
   cdSep: { fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.8rem', color: 'rgba(201,168,76,0.35)', lineHeight: 1, paddingBottom: '0.4rem' },
   goldBtn: { background: '#c9a84c', border: 'none', color: '#0a1a08', borderRadius: '8px', padding: '0.65rem 1.25rem', fontFamily: "'Bebas Neue', sans-serif", fontSize: '1rem', letterSpacing: '0.08em', cursor: 'pointer', width: '100%', textAlign: 'center', marginTop: 'auto' },
 
-  // Mobile bar
-  mobileBar: { display: 'none', position: 'fixed', bottom: 0, left: 0, right: 0, background: '#0d1f0d', borderTop: '1px solid rgba(201,168,76,0.15)', padding: '0.5rem 0', zIndex: 100, justifyContent: 'space-around' },
-  mobileItem: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', padding: '0.3rem 0', color: 'rgba(232,220,200,0.4)', textDecoration: 'none', flex: 1 },
-  mobileItemActive: { color: '#c9a84c' },
-  mobileLabel: { fontSize: '10px', fontWeight: '500' },
-  mobileDot: { width: '4px', height: '4px', borderRadius: '50%', background: '#c9a84c', marginTop: '1px' },
 }

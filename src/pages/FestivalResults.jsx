@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import ProfileDropdown from '../components/ProfileDropdown.jsx'
-import { Home, Target, Trophy, BarChart2 } from 'lucide-react'
+import BottomNav from '../components/BottomNav.jsx'
 
 export default function FestivalResults() {
   const navigate               = useNavigate()
@@ -352,25 +352,7 @@ export default function FestivalResults() {
       </main>
 
       {/* ── Mobile bar ── */}
-      <nav style={st.mobileBar} className="app-mobile-bar">
-        <a href="/dashboard" style={st.mobileBarItem}>
-          <Home size={22} strokeWidth={1.5} />
-          <span style={st.mobileBarLabel}>Home</span>
-        </a>
-        <a href="/picks" style={st.mobileBarItem}>
-          <Target size={22} strokeWidth={1.5} />
-          <span style={st.mobileBarLabel}>Picks</span>
-        </a>
-        <a href="/league" style={st.mobileBarItem}>
-          <Trophy size={22} strokeWidth={1.5} />
-          <span style={st.mobileBarLabel}>League</span>
-        </a>
-        <a href="/results" style={{ ...st.mobileBarItem, ...st.mobileBarItemActive }}>
-          <BarChart2 size={22} strokeWidth={1.5} />
-          <span style={st.mobileBarLabel}>Results</span>
-          <span style={st.mobileDot} />
-        </a>
-      </nav>
+      <BottomNav />
 
     </div>
   )
@@ -491,10 +473,4 @@ const st = {
     color: '#5a8a5a', fontSize: '0.9rem',
   },
 
-  // Mobile bar
-  mobileBar: { display: 'none', position: 'fixed', bottom: 0, left: 0, right: 0, background: '#0d1f0d', borderTop: '1px solid rgba(201,168,76,0.15)', padding: '0.5rem 0', zIndex: 100, justifyContent: 'space-around' },
-  mobileBarItem: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', padding: '0.3rem 0', color: 'rgba(232,220,200,0.4)', textDecoration: 'none', flex: 1 },
-  mobileBarItemActive: { color: '#c9a84c' },
-  mobileBarLabel: { fontSize: '10px', fontWeight: '500' },
-  mobileDot: { width: '4px', height: '4px', borderRadius: '50%', background: '#c9a84c', marginTop: '1px' },
 }
