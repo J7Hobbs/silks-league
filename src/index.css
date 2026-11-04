@@ -854,98 +854,81 @@ img { max-width: 100%; display: block; }
   .top-nav__links { display: none; }
   .top-nav--desktop-only { display: none; }
   /* Pages with the bottom nav: content sits just above it (replaces each page's own bottom padding) */
-  .app-page { padding-bottom: calc(86px + env(safe-area-inset-bottom, 0px)) !important; }
+  /* bar 70px (56 tabs + 12 padding + 2 border) + 22px gap below it */
+  .app-page { padding-bottom: calc(92px + env(safe-area-inset-bottom, 0px)) !important; }
 }
 
-/* ── Mobile bottom nav: floating champagne glass. Hidden desktop, visible mobile.
+/* ── Mobile bottom nav: floating bar. Hidden desktop, visible mobile.
       Markup lives in src/components/BottomNav.jsx. --i is the active tab index. ── */
-.glass-nav { display: none; }
+.bar-nav { display: none; }
 @media (max-width: 768px) {
-  .glass-nav {
+  .bar-nav {
     --i: 0;
     display: flex;
+    gap: 4px;
     position: fixed;
     z-index: 100;
-    left: 14px;
-    right: 14px;
-    bottom: calc(10px + env(safe-area-inset-bottom, 0px));
-    height: 64px;
-    padding: 5px;
-    border-radius: 32px;
-    -webkit-backdrop-filter: blur(24px) saturate(1.9);
-    backdrop-filter: blur(24px) saturate(1.9);
-    background: linear-gradient(135deg, rgba(246, 222, 150, 0.86), rgba(214, 182, 92, 0.74));
-    box-shadow:
-      0 18px 40px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3),
-      inset 0 1px 1px rgba(255, 255, 255, 0.45), inset 0 -1px 1px rgba(255, 255, 255, 0.1), inset 0 0 22px rgba(255, 255, 255, 0.05);
+    left: 12px;
+    right: 12px;
+    bottom: calc(22px + env(safe-area-inset-bottom, 0px));
+    padding: 6px;
+    border-radius: 999px;
+    background: var(--surface);
+    border: 1px solid rgba(201, 168, 76, 0.25);
   }
-  /* Glass edge light on the bar and the lens */
-  .glass-nav::before,
-  .glass-lens::before {
-    content: "";
+  /* Gold pill that slides to the active tab */
+  .bar-pill {
     position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    padding: 1px;
-    pointer-events: none;
-    background: linear-gradient(160deg, rgba(255, 255, 255, 0.75), rgba(255, 255, 255, 0.08) 35%, rgba(255, 255, 255, 0.04) 65%, rgba(255, 255, 255, 0.45));
-    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-    -webkit-mask-composite: xor;
-            mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+    top: 6px;
+    bottom: 6px;
+    left: calc(6px + var(--i) * ((100% - 24px) / 4 + 4px));
+    width: calc((100% - 24px) / 4);
+    border-radius: 999px;
+    background: var(--gold);
+    transition: left 0.2s ease, opacity 0.2s ease;
   }
-  .glass-lens::before {
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.05));
-  }
-  /* Smoked lens that springs to the active tab */
-  .glass-lens {
-    position: absolute;
-    top: 5px;
-    bottom: 5px;
-    left: calc(5px + var(--i) * (100% - 10px) / 4);
-    width: calc((100% - 10px) / 4);
-    border-radius: 28px;
-    background: linear-gradient(180deg, rgba(14, 34, 12, 0.8), rgba(8, 20, 6, 0.72));
-    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.35), inset 0 1px 1px rgba(255, 255, 255, 0.3);
-    transition: left 0.5s cubic-bezier(0.34, 1.35, 0.5, 1), opacity 0.2s ease;
-  }
-  .glass-lens--off { opacity: 0; }
-  .glass-tab {
+  .bar-pill--off { opacity: 0; }
+  .bar-tab {
     position: relative;
     z-index: 1;
     flex: 1;
+    height: 56px;
+    border-radius: 999px;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     gap: 3px;
-    color: rgba(10, 26, 8, 0.74);
-    transition: color 0.25s ease;
+    color: var(--nav-inactive);
+    transition: color 0.2s ease;
     -webkit-tap-highlight-color: transparent;
   }
-  .glass-tab[aria-current="page"] { color: var(--gold); }
-  .glass-tab:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; border-radius: 28px; }
-  .glass-tab svg { display: block; transition: fill-opacity 0.25s ease; }
-  .glass-tab__label { font-size: 11px; font-weight: 600; letter-spacing: 0; }
-  .glass-badge {
+  .bar-tab[aria-current="page"] { color: #0a1a08; }
+  .bar-tab:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; }
+  .bar-tab svg { display: block; }
+  .bar-tab__label { font-size: 11px; font-weight: 600; line-height: 1.2; letter-spacing: 0; }
+  /* Races-left count on Picks: gold when the tab is idle, dark on the gold pill */
+  .bar-badge {
     position: absolute;
-    top: 5px;
-    left: calc(50% + 5px);
-    min-width: 19px;
-    height: 19px;
+    top: 4px;
+    left: calc(50% + 4px);
+    min-width: 18px;
+    height: 18px;
     padding: 0 5px;
-    border-radius: 10px;
+    border-radius: 9px;
     display: grid;
     place-items: center;
-    background: #f0524a;
-    color: #fff;
+    background: var(--gold);
+    color: #0a1a08;
     font-size: 11px;
     font-weight: 700;
     font-variant-numeric: tabular-nums;
-    box-shadow: 0 0 0 2px rgba(10, 26, 8, 0.55), 0 3px 8px rgba(240, 82, 74, 0.5);
+    transition: background 0.2s ease, color 0.2s ease;
   }
+  .bar-tab[aria-current="page"] .bar-badge { background: #0a1a08; color: var(--gold); }
 }
 @media (max-width: 768px) and (prefers-reduced-motion: reduce) {
-  .glass-lens, .glass-tab, .glass-tab svg { transition: none; }
+  .bar-pill, .bar-tab, .bar-badge { transition: none; }
 }
 
 /* ── 4-column grid → 2-column on mobile ── */

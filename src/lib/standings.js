@@ -36,7 +36,7 @@ function tally(rows, totals, wins) {
   }
 }
 
-// { rank, total } for userId, or null when they are not in `totals`.
+// { rank, total, points } for userId, or null when they are not in `totals`.
 export function rankOf(totals, wins, names, userId) {
   if (!(userId in totals)) return null
   const ids = Object.keys(totals)
@@ -44,7 +44,7 @@ export function rankOf(totals, wins, names, userId) {
     totals[b] - totals[a] ||
     (wins[b] || 0) - (wins[a] || 0) ||
     (names[a] || '').localeCompare(names[b] || ''))
-  return { rank: ids.indexOf(userId) + 1, total: ids.length }
+  return { rank: ids.indexOf(userId) + 1, total: ids.length, points: totals[userId] }
 }
 
 async function raceIdsForSeasons(seasonIds) {

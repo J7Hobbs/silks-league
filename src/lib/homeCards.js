@@ -50,14 +50,18 @@ function saturdayCard(sat, nowMs, today) {
     }
   }
 
+  const month = sat.season?.startDate ? monthLong(sat.season.startDate) : null
+  const line = !month ? null
+    : sat.seasonPos?.points > 0 ? `Your ${month} position: ${ordinal(sat.seasonPos.rank)}`
+    : `The ${month} season starts with the next race week`
   return {
     ...base,
     state: 'returns',
     context: '',
     title: 'Saturday League returns soon',
     tiles: [],
-    line: sat.annual ? `Your ${sat.year} position: ${ordinal(sat.annual.rank)}` : null,
-    button: { label: `View ${sat.year} table`, outline: true, action: { to: '/league' } },
+    line,
+    button: { label: 'View leaderboard', outline: true, action: { to: '/league' } },
   }
 }
 

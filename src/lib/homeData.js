@@ -15,9 +15,9 @@ function groupBy(rows, key) {
 // open     picks are open now (a race week with races and a future deadline)
 // closed   it's race day and the deadline has passed
 // lastWeek last week's result, up to 14 days after that race week
-// returns  nothing recent: "returns soon" with the annual position
+// returns  nothing recent: "returns soon" with the position in the active season
 async function loadSaturday(userId, today, nowMs) {
-  const { data: season } = await supabase.from('seasons').select('id, year').eq('is_active', true).maybeSingle()
+  const { data: season } = await supabase.from('seasons').select('id, start_date').eq('is_active', true).maybeSingle()
   const { data: weeks } = await supabase
     .from('race_weeks').select('id, season_id, week_number, saturday_date, picks_deadline')
     .order('saturday_date', { ascending: false }).limit(12)
@@ -75,14 +75,8 @@ async function loadSaturday(userId, today, nowMs) {
     return { state: 'lastWeek', week: last, points, winners, rank }
   }
 
-  let year = season?.year
-  if (!year) {
-    const { data: latest } = await supabase.from('seasons').select('year').order('year', { ascending: false }).limit(1)
-    year = latest?.[0]?.year ?? new Date().getFullYear()
-  }
-  const { data: seasons } = await supabase.from('seasons').select('id').eq('year', year)
-  const annual = seasons?.length ? await seasonsRank(userId, seasons.map(s => s.id)) : null
-  return { state: 'returns', year, annual }
+  const seasonPos = season ? await seasonsRank(userId, [season.id]) : null
+  return { state: 'returns', season: season ? { startDate: season.start_date } : null, seasonPos }
 }
 
 // ── Festival ────────────────────────────────────────────────────────────────
