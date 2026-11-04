@@ -2,10 +2,11 @@ import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { currentUser } from '../lib/session.js'
 import { useCompetition } from '../context/competition.js'
-import { loadHomeData } from '../lib/homeData.js'
+import { loadHomeData, refreshSaturday } from '../lib/homeData.js'
 import { buildCards } from '../lib/homeCards.js'
 import { greetingFor } from '../lib/format.js'
 import CompetitionCard from '../components/home/CompetitionCard.jsx'
+import SaturdayCard from '../components/home/SaturdayCard.jsx'
 import ComingUp from '../components/home/ComingUp.jsx'
 import RaceDayCard from '../components/home/RaceDayCard.jsx'
 import { HomeSkeleton } from '../components/Skeletons.jsx'
@@ -40,6 +41,32 @@ export default function Dashboard() {
     [data, now],
   )
 
+  // While races are running, re-read the Saturday part every minute and when the app
+  // comes back into view, so the results and table keep up.
+  const racing = cards.some(c => c.kind === 'saturday' && c.phase === 'racing')
+  useEffect(() => {
+    if (!racing || !user) return undefined
+    let cancelled = false
+    let last = Date.now()
+    async function refresh() {
+      if (document.visibilityState === 'hidden' || Date.now() - last < 5000) return
+      last = Date.now()
+      try {
+        const saturday = await refreshSaturday(user)
+        if (!cancelled) setData(prev => (prev ? { ...prev, saturday } : prev))
+      } catch (err) { console.error('[Home] refresh failed:', err) }
+    }
+    const timer = setInterval(refresh, 60000)
+    document.addEventListener('visibilitychange', refresh)
+    window.addEventListener('focus', refresh)
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+      document.removeEventListener('visibilitychange', refresh)
+      window.removeEventListener('focus', refresh)
+    }
+  }, [racing, user])
+
   if (!data) {
     return <HomeSkeleton />
   }
@@ -73,8 +100,9 @@ export default function Dashboard() {
           </div>
         )}
 
-        {cards.map((card, i) => (
-          <CompetitionCard key={card.key} card={card} isTop={i === 0} onAction={openCard} />
+        {cards.map((card, i) => (card.kind === 'saturday'
+          ? <SaturdayCard key={card.key} card={card} onAction={openCard} />
+          : <CompetitionCard key={card.key} card={card} isTop={i === 0} onAction={openCard} />
         ))}
 
         <ComingUp festivals={data.upcoming} nowMs={now} />

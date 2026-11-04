@@ -36,14 +36,20 @@ function tally(rows, totals, wins) {
   }
 }
 
-// { rank, total, points } for userId, or null when they are not in `totals`.
-export function rankOf(totals, wins, names, userId) {
-  if (!(userId in totals)) return null
+// Player ids best first: points, then number of winning picks, then name.
+export function orderIds(totals, wins, names) {
   const ids = Object.keys(totals)
   ids.sort((a, b) =>
     totals[b] - totals[a] ||
     (wins[b] || 0) - (wins[a] || 0) ||
     (names[a] || '').localeCompare(names[b] || ''))
+  return ids
+}
+
+// { rank, total, points } for userId, or null when they are not in `totals`.
+export function rankOf(totals, wins, names, userId) {
+  if (!(userId in totals)) return null
+  const ids = orderIds(totals, wins, names)
   return { rank: ids.indexOf(userId) + 1, total: ids.length, points: totals[userId] }
 }
 
@@ -58,7 +64,7 @@ async function raceIdsForSeasons(seasonIds) {
 function scoresForRaces(raceIds) {
   if (!raceIds.length) return Promise.resolve([])
   return fetchAll(() => supabase.from('scores')
-    .select('id, user_id, total_points, position_achieved').in('race_id', raceIds))
+    .select('id, race_id, user_id, total_points, position_achieved').in('race_id', raceIds))
 }
 
 // Rank across one or more seasons (a single season, or every season in a year).
@@ -72,6 +78,50 @@ export async function seasonsRank(userId, seasonIds) {
   const wins = {}
   tally(scores, totals, wins)
   return rankOf(totals, wins, names, userId)
+}
+
+// The standings table for one season, for the Home card: every player ordered the
+// way rankOf orders them, with each player's movement. Movement is the change in
+// position since before `referenceWeekId` (default: the latest week with scores), so a
+// positive number means they moved up. It is null where there is nothing to compare:
+// the player had no points before that week.
+export async function seasonTable(userId, seasonId, referenceWeekId = null) {
+  const idsLoaded = allProfileIds()
+  const weekScores = (async () => {
+    const { data: weeks } = await supabase.from('race_weeks').select('id, saturday_date').eq('season_id', seasonId)
+    if (!weeks?.length) return { weeks: [], races: [], scores: [] }
+    const { data: races } = await supabase.from('races').select('id, race_week_id').in('race_week_id', weeks.map(w => w.id))
+    const scores = await scoresForRaces((races || []).map(r => r.id))
+    return { weeks, races: races || [], scores }
+  })()
+  const namesLoaded = idsLoaded.then(ids => namesFor([...new Set([...ids, userId])]))
+  const [ids, { weeks, races, scores }, names] = await Promise.all([idsLoaded, weekScores, namesLoaded])
+
+  const everyone = [...new Set([...ids, userId])]
+  const weekOfRace = Object.fromEntries(races.map(r => [r.id, r.race_week_id]))
+
+  let reference = referenceWeekId
+  if (!reference) {
+    const scored = new Set(scores.map(s => weekOfRace[s.race_id]))
+    reference = weeks.filter(w => scored.has(w.id))
+      .sort((a, b) => (a.saturday_date < b.saturday_date ? 1 : -1))[0]?.id || null
+  }
+
+  const totals = {}, wins = {}, beforeTotals = {}, beforeWins = {}
+  everyone.forEach(id => { totals[id] = 0; beforeTotals[id] = 0 })
+  tally(scores, totals, wins)
+  tally(scores.filter(s => !reference || weekOfRace[s.race_id] !== reference), beforeTotals, beforeWins)
+
+  const order = orderIds(totals, wins, names)
+  const beforeRank = Object.fromEntries(orderIds(beforeTotals, beforeWins, names).map((id, i) => [id, i + 1]))
+  const rows = order.map((id, i) => ({
+    id,
+    name: names[id] || '',
+    points: totals[id],
+    rank: i + 1,
+    move: beforeTotals[id] > 0 ? beforeRank[id] - (i + 1) : null,
+  }))
+  return { rank: rankOf(totals, wins, names, userId), rows }
 }
 
 // Rank for one race week, among players who scored that week.

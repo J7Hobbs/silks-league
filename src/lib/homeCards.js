@@ -1,4 +1,5 @@
-import { ordinal, formatCountdown, localDateStr, monthLong, deadlineMs } from './format.js'
+import { ordinal, formatCountdown, deadlineMs } from './format.js'
+import { saturdayCard } from './saturdayCard.js'
 
 // Turns the loaded Home data into the competition cards to show, in order.
 // Pure: pass in `nowMs` so the countdowns tick without re-querying.
@@ -10,60 +11,6 @@ function pickLabel(picked, total) {
 }
 
 const rankText = r => (r ? ordinal(r.rank) : '—')
-
-function saturdayCard(sat, nowMs, today) {
-  const base = { key: 'saturday', kind: 'saturday', tag: 'SATURDAY LEAGUE', competition: { type: 'saturday', id: null } }
-
-  if (sat.state === 'open' || sat.state === 'closed') {
-    const dl = deadlineMs(sat.deadline)
-    const live = sat.state === 'open' && dl > nowMs
-    const isToday = sat.week.saturday_date === today
-    return {
-      ...base,
-      state: live ? 'open' : 'closed',
-      deadlineMs: dl,
-      context: `Week ${sat.week.week_number} · ${monthLong(sat.week.saturday_date)}`,
-      title: `${isToday ? "Today's" : "This week's"} ${sat.total} races`,
-      tiles: [
-        { label: 'Closes in', value: formatCountdown(dl - nowMs), accent: live },
-        { label: 'Your picks', value: `${sat.picked}/${sat.total}` },
-        { label: 'Season', value: rankText(sat.seasonRank) },
-      ],
-      button: live
-        ? { label: pickLabel(sat.picked, sat.total), action: { to: '/picks' } }
-        : { label: 'View results', outline: true, action: { to: '/results' } },
-    }
-  }
-
-  if (sat.state === 'lastWeek') {
-    return {
-      ...base,
-      state: 'lastWeek',
-      context: `Week ${sat.week.week_number} · ${monthLong(sat.week.saturday_date)}`,
-      title: 'Last week',
-      tiles: [
-        { label: 'Points', value: String(sat.points) },
-        { label: 'Winners', value: String(sat.winners) },
-        { label: 'Position', value: rankText(sat.rank) },
-      ],
-      button: { label: 'View results', outline: true, action: { to: '/results' } },
-    }
-  }
-
-  const month = sat.season?.startDate ? monthLong(sat.season.startDate) : null
-  const line = !month ? null
-    : sat.seasonPos?.points > 0 ? `Your ${month} position: ${ordinal(sat.seasonPos.rank)}`
-    : `The ${month} season starts with the next race week`
-  return {
-    ...base,
-    state: 'returns',
-    context: '',
-    title: 'Saturday League returns soon',
-    tiles: [],
-    line,
-    button: { label: 'View leaderboard', outline: true, action: { to: '/league' } },
-  }
-}
 
 function festivalCard(fest, nowMs) {
   const f = fest.festival
@@ -100,10 +47,9 @@ function sortOrder(card) {
 }
 
 export function buildCards(data, nowMs) {
-  const today = localDateStr(new Date(nowMs))
   const cards = []
   if (data.festival) cards.push(festivalCard(data.festival, nowMs))
-  if (data.saturday) cards.push(saturdayCard(data.saturday, nowMs, today))
+  if (data.saturday) cards.push(saturdayCard(data.saturday, nowMs))
 
   cards.sort((a, b) => {
     const g = sortOrder(a) - sortOrder(b)

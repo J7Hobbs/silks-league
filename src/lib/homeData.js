@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import { seasonsRank, weekRank, festivalRank } from './standings'
+import { seasonTable, festivalRank } from './standings'
 import { localDateStr, daysBetween, deadlineMs } from './format'
 
 // Everything the Home page needs, in one read-only load. A failing part is
@@ -16,6 +16,23 @@ function groupBy(rows, key) {
 // closed   it's race day and the deadline has passed
 // lastWeek last week's result, up to 14 days after that race week
 // returns  nothing recent: "returns soon" with the position in the active season
+// The card itself (homeCards.js) works out what to show from this, as the clock moves on.
+const RACE_COLS = 'id, race_week_id, race_number, race_time, venue, race_name'
+const RUNNER_COLS = 'id, race_id, horse_name, horse_number, silk_colour, silk_colour_secondary, odds_fractional, odds_decimal, is_withdrawn'
+
+// A race week's races, the player's picks and scores, the results and the season table.
+async function loadWeekDetail(userId, races, season, referenceWeekId) {
+  const raceIds = races.map(r => r.id)
+  const [runners, picks, results, scores, table] = await Promise.all([
+    supabase.from('runners').select(RUNNER_COLS).in('race_id', raceIds).then(r => r.data || []),
+    supabase.from('picks').select('race_id, runner_id, bet_type, was_replaced').eq('user_id', userId).in('race_id', raceIds).then(r => r.data || []),
+    supabase.from('results').select('race_id, position, horse_name, starting_price_display').in('race_id', raceIds).then(r => r.data || []),
+    supabase.from('scores').select('race_id, total_points, position_achieved, bet_type, place_token_points').eq('user_id', userId).in('race_id', raceIds).then(r => r.data || []),
+    season ? seasonTable(userId, season.id, referenceWeekId) : Promise.resolve(null),
+  ])
+  return { races, runners, picks, results, scores, table }
+}
+
 async function loadSaturday(userId, today, nowMs) {
   const [{ data: season }, { data: weeks }] = await Promise.all([
     supabase.from('seasons').select('id, start_date').eq('is_active', true).maybeSingle(),
@@ -23,6 +40,7 @@ async function loadSaturday(userId, today, nowMs) {
       .order('saturday_date', { ascending: false }).limit(12),
   ])
   const all = weeks || []
+  const seasonInfo = season ? { id: season.id, startDate: season.start_date } : null
 
   const upcoming = all
     .filter(w => season && w.season_id === season.id && deadlineMs(w.picks_deadline, w.saturday_date) > nowMs)
@@ -32,7 +50,7 @@ async function loadSaturday(userId, today, nowMs) {
   const candidateIds = [...new Set([...upcoming.map(w => w.id), todayWeek?.id].filter(Boolean))]
   let racesByWeek = {}
   if (candidateIds.length) {
-    const { data: races } = await supabase.from('races').select('id, race_week_id').in('race_week_id', candidateIds)
+    const { data: races } = await supabase.from('races').select(RACE_COLS).in('race_week_id', candidateIds)
     racesByWeek = groupBy(races || [], 'race_week_id')
   }
   const hasRaces = w => (racesByWeek[w.id] || []).length > 0
@@ -42,42 +60,42 @@ async function loadSaturday(userId, today, nowMs) {
   const current = openWeek || closedWeek
 
   if (current) {
-    const raceIds = racesByWeek[current.id].map(r => r.id)
-    const [{ data: picks }, rank] = await Promise.all([
-      supabase.from('picks').select('race_id').eq('user_id', userId).in('race_id', raceIds),
-      season ? seasonsRank(userId, [season.id]) : Promise.resolve(null),
-    ])
+    // Once picks have closed, movement in the table is measured from before this week.
+    const detail = await loadWeekDetail(userId, racesByWeek[current.id], seasonInfo, openWeek ? null : current.id)
     return {
       state: openWeek ? 'open' : 'closed',
       week: current,
-      total: raceIds.length,
-      picked: new Set((picks || []).map(p => p.race_id)).size,
       deadline: current.picks_deadline || `${current.saturday_date}T12:00:00`,
-      seasonRank: rank,
+      season: seasonInfo,
+      seasonRank: detail.table?.rank || null,
+      ...detail,
     }
   }
 
   const last = all.find(w => w.saturday_date < today)
   if (last && daysBetween(last.saturday_date, today) <= 14) {
-    const { data: races } = await supabase.from('races').select('id').eq('race_week_id', last.id)
-    const raceIds = (races || []).map(r => r.id)
-    let points = 0
-    let winners = 0
-    let rank = null
-    if (raceIds.length) {
-      const [{ data: mine }, r] = await Promise.all([
-        supabase.from('scores').select('total_points, position_achieved').eq('user_id', userId).in('race_id', raceIds),
-        weekRank(userId, raceIds),
-      ])
-      points = (mine || []).reduce((sum, s) => sum + (s.total_points || 0), 0)
-      winners = (mine || []).filter(s => s.position_achieved === 1).length
-      rank = r
+    const { data: races } = await supabase.from('races').select(RACE_COLS).eq('race_week_id', last.id)
+    if (races?.length) {
+      const detail = await loadWeekDetail(userId, races, seasonInfo, last.id)
+      return {
+        state: 'lastWeek',
+        week: last,
+        deadline: last.picks_deadline || `${last.saturday_date}T12:00:00`,
+        season: seasonInfo,
+        seasonRank: detail.table?.rank || null,
+        ...detail,
+      }
     }
-    return { state: 'lastWeek', week: last, points, winners, rank }
   }
 
-  const seasonPos = season ? await seasonsRank(userId, [season.id]) : null
-  return { state: 'returns', season: season ? { startDate: season.start_date } : null, seasonPos }
+  const table = season ? await seasonTable(userId, season.id) : null
+  return { state: 'returns', season: seasonInfo, seasonPos: table?.rank || null, table }
+}
+
+// Just the Saturday part, re-read while races are running.
+export async function refreshSaturday(user) {
+  const nowMs = Date.now()
+  return { ...(await loadSaturday(user.id, localDateStr(new Date(nowMs)), nowMs)), userId: user.id }
 }
 
 // ── Festival ────────────────────────────────────────────────────────────────
@@ -142,7 +160,7 @@ export async function loadHomeData(user) {
 
   const [profile, saturday, festival, upcoming] = await Promise.all([
     safe('profile', async () => (await supabase.from('profiles').select('is_admin, full_name, username').eq('id', user.id).single()).data, null),
-    safe('saturday', () => loadSaturday(user.id, today, nowMs), null),
+    safe('saturday', async () => ({ ...(await loadSaturday(user.id, today, nowMs)), userId: user.id }), null),
     safe('festival', () => loadFestival(user.id, today, nowMs), null),
     safe('upcoming', () => loadUpcoming(today), []),
   ])

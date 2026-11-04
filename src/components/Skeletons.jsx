@@ -22,7 +22,7 @@ export function HomeSkeleton() {
           <Block h={32} w="62%" r={8} />
         </header>
         <Busy className="sk-col" >
-          <Block h={236} r={18} />
+          <Block h={520} r={20} />
         </Busy>
         <Block h={96} r={18} />
         <Block h={88} r={18} />

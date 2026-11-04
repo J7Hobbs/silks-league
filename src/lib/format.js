@@ -89,3 +89,48 @@ export function lockLabel(iso, nowMs) {
   if (ahead < 7) return `Locks ${p.weekday} ${time}`
   return `Locks ${p.weekday} ${p.day} ${p.month} ${time}`
 }
+
+// ── UK clock helpers for the Saturday League card ──
+const UK_CLOCK = new Intl.DateTimeFormat('en-GB', { timeZone: UK, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+const UK_FULL = new Intl.DateTimeFormat('en-GB', {
+  timeZone: UK, year: 'numeric', month: '2-digit', day: '2-digit',
+  hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+})
+
+// Today's date in the UK, YYYY-MM-DD.
+export function ukDateStr(ms) { return UK_DATE.format(ms) }
+
+// "12:00" for a moment in time, in UK time.
+export function ukClock(ms) { return UK_CLOCK.format(ms) }
+
+// "14:10" -> "14:10"; anything that isn't an HH:MM time -> ''.
+export function clockText(t) {
+  const m = /^(\d{1,2}):(\d{2})/.exec(t || '')
+  return m ? `${m[1].padStart(2, '0')}:${m[2]}` : ''
+}
+
+function ukOffsetMs(ms) {
+  const p = Object.fromEntries(UK_FULL.formatToParts(ms).map(x => [x.type, x.value]))
+  return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second) - Math.floor(ms / 1000) * 1000
+}
+
+// The moment a UK wall-clock time ("2026-11-07", "14:10") happens, as epoch ms. null if the time is missing.
+export function ukWallToMs(dateStr, hhmm) {
+  const t = clockText(hhmm)
+  if (!dateStr || !t) return null
+  const [y, mo, d] = dateStr.split('-').map(Number)
+  const [h, mi] = t.split(':').map(Number)
+  const wall = Date.UTC(y, mo - 1, d, h, mi)
+  return wall - ukOffsetMs(wall - ukOffsetMs(wall))
+}
+
+// Countdown on the Saturday card: "2d 21h" from a day out, then hh:mm:ss.
+export function formatLockCountdown(ms) {
+  const total = Math.max(0, Math.floor(ms / 1000))
+  const d = Math.floor(total / 86400)
+  const h = Math.floor((total % 86400) / 3600)
+  if (d >= 1) return `${d}d ${h}h`
+  const m = Math.floor((total % 3600) / 60)
+  const s = total % 60
+  return [h, m, s].map(n => String(n).padStart(2, '0')).join(':')
+}
