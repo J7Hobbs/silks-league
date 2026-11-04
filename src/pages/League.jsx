@@ -9,6 +9,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { currentUser } from '../lib/session.js'
 import { useCompetition } from '../context/competition.js'
 import { localDateStr } from '../lib/format.js'
 import { runningFestivals, selectedFestival } from '../lib/picksView.js'
@@ -83,7 +84,7 @@ export default function League() {
   useEffect(() => { init() }, [])
 
   async function init() {
-    const { data: { user: u } } = await supabase.auth.getUser()
+    const u = await currentUser()
     if (!u) { navigate('/auth'); return }
     setUser(u)
 

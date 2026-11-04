@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
+import { currentUser } from '../lib/session.js'
 import { useCompetition } from '../context/competition.js'
 import { loadHomeData } from '../lib/homeData.js'
 import { buildCards } from '../lib/homeCards.js'
@@ -26,7 +26,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     let cancelled = false
-    supabase.auth.getUser().then(async ({ data: { user } }) => {
+    currentUser().then(async user => {
       if (!user) { navigate('/auth'); return }
       setUser(user)
       const result = await loadHomeData(user)

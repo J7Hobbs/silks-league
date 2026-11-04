@@ -8,7 +8,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
+import { currentUser } from '../lib/session.js'
 import { useCompetition } from '../context/competition.js'
 import {
   loadWeekIndex, loadFestivalIndex, loadWeekPeriod, loadFestivalPeriod,
@@ -49,7 +49,7 @@ export default function Results() {
   useEffect(() => {
     let cancelled = false
     async function init() {
-      const { data: { user } } = await supabase.auth.getUser()
+      const user = await currentUser()
       if (!user) { navigate('/auth'); return }
       if (cancelled) return
       setUser(user)

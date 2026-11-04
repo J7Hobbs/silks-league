@@ -9,6 +9,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Clock } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { currentUser } from '../lib/session.js'
 import { useCompetition } from '../context/competition.js'
 import { PICKS_CHANGED } from '../lib/navTabs.js'
 import { isWinOnly, canOfferEachWay, calcTokenPoints } from '../lib/scoring.js'
@@ -88,7 +89,7 @@ export default function Picks() {
   useEffect(() => { init() }, [])
 
   async function init() {
-    const { data: { user } } = await supabase.auth.getUser()
+    const user = await currentUser()
     if (!user) { navigate('/auth'); return }
     setUser(user)
     // The festival list and the weekly picks don't depend on each other, so they load together.
@@ -178,7 +179,7 @@ export default function Picks() {
 
   // ── Festival loaders ──────────────────────────────────────────
   async function loadFestivalData(fest) {
-    const { data: { user: u } } = await supabase.auth.getUser()
+    const u = await currentUser()
     if (!u) return
     const token = ++festReq.current
     const stale = () => token !== festReq.current
@@ -255,7 +256,7 @@ export default function Picks() {
     setFestDay(day)
     setFestRaces([]); setFestRunners({}); setFestPicks({}); setFestReplaced({})
     setFestSelected({}); setFestBetType({}); setFestIdx(0)
-    const { data: { user: u } } = await supabase.auth.getUser()
+    const u = await currentUser()
     if (u) await loadFestDayData(day, u.id, token)
   }
 
