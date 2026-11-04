@@ -17,10 +17,11 @@ function groupBy(rows, key) {
 // lastWeek last week's result, up to 14 days after that race week
 // returns  nothing recent: "returns soon" with the position in the active season
 async function loadSaturday(userId, today, nowMs) {
-  const { data: season } = await supabase.from('seasons').select('id, start_date').eq('is_active', true).maybeSingle()
-  const { data: weeks } = await supabase
-    .from('race_weeks').select('id, season_id, week_number, saturday_date, picks_deadline')
-    .order('saturday_date', { ascending: false }).limit(12)
+  const [{ data: season }, { data: weeks }] = await Promise.all([
+    supabase.from('seasons').select('id, start_date').eq('is_active', true).maybeSingle(),
+    supabase.from('race_weeks').select('id, season_id, week_number, saturday_date, picks_deadline')
+      .order('saturday_date', { ascending: false }).limit(12),
+  ])
   const all = weeks || []
 
   const upcoming = all

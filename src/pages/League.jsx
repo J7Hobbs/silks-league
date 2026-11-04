@@ -110,6 +110,14 @@ export default function League() {
 
   // ── Saturday League ───────────────────────────────────────────
   async function loadSaturdayLeague(myUserId, seasonId) {
+    // Every registered user appears even with 0 pts, so the names don't wait on the season.
+    const namesLoaded = (async () => {
+      const { data: allProfileData } = await supabase.from('profiles').select('id')
+      const ids = [...new Set([...(allProfileData || []).map(p => p.id), myUserId])]
+      const { data: profData } = await supabase.rpc('get_user_names', { user_ids: ids })
+      return { allProfileIds: ids, profData }
+    })()
+
     let s
     if (seasonId) {
       const { data } = await supabase.from('seasons').select('id, name, status, is_active').eq('id', seasonId).single()
@@ -141,18 +149,16 @@ export default function League() {
       }
     }
 
+    // The player's own scores and everyone's scores are independent reads.
     let ownScores = []
-    if (allRaceIds.length) {
-      const { data: od } = await supabase
-        .from('scores').select('user_id, race_id, total_points')
-        .eq('user_id', myUserId).in('race_id', allRaceIds)
-      ownScores = od || []
-    }
-
     let allScores = []
     if (allRaceIds.length) {
-      const { data: everyone, error: evErr } = await supabase
-        .from('scores').select('user_id, race_id, total_points, position_achieved').in('race_id', allRaceIds)
+      const [{ data: od }, { data: everyone, error: evErr }] = await Promise.all([
+        supabase.from('scores').select('user_id, race_id, total_points')
+          .eq('user_id', myUserId).in('race_id', allRaceIds),
+        supabase.from('scores').select('user_id, race_id, total_points, position_achieved').in('race_id', allRaceIds),
+      ])
+      ownScores = od || []
       if (!evErr && everyone?.length) allScores = everyone
     }
     // else: no races in this season yet — all scores stay []
@@ -168,10 +174,7 @@ export default function League() {
       if (sc.position_achieved === 1) weekWinsByUser[sc.user_id] = (weekWinsByUser[sc.user_id] || 0) + 1
     })
 
-    // Fetch all profiles — every registered user appears even with 0 pts
-    const { data: allProfileData } = await supabase.from('profiles').select('id')
-    const allProfileIds = [...new Set([...(allProfileData || []).map(p => p.id), myUserId])]
-    const { data: profData } = await supabase.rpc('get_user_names', { user_ids: allProfileIds })
+    const { allProfileIds, profData } = await namesLoaded
     const nameMap = {}
     profData?.forEach(p => { nameMap[p.id] = p.username || p.full_name || null })
 
@@ -276,48 +279,42 @@ export default function League() {
   // ── Festival leaderboard helper ───────────────────────────────
   // Returns { rows, festDays } where rows include dayPts: { [dayNumber]: pts }
   async function fetchFestivalRows(fest, memberIds, myUserId) {
-    const { data: daysData } = await supabase
-      .from('festival_days').select('id, day_number, race_date').eq('festival_id', fest.id).order('day_number')
-    if (!daysData?.length) return { rows: [], festDays: [] }
-    const { data: races } = await supabase
-      .from('festival_races').select('id').in('festival_day_id', daysData.map(d => d.id))
-    const raceIds = (races || []).map(r => r.id)
-
+    // The days (then their races) and the entries are independent, so they load together.
     let entriesQ = supabase.from('festival_entries')
       .select('user_id, starting_points').eq('festival_id', fest.id)
     if (memberIds?.length) entriesQ = entriesQ.in('user_id', memberIds)
-    const { data: entries } = await entriesQ
+    const daysAndRaces = (async () => {
+      const { data: daysData } = await supabase
+        .from('festival_days').select('id, day_number, race_date').eq('festival_id', fest.id).order('day_number')
+      if (!daysData?.length) return { daysData, raceIds: [] }
+      const { data: races } = await supabase
+        .from('festival_races').select('id').in('festival_day_id', daysData.map(d => d.id))
+      return { daysData, raceIds: (races || []).map(r => r.id) }
+    })()
+    const [{ daysData, raceIds }, { data: entries }] = await Promise.all([daysAndRaces, entriesQ])
+    if (!daysData?.length) return { rows: [], festDays: [] }
     if (!entries?.length) return { rows: [], festDays: daysData }
 
     const entryUserIds = entries.map(e => e.user_id)
+    const festProfileIds = [...new Set([...entryUserIds, myUserId])]
 
-    // Fetch race scores (for totals + tiebreaker wins)
-    let scoresData = []
-    if (raceIds.length) {
-      const { data: sc } = await supabase
-        .from('festival_scores').select('user_id, total_points, position_achieved')
-        .in('festival_race_id', raceIds).in('user_id', entryUserIds)
-      scoresData = sc || []
-    }
+    // Race scores (totals + tiebreaker wins), day-by-day points from festival_day_points, and
+    // player names don't depend on each other, so they load together.
+    const [scoresData, dayPointsData, profiles] = await Promise.all([
+      raceIds.length
+        ? supabase.from('festival_scores').select('user_id, total_points, position_achieved')
+            .in('festival_race_id', raceIds).in('user_id', entryUserIds).then(({ data }) => data || [])
+        : Promise.resolve([]),
+      supabase.from('festival_day_points').select('user_id, day_number, points')
+        .eq('festival_id', fest.id).in('user_id', memberIds?.length ? memberIds : entryUserIds)
+        .then(({ data }) => data || []),
+      supabase.rpc('get_user_names', { user_ids: festProfileIds }).then(({ data }) => data),
+    ])
 
     // Count 1st-place finishes per user for tiebreaker
     const winsByUser = {}
     for (const s of scoresData) {
       if (s.position_achieved === 1) winsByUser[s.user_id] = (winsByUser[s.user_id] || 0) + 1
-    }
-
-    // Fetch day-by-day points from festival_day_points
-    let dayPointsData = []
-    if (memberIds?.length) {
-      const { data: dp } = await supabase
-        .from('festival_day_points').select('user_id, day_number, points')
-        .eq('festival_id', fest.id).in('user_id', memberIds)
-      dayPointsData = dp || []
-    } else {
-      const { data: dp } = await supabase
-        .from('festival_day_points').select('user_id, day_number, points')
-        .eq('festival_id', fest.id).in('user_id', entryUserIds)
-      dayPointsData = dp || []
     }
 
     // Build day-points lookup: { userId: { dayNumber: pts } }
@@ -333,9 +330,6 @@ export default function League() {
       if (totals[s.user_id] !== undefined) totals[s.user_id] += (s.total_points || 0)
     }
 
-    const festProfileIds = [...new Set([...entryUserIds, myUserId])]
-    const { data: profiles } = await supabase
-      .rpc('get_user_names', { user_ids: festProfileIds })
     const nameMap = {}
     profiles?.forEach(p => { nameMap[p.id] = p.username || p.full_name || null })
 
@@ -354,15 +348,16 @@ export default function League() {
 
   // ── Group Saturday helper ─────────────────────────────────────
   async function fetchGroupSatRows(memberIds, myUserId) {
+    // Names for all group members regardless of whether they have scores; they don't wait on the season.
+    const groupProfileIds = [...new Set([...memberIds, myUserId])]
+    const namesLoaded = supabase.rpc('get_user_names', { user_ids: groupProfileIds })
     const { data: season } = await supabase
       .from('seasons').select('id').eq('is_active', true).single()
     if (!season) return []
     const { data: weeks } = await supabase
       .from('race_weeks').select('id').eq('season_id', season.id)
     const weekIds = (weeks || []).map(w => w.id)
-    // Fetch names for all group members regardless of whether they have scores
-    const groupProfileIds = [...new Set([...memberIds, myUserId])]
-    const { data: groupProfiles } = await supabase.rpc('get_user_names', { user_ids: groupProfileIds })
+    const { data: groupProfiles } = await namesLoaded
     const groupNameMap = {}
     groupProfiles?.forEach(p => { groupNameMap[p.id] = p.username || p.full_name || null })
 

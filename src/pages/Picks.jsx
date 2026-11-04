@@ -91,14 +91,18 @@ export default function Picks() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { navigate('/auth'); return }
     setUser(user)
-    const { data: fests } = await supabase
-      .from('festivals').select('*').eq('is_active', true).order('start_date')
-    const running = runningFestivals(fests, localDateStr())
-    setActiveFestivals(running)
-    // Older links navigate here with { festivalTab } (e.g. a festival banner).
-    const requestedTab = location.state?.festivalTab
-    if (requestedTab && running.some(f => f.id === requestedTab)) setCompetition('festival', requestedTab)
-    await loadData(user)
+    // The festival list and the weekly picks don't depend on each other, so they load together.
+    // The page stays on its placeholder until both are in, so the pills don't pop in late.
+    const festivalsLoaded = (async () => {
+      const { data: fests } = await supabase
+        .from('festivals').select('*').eq('is_active', true).order('start_date')
+      const running = runningFestivals(fests, localDateStr())
+      setActiveFestivals(running)
+      // Older links navigate here with { festivalTab } (e.g. a festival banner).
+      const requestedTab = location.state?.festivalTab
+      if (requestedTab && running.some(f => f.id === requestedTab)) setCompetition('festival', requestedTab)
+    })()
+    await loadData(user, festivalsLoaded)
   }
 
   // The festival being looked at (null = Saturday League). A group id or a
@@ -117,11 +121,12 @@ export default function Picks() {
   }, [selFestId, user])
 
   // ── Weekly loader ─────────────────────────────────────────────
-  async function loadData(u) {
+  async function loadData(u, alongside) {
     setLoading(true)
+    const finish = async () => { await alongside; setLoading(false) }
     const { data: season } = await supabase
       .from('seasons').select('id').eq('is_active', true).single()
-    if (!season) { setNoWeek(true); setLoading(false); return }
+    if (!season) { setNoWeek(true); await finish(); return }
 
     const nowDate = new Date()
     const { data: weeks } = await supabase
@@ -135,27 +140,26 @@ export default function Picks() {
     })
     const week = openWeek || (weeks?.length ? weeks[weeks.length - 1] : null)
 
-    if (!week) { setNoWeek(true); setLoading(false); return }
+    if (!week) { setNoWeek(true); await finish(); return }
     // Same rule as Home: no open week and the latest one is over two weeks old.
-    if (!openWeek && daysBetween(week.saturday_date, localDateStr()) > 14) { setNoWeek(true); setLoading(false); return }
+    if (!openWeek && daysBetween(week.saturday_date, localDateStr()) > 14) { setNoWeek(true); await finish(); return }
     setCurrentWeek(week)
 
     const { data: raceData } = await supabase
       .from('races').select('*').eq('race_week_id', week.id).order('race_number')
     setRaces(raceData || [])
-    if (!raceData?.length) { setLoading(false); return }
+    if (!raceData?.length) { await finish(); return }
 
-    const runnersMap = {}
-    for (const race of raceData) {
-      const { data: r } = await supabase
-        .from('runners').select('*').eq('race_id', race.id).order('horse_number', { ascending: true })
-      runnersMap[race.id] = r || []
-    }
-    setRunners(runnersMap)
-
+    // Runners (one query per race) and the player's picks are independent, so they load together.
     const raceIds = raceData.map(r => r.id)
-    const { data: picks } = await supabase
-      .from('picks').select('*').eq('user_id', u.id).in('race_id', raceIds)
+    const [runnerResults, { data: picks }] = await Promise.all([
+      Promise.all(raceData.map(race => supabase
+        .from('runners').select('*').eq('race_id', race.id).order('horse_number', { ascending: true }))),
+      supabase.from('picks').select('*').eq('user_id', u.id).in('race_id', raceIds),
+    ])
+    const runnersMap = {}
+    raceData.forEach((race, i) => { runnersMap[race.id] = runnerResults[i].data || [] })
+    setRunners(runnersMap)
 
     const picksMap = {}
     const selMap   = {}
@@ -169,7 +173,7 @@ export default function Picks() {
     setSelected(selMap)
     setBetType(betMap)
     setWeekIdx(firstUnpickedIndex(raceData, id => hasLivePick(picksMap[id]?.runner_id, runnersMap[id] || [])))
-    setLoading(false)
+    await finish()
   }
 
   // ── Festival loaders ──────────────────────────────────────────
@@ -180,15 +184,13 @@ export default function Picks() {
     const stale = () => token !== festReq.current
     setFestLoading(true)
     try {
-      const { data: entryData } = await supabase
-        .from('festival_entries').select('*')
-        .eq('festival_id', fest.id).eq('user_id', u.id).maybeSingle()
+      const [{ data: entryData }, { data: daysData }] = await Promise.all([
+        supabase.from('festival_entries').select('*')
+          .eq('festival_id', fest.id).eq('user_id', u.id).maybeSingle(),
+        supabase.from('festival_days').select('*').eq('festival_id', fest.id).order('day_number'),
+      ])
       if (stale()) return
       setFestEntry(entryData || null)
-
-      const { data: daysData } = await supabase
-        .from('festival_days').select('*').eq('festival_id', fest.id).order('day_number')
-      if (stale()) return
       setFestDays(daysData || [])
 
       if (daysData?.length) {
@@ -221,19 +223,16 @@ export default function Picks() {
     if (!racesData?.length) return
 
     const raceIds = racesData.map(r => r.id)
+    const [runnerResults, { data: picksData }] = await Promise.all([
+      Promise.all(racesData.map(race => supabase
+        .from('festival_runners').select('*').eq('festival_race_id', race.id).order('horse_number'))),
+      supabase.from('festival_picks').select('festival_race_id, runner_id, bet_type, was_replaced, original_runner_id')
+        .eq('user_id', userId).in('festival_race_id', raceIds),
+    ])
+    if (stale()) return
     const runnersMap = {}
-    for (const race of racesData) {
-      const { data: rData } = await supabase
-        .from('festival_runners').select('*').eq('festival_race_id', race.id).order('horse_number')
-      runnersMap[race.id] = rData || []
-    }
-    if (stale()) return
+    racesData.forEach((race, i) => { runnersMap[race.id] = runnerResults[i].data || [] })
     setFestRunners(runnersMap)
-
-    const { data: picksData } = await supabase
-      .from('festival_picks').select('festival_race_id, runner_id, bet_type, was_replaced, original_runner_id')
-      .eq('user_id', userId).in('festival_race_id', raceIds)
-    if (stale()) return
     const picksMap = {}
     const betMap   = {}
     const replacedMap = {}
