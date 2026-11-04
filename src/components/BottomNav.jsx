@@ -45,9 +45,16 @@ function usePicksLeft() {
       if (!cancelled) setLeft(Math.max(0, raceIds.length - (picks?.length ?? 0)))
     }
 
+    // The bar now stays mounted across tabs, so recount on a saved pick and when the app returns to the foreground.
+    const onVisible = () => { if (document.visibilityState === 'visible') load() }
     load()
     window.addEventListener(PICKS_CHANGED, load)
-    return () => { cancelled = true; window.removeEventListener(PICKS_CHANGED, load) }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      cancelled = true
+      window.removeEventListener(PICKS_CHANGED, load)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
   }, [])
 
   return left

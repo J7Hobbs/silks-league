@@ -1,13 +1,12 @@
 /* Picks (/picks). Built on the tokens in tokens.css. */
 
 .pk {
-  min-height: 100vh;
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-body);
   padding-bottom: 3rem;
 }
-.pk-loading { min-height: 100vh; display: grid; place-items: center; background: var(--bg); }
+.pk-loading { min-height: 60vh; display: grid; place-items: center; background: var(--bg); }
 .pk-loading__dot { width: 12px; height: 12px; border-radius: 50%; background: var(--gold); }
 
 .pk__main {

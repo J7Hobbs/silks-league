@@ -5,8 +5,6 @@ import { useCompetition } from '../context/competition.js'
 import { loadHomeData } from '../lib/homeData.js'
 import { buildCards } from '../lib/homeCards.js'
 import { greetingFor } from '../lib/format.js'
-import TopNav from '../components/TopNav.jsx'
-import BottomNav from '../components/BottomNav.jsx'
 import CompetitionCard from '../components/home/CompetitionCard.jsx'
 import ComingUp from '../components/home/ComingUp.jsx'
 import RaceDayCard from '../components/home/RaceDayCard.jsx'
@@ -59,8 +57,6 @@ export default function Dashboard() {
 
   return (
     <div className="app-page home">
-      <TopNav user={user} isAdmin={!!data.profile?.is_admin} />
-
       <main className="home__main">
         <header className="home__intro">
           <div className="home__date">
@@ -84,7 +80,6 @@ export default function Dashboard() {
         <RaceDayCard />
       </main>
 
-      <BottomNav />
     </div>
   )
 }

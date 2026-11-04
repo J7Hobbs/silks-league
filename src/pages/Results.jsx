@@ -16,8 +16,6 @@ import {
 import {
   weekPeriods, festivalList, defaultPeriodIndex, pillItems, activePillKey, buildRaceRows, summarise,
 } from '../lib/resultsView.js'
-import TopNav from '../components/TopNav.jsx'
-import BottomNav from '../components/BottomNav.jsx'
 import CompetitionPills from '../components/picks/CompetitionPills.jsx'
 import PeriodSelector from '../components/results/PeriodSelector.jsx'
 import SummaryTiles from '../components/results/SummaryTiles.jsx'
@@ -32,7 +30,6 @@ export default function Results() {
   const { competition, setCompetition } = useCompetition()
 
   const [user,    setUser]    = useState(null)
-  const [isAdmin, setIsAdmin] = useState(false)
   const [loading, setLoading] = useState(true)
   const [failed,  setFailed]  = useState(false)   // the week / festival lists could not be read
   const [attempt, setAttempt] = useState(0)   // bumped to re-read the lists
@@ -55,12 +52,8 @@ export default function Results() {
       if (!user) { navigate('/auth'); return }
       if (cancelled) return
       setUser(user)
-      const [{ data: profile }, indexes] = await Promise.all([
-        supabase.from('profiles').select('is_admin').eq('id', user.id).single(),
-        Promise.all([loadWeekIndex(), loadFestivalIndex()]).catch(() => null),
-      ])
+      const indexes = await Promise.all([loadWeekIndex(), loadFestivalIndex()]).catch(() => null)
       if (cancelled) return
-      setIsAdmin(profile?.is_admin || false)
       if (indexes) {
         const [w, f] = indexes
         setWeeks(weekPeriods(w.weeks, w.races, w.won))
@@ -142,8 +135,6 @@ export default function Results() {
 
   return (
     <div className="app-page rs">
-      <TopNav user={user} isAdmin={isAdmin} />
-
       <main className="rs__main">
         <h1 className="rs-title">Results</h1>
 
@@ -203,7 +194,6 @@ export default function Results() {
         )}
       </main>
 
-      <BottomNav />
     </div>
   )
 }

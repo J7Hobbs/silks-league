@@ -18,6 +18,7 @@ import Account             from './pages/Account.jsx'
 import FestivalPicks       from './pages/FestivalPicks.jsx'
 import FestivalLeaderboard from './pages/FestivalLeaderboard.jsx'
 import RaceDay             from './pages/RaceDay.jsx'
+import TabLayout           from './components/TabLayout.jsx'
 import InstallPrompt       from './components/InstallPrompt.jsx'
 import OneSignalInit       from './components/OneSignalInit.jsx'
 import { CompetitionProvider } from './context/CompetitionContext.jsx'
@@ -29,19 +30,21 @@ createRoot(document.getElementById('root')).render(
         <Routes>
           <Route path="/"          element={<App />}       />
           <Route path="/auth"      element={<Auth />}      />
-          <Route path="/dashboard" element={<Dashboard />} />
+          <Route element={<TabLayout />}>
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/picks"     element={<Picks />}     />
+            <Route path="/league"    element={<League />}    />
+            <Route path="/results"   element={<Results />}   />
+            <Route path="/results/festival/:festivalId" element={<Results />} />
+          </Route>
           <Route path="/admin"     element={<Admin />}     />
-          <Route path="/picks"     element={<Picks />}     />
-          <Route path="/league"    element={<League />}    />
           <Route path="/races"     element={<Races />}     />
-          <Route path="/results"   element={<Results />}   />
           <Route path="/profile"   element={<Profile />}   />
           <Route path="/groups"              element={<Groups />}      />
           <Route path="/player-picks/:userId"    element={<PlayerPicks />}         />
           <Route path="/account"               element={<Account />}             />
           <Route path="/festival-picks"        element={<FestivalPicks />}       />
           <Route path="/festival-leaderboard"        element={<FestivalLeaderboard />}           />
-          <Route path="/results/festival/:festivalId" element={<Results />}                    />
           <Route path="/race-day"              element={<RaceDay />}              />
         </Routes>
         <InstallPrompt />

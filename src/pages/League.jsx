@@ -16,8 +16,6 @@ import {
   seasonMonth, weekSubLine, festSubLine, winnersLine, positionLine, allZero,
   weekRowsForAll, weekRowsForGroup,
 } from '../lib/leagueView.js'
-import TopNav from '../components/TopNav.jsx'
-import BottomNav from '../components/BottomNav.jsx'
 import PlayerPicksModal from '../components/PlayerPicksModal.jsx'
 import CompetitionPills from '../components/picks/CompetitionPills.jsx'
 import ViewToggle from '../components/league/ViewToggle.jsx'
@@ -43,7 +41,6 @@ export default function League() {
 
   // ── Core ──────────────────────────────────────────────────────
   const [user,    setUser]    = useState(null)
-  const [isAdmin, setIsAdmin] = useState(false)
   const [loading, setLoading] = useState(true)
 
   // ── Saturday League ───────────────────────────────────────────
@@ -88,9 +85,6 @@ export default function League() {
     const { data: { user: u } } = await supabase.auth.getUser()
     if (!u) { navigate('/auth'); return }
     setUser(u)
-    const { data: profile } = await supabase
-      .from('profiles').select('is_admin').eq('id', u.id).single()
-    setIsAdmin(profile?.is_admin || false)
 
     const [, loadedFestivals] = await Promise.all([
       loadSaturdayLeague(u.id),
@@ -616,8 +610,6 @@ export default function League() {
   // ── Render ────────────────────────────────────────────────────
   return (
     <div className="app-page lg">
-      <TopNav user={user} isAdmin={isAdmin} />
-
       <main className="lg__main">
         <h1 className="lg-title">Leaderboard</h1>
 
@@ -676,7 +668,6 @@ export default function League() {
         )}
       </main>
 
-      <BottomNav />
 
       {/* ── Player picks modal ── */}
       {picksModal && (

@@ -16,8 +16,6 @@ import { daysBetween, localDateStr, lockLabel } from '../lib/format.js'
 import {
   runningFestivals, selectedFestival, isDayOpen, defaultFestDay, hasLivePick, firstUnpickedIndex,
 } from '../lib/picksView.js'
-import TopNav from '../components/TopNav.jsx'
-import BottomNav from '../components/BottomNav.jsx'
 import CompetitionPills from '../components/picks/CompetitionPills.jsx'
 import DaySwitch from '../components/picks/DaySwitch.jsx'
 import RaceChips from '../components/picks/RaceChips.jsx'
@@ -45,7 +43,6 @@ export default function Picks() {
 
   // ── Weekly state ──────────────────────────────────────────────
   const [user,          setUser]          = useState(null)
-  const [isAdmin,       setIsAdmin]       = useState(false)
   const [loading,       setLoading]       = useState(true)
   const [noWeek,        setNoWeek]        = useState(false)
   const [currentWeek,   setCurrentWeek]   = useState(null)
@@ -93,9 +90,6 @@ export default function Picks() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { navigate('/auth'); return }
     setUser(user)
-    const { data: profile } = await supabase
-      .from('profiles').select('is_admin').eq('id', user.id).single()
-    setIsAdmin(profile?.is_admin || false)
     const { data: fests } = await supabase
       .from('festivals').select('*').eq('is_active', true).order('start_date')
     const running = runningFestivals(fests, localDateStr())
@@ -434,8 +428,6 @@ export default function Picks() {
   // ── Render ────────────────────────────────────────────────────
   return (
     <div className="app-page pk">
-      <TopNav user={user} isAdmin={isAdmin} />
-
       {toast && (
         <div className={`pk-toast${toast.type === 'error' ? ' pk-toast--error' : ''}`} role="status">
           {toast.type === 'error' ? '⚠ ' : '✓ '}{toast.text}
@@ -519,7 +511,6 @@ export default function Picks() {
         )}
       </main>
 
-      <BottomNav />
     </div>
   )
 }

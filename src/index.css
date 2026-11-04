@@ -808,6 +808,10 @@ img { max-width: 100%; display: block; }
   .app-nav-links { display: none !important; }
 }
 
+/* ── Shared frame for the four tab pages (src/components/TabLayout.jsx): the top bar and
+      bottom bar stay mounted while the page between them changes ── */
+.tab-shell { min-height: 100vh; background: var(--bg); }
+
 /* ── Top nav (src/components/TopNav.jsx): logo, four tabs on desktop, avatar ── */
 .top-nav {
   position: sticky;
