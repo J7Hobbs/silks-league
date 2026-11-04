@@ -18,6 +18,7 @@ import Account             from './pages/Account.jsx'
 import FestivalPicks       from './pages/FestivalPicks.jsx'
 import FestivalLeaderboard from './pages/FestivalLeaderboard.jsx'
 import FestivalResults     from './pages/FestivalResults.jsx'
+import RaceDay             from './pages/RaceDay.jsx'
 import InstallPrompt       from './components/InstallPrompt.jsx'
 import OneSignalInit       from './components/OneSignalInit.jsx'
 import { CompetitionProvider } from './context/CompetitionContext.jsx'
@@ -42,6 +43,7 @@ createRoot(document.getElementById('root')).render(
           <Route path="/festival-picks"        element={<FestivalPicks />}       />
           <Route path="/festival-leaderboard"        element={<FestivalLeaderboard />}           />
           <Route path="/results/festival/:festivalId" element={<FestivalResults />}              />
+          <Route path="/race-day"              element={<RaceDay />}              />
         </Routes>
         <InstallPrompt />
         <OneSignalInit />

@@ -829,11 +829,12 @@ img { max-width: 100%; display: block; }
 .top-nav__logo {
   font-family: var(--font-heading);
   font-weight: 800;
-  font-size: 1.05rem;
-  letter-spacing: 0.14em;
+  font-size: 20px;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--gold);
+  color: var(--text);
 }
+.top-nav__logo span { color: var(--gold); }
 .top-nav__links { display: flex; flex: 1; justify-content: center; gap: 0.25rem; }
 .top-nav__link {
   font-family: var(--font-body);

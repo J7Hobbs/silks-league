@@ -34,7 +34,7 @@ export default function TopNav({ user, isAdmin, desktopOnly = false }) {
   return (
     <header className={`top-nav${desktopOnly ? ' top-nav--desktop-only' : ''}`}>
       <div className="top-nav__inner">
-        <Link to="/" className="top-nav__logo">Silks League</Link>
+        <Link to="/" className="top-nav__logo" aria-label="Silks League"><span>SILKS</span> LEAGUE</Link>
         <nav className="top-nav__links" aria-label="Main">
           {NAV_TABS.map(({ to, label }, n) => (
             <Link key={to} to={to} className="top-nav__link" aria-current={n === active ? 'page' : undefined}>
