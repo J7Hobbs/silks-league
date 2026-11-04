@@ -70,3 +70,22 @@ export function festivalLength(start, end) {
 export function deadlineMs(iso, fallbackDate) {
   return new Date(iso || `${fallbackDate}T12:00:00`).getTime()
 }
+
+// ── Picks lock time, shown in UK time whatever the device's timezone ──
+const UK = 'Europe/London'
+const UK_PARTS = new Intl.DateTimeFormat('en-GB', {
+  timeZone: UK, weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+})
+const UK_DATE = new Intl.DateTimeFormat('en-CA', { timeZone: UK, year: 'numeric', month: '2-digit', day: '2-digit' })
+
+// "Locks 12:00 today", "Locks Sat 12:00", or "Locks Sat 8 Aug 12:00" if more than a week away.
+export function lockLabel(iso, nowMs) {
+  if (!iso) return null
+  const at = new Date(iso).getTime()
+  const p = Object.fromEntries(UK_PARTS.formatToParts(at).map(x => [x.type, x.value]))
+  const time = `${p.hour}:${p.minute}`
+  const ahead = daysBetween(UK_DATE.format(nowMs), UK_DATE.format(at))
+  if (ahead <= 0) return `Locks ${time} today`
+  if (ahead < 7) return `Locks ${p.weekday} ${time}`
+  return `Locks ${p.weekday} ${p.day} ${p.month} ${time}`
+}

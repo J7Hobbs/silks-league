@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { NAV_TABS, activeTabIndex } from '../lib/navTabs.js'
+import { NAV_TABS, activeTabIndex, PICKS_CHANGED } from '../lib/navTabs.js'
 
 // Mobile bottom nav — floating champagne glass bar. Shown on mobile only
 // (styles in src/index.css, .glass-nav). The active tab comes from the
@@ -46,7 +46,8 @@ function usePicksLeft() {
     }
 
     load()
-    return () => { cancelled = true }
+    window.addEventListener(PICKS_CHANGED, load)
+    return () => { cancelled = true; window.removeEventListener(PICKS_CHANGED, load) }
   }, [])
 
   return left

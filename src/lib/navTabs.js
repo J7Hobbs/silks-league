@@ -13,3 +13,7 @@ export const NAV_TABS = [
 export function activeTabIndex(pathname) {
   return NAV_TABS.findIndex(t => t.paths.some(p => pathname === p || pathname.startsWith(p + '/')))
 }
+
+// Fired after a Saturday League pick is saved, so the "races left" badge on the
+// bottom bar can recount.
+export const PICKS_CHANGED = 'silks:picks-changed'

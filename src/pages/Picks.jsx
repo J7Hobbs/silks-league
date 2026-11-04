@@ -1,15 +1,31 @@
 /**
  * Silks League — Picks Page
- * Weekly picks + festival tab switcher.
+ * Saturday League and festival picks behind one set of competition pills.
+ * Loading, saving, joining and deadline logic is unchanged; the layout
+ * lives in the components in src/components/picks and src/styles/picks.css.
  */
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
+import { Clock } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { useCompetition } from '../context/competition.js'
+import { PICKS_CHANGED } from '../lib/navTabs.js'
+import { isWinOnly, canOfferEachWay, calcTokenPoints } from '../lib/scoring.js'
+import { daysBetween, localDateStr, lockLabel } from '../lib/format.js'
+import {
+  runningFestivals, selectedFestival, isDayOpen, defaultFestDay, hasLivePick, firstUnpickedIndex,
+} from '../lib/picksView.js'
 import TopNav from '../components/TopNav.jsx'
 import BottomNav from '../components/BottomNav.jsx'
-import RunnerCard from '../components/RunnerCard.jsx'
-import { isWinOnly, canOfferEachWay, calcTokenPoints } from '../lib/scoring.js'
+import CompetitionPills from '../components/picks/CompetitionPills.jsx'
+import DaySwitch from '../components/picks/DaySwitch.jsx'
+import RaceChips from '../components/picks/RaceChips.jsx'
+import RaceHeader from '../components/picks/RaceHeader.jsx'
+import RunnerRow from '../components/picks/RunnerRow.jsx'
+import JoinCard from '../components/picks/JoinCard.jsx'
+import EmptyState from '../components/picks/EmptyState.jsx'
+import '../styles/picks.css'
 
 // "If it places" preview always shows the 2nd-place figure (the best-case
 // place payout) — exact taper depends on the actual finishing position.
@@ -22,33 +38,10 @@ function previewPoints(betType, oddsDecimal, runnerCount) {
   return { win, place }
 }
 
-function fmtDeadlineDate(ds) {
-  if (!ds) return ''
-  const d = new Date(ds + 'T12:00:00')
-  const day = d.getDate()
-  const suffix = day === 1 || day === 21 || day === 31 ? 'st'
-               : day === 2 || day === 22 ? 'nd'
-               : day === 3 || day === 23 ? 'rd' : 'th'
-  const month = d.toLocaleDateString('en-GB', { month: 'long' })
-  return `${day}${suffix} ${month} ${d.getFullYear()}`
-}
-
-function formatCountdown(ms) {
-  if (ms <= 0) return null
-  const total = Math.floor(ms / 1000)
-  const d = Math.floor(total / 86400)
-  const h = Math.floor((total % 86400) / 3600)
-  const m = Math.floor((total % 3600) / 60)
-  const s = total % 60
-  if (d > 0) return `${d}d ${h}h ${m}m`
-  if (h > 0) return `${h}h ${m}m ${s}s`
-  if (m > 0) return `${m}m ${s}s`
-  return `${s}s`
-}
-
 export default function Picks() {
   const navigate = useNavigate()
   const location  = useLocation()
+  const { competition, setCompetition } = useCompetition()
 
   // ── Weekly state ──────────────────────────────────────────────
   const [user,          setUser]          = useState(null)
@@ -59,32 +52,38 @@ export default function Picks() {
   const [races,         setRaces]         = useState([])
   const [runners,       setRunners]       = useState({})
   const [userPicks,     setUserPicks]     = useState({})
-  const [expandedRace,  setExpandedRace]  = useState(null)
   const [selected,      setSelected]      = useState({})
   const [betType,       setBetType]       = useState({})
   const [saving,        setSaving]        = useState(null)
   const [toast,         setToast]         = useState(null)
   const [now,           setNow]           = useState(new Date())
-  const [origRunners,   setOrigRunners]   = useState({})
+  const [weekIdx,       setWeekIdx]       = useState(0)
 
   // ── Festival state ────────────────────────────────────────────
   const [activeFestivals,  setActiveFestivals]  = useState([])
-  const [selectedTab,      setSelectedTab]      = useState('week')
   const [festEntry,        setFestEntry]        = useState(null)
   const [festDays,         setFestDays]         = useState([])
+  const [openDayIds,       setOpenDayIds]       = useState([])
   const [festDay,          setFestDay]          = useState(null)
   const [festRaces,        setFestRaces]        = useState([])
   const [festRunners,      setFestRunners]      = useState({})
   const [festPicks,        setFestPicks]        = useState({})
-  const [festScores,       setFestScores]       = useState({})
-  const [festExpandedRace, setFestExpandedRace] = useState(null)
+  const [festReplaced,     setFestReplaced]     = useState({})
   const [festSelected,     setFestSelected]     = useState({})
   const [festBetType,      setFestBetType]      = useState({})
   const [festSaving,       setFestSaving]       = useState(null)
   const [festLoading,      setFestLoading]      = useState(false)
+  const [festIdx,          setFestIdx]          = useState(0)
+
+  // Which runner's bet panel is open, per race.
+  const [openRunner, setOpenRunner] = useState({})
+  // Latest festival load; older ones are ignored if the player switches mid-load.
+  const festReq = useRef(0)
+  // Bet type last saved per festival race, to restore if a save fails.
+  const festSavedBet = useRef({})
 
   useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 1000)
+    const t = setInterval(() => setNow(new Date()), 5000)
     return () => clearInterval(t)
   }, [])
 
@@ -97,20 +96,30 @@ export default function Picks() {
     const { data: profile } = await supabase
       .from('profiles').select('is_admin').eq('id', user.id).single()
     setIsAdmin(profile?.is_admin || false)
-    await loadData(user)
     const { data: fests } = await supabase
       .from('festivals').select('*').eq('is_active', true).order('start_date')
-    setActiveFestivals(fests || [])
-    // Auto-select festival tab if navigated here with festivalTab state (e.g. from Dashboard banner)
+    const running = runningFestivals(fests, localDateStr())
+    setActiveFestivals(running)
+    // Older links navigate here with { festivalTab } (e.g. a festival banner).
     const requestedTab = location.state?.festivalTab
-    if (requestedTab) {
-      const targetFest = fests?.find(f => f.id === requestedTab)
-      if (targetFest) {
-        setSelectedTab(requestedTab)
-        await loadFestivalData(targetFest)
-      }
-    }
+    if (requestedTab && running.some(f => f.id === requestedTab)) setCompetition('festival', requestedTab)
+    await loadData(user)
   }
+
+  // The festival being looked at (null = Saturday League). A group id or a
+  // festival that has finished shows the Saturday League without changing the
+  // saved selection, so a Leaderboard group choice survives a visit here.
+  const selFest = selectedFestival(competition, activeFestivals)
+  const selFestId = selFest?.id ?? null
+
+  useEffect(() => {
+    if (!selFestId || !user) return
+    setFestEntry(null); setFestDays([]); setOpenDayIds([]); setFestDay(null)
+    setFestRaces([]); setFestRunners({}); setFestPicks({}); setFestReplaced({})
+    setFestSelected({}); setFestBetType({}); setFestIdx(0)
+    loadFestivalData(activeFestivals.find(f => f.id === selFestId))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selFestId, user])
 
   // ── Weekly loader ─────────────────────────────────────────────
   async function loadData(u) {
@@ -125,12 +134,15 @@ export default function Picks() {
       .eq('season_id', season.id)
       .order('saturday_date', { ascending: true })
 
-    const week = weeks?.find(w => {
+    const openWeek = weeks?.find(w => {
       const dl = w.picks_deadline ? new Date(w.picks_deadline) : new Date(w.saturday_date + 'T12:00:00')
       return nowDate < dl
-    }) || (weeks?.length ? weeks[weeks.length - 1] : null)
+    })
+    const week = openWeek || (weeks?.length ? weeks[weeks.length - 1] : null)
 
     if (!week) { setNoWeek(true); setLoading(false); return }
+    // Same rule as Home: no open week and the latest one is over two weeks old.
+    if (!openWeek && daysBetween(week.saturday_date, localDateStr()) > 14) { setNoWeek(true); setLoading(false); return }
     setCurrentWeek(week)
 
     const { data: raceData } = await supabase
@@ -161,58 +173,55 @@ export default function Picks() {
     setUserPicks(picksMap)
     setSelected(selMap)
     setBetType(betMap)
-
-    const origIds = (picks || []).filter(p => p.was_replaced && p.original_runner_id).map(p => p.original_runner_id)
-    if (origIds.length) {
-      const { data: origData } = await supabase.from('runners').select('id, horse_name').in('id', origIds)
-      const origMap = {}
-      origData?.forEach(r => { origMap[r.id] = r.horse_name })
-      setOrigRunners(origMap)
-    }
+    setWeekIdx(firstUnpickedIndex(raceData, id => hasLivePick(picksMap[id]?.runner_id, runnersMap[id] || [])))
     setLoading(false)
   }
 
   // ── Festival loaders ──────────────────────────────────────────
-  async function handleFestivalTabClick(fest) {
-    if (selectedTab === fest.id) return
-    setSelectedTab(fest.id)
-    setFestEntry(null); setFestDays([]); setFestDay(null)
-    setFestRaces([]); setFestRunners({}); setFestPicks({})
-    setFestScores({}); setFestExpandedRace(null); setFestSelected({})
-    await loadFestivalData(fest)
-  }
-
   async function loadFestivalData(fest) {
     const { data: { user: u } } = await supabase.auth.getUser()
     if (!u) return
+    const token = ++festReq.current
+    const stale = () => token !== festReq.current
     setFestLoading(true)
     try {
       const { data: entryData } = await supabase
         .from('festival_entries').select('*')
         .eq('festival_id', fest.id).eq('user_id', u.id).maybeSingle()
+      if (stale()) return
       setFestEntry(entryData || null)
 
       const { data: daysData } = await supabase
         .from('festival_days').select('*').eq('festival_id', fest.id).order('day_number')
+      if (stale()) return
       setFestDays(daysData || [])
 
       if (daysData?.length) {
-        const todayStr = new Date().toISOString().split('T')[0]
-        const currentDay = daysData.find(d => d.race_date === todayStr)
-          || daysData.find(d => d.race_date >= todayStr)
-          || daysData[0]
+        // Days that still take picks: deadline not passed and races loaded.
+        const { data: dayRaces } = await supabase
+          .from('festival_races').select('festival_day_id').in('festival_day_id', daysData.map(d => d.id))
+        if (stale()) return
+        const withRaces = new Set((dayRaces || []).map(r => r.festival_day_id))
+        const today = localDateStr()
+        const nowMs = Date.now()
+        const open = daysData.filter(d => withRaces.has(d.id) && isDayOpen(d, nowMs, today))
+        setOpenDayIds(open.map(d => d.id))
+        const currentDay = defaultFestDay(daysData, open, today)
         setFestDay(currentDay)
-        if (entryData) await loadFestDayData(currentDay, u.id)
+        // Races are readable by every signed-in player, so non-members see them too.
+        await loadFestDayData(currentDay, u.id, token)
       }
     } finally {
-      setFestLoading(false)
+      if (!stale()) setFestLoading(false)
     }
   }
 
-  async function loadFestDayData(day, userId) {
+  async function loadFestDayData(day, userId, token) {
     if (!day || !userId) return
+    const stale = () => token !== festReq.current
     const { data: racesData } = await supabase
       .from('festival_races').select('*').eq('festival_day_id', day.id).order('race_number')
+    if (stale()) return
     setFestRaces(racesData || [])
     if (!racesData?.length) return
 
@@ -223,47 +232,43 @@ export default function Picks() {
         .from('festival_runners').select('*').eq('festival_race_id', race.id).order('horse_number')
       runnersMap[race.id] = rData || []
     }
+    if (stale()) return
     setFestRunners(runnersMap)
 
     const { data: picksData } = await supabase
-      .from('festival_picks').select('festival_race_id, runner_id, bet_type')
+      .from('festival_picks').select('festival_race_id, runner_id, bet_type, was_replaced, original_runner_id')
       .eq('user_id', userId).in('festival_race_id', raceIds)
+    if (stale()) return
     const picksMap = {}
     const betMap   = {}
-    picksData?.forEach(p => { picksMap[p.festival_race_id] = p.runner_id; betMap[p.festival_race_id] = p.bet_type || 'win' })
+    const replacedMap = {}
+    picksData?.forEach(p => {
+      picksMap[p.festival_race_id] = p.runner_id
+      betMap[p.festival_race_id] = p.bet_type || 'win'
+      replacedMap[p.festival_race_id] = !!p.was_replaced
+    })
     setFestPicks(picksMap)
     setFestSelected(picksMap)
     setFestBetType(betMap)
-
-    const { data: scoresData } = await supabase
-      .from('festival_scores').select('*').eq('user_id', userId).in('festival_race_id', raceIds)
-    const scoresMap = {}
-    scoresData?.forEach(s => { scoresMap[s.festival_race_id] = s })
-    setFestScores(scoresMap)
+    festSavedBet.current = betMap
+    setFestReplaced(replacedMap)
+    setFestIdx(firstUnpickedIndex(racesData, id => hasLivePick(picksMap[id], runnersMap[id] || [])))
   }
 
   async function handleFestDaySwitch(day) {
     if (day.id === festDay?.id) return
+    const token = ++festReq.current
     setFestDay(day)
-    setFestRaces([]); setFestRunners({}); setFestPicks({})
-    setFestScores({}); setFestExpandedRace(null); setFestSelected({})
-    if (festEntry) {
-      const { data: { user: u } } = await supabase.auth.getUser()
-      if (u) await loadFestDayData(day, u.id)
-    }
+    setFestRaces([]); setFestRunners({}); setFestPicks({}); setFestReplaced({})
+    setFestSelected({}); setFestBetType({}); setFestIdx(0)
+    const { data: { user: u } } = await supabase.auth.getUser()
+    if (u) await loadFestDayData(day, u.id, token)
   }
 
   // ── Computed ──────────────────────────────────────────────────
   const deadline     = currentWeek?.picks_deadline ? new Date(currentWeek.picks_deadline) : null
   const isLocked     = deadline ? now >= deadline : false
-  const msRemaining  = deadline ? deadline - now : 0
-  const countdown    = formatCountdown(msRemaining)
-  const pickedCount  = Object.keys(userPicks).length
-  const allPicked    = races.length > 0 && pickedCount === races.length
   const festDayLocked = !!(festDay?.picks_deadline && now >= new Date(festDay.picks_deadline))
-  const festTotalPts  = (festEntry?.starting_points || 0) +
-    Object.values(festScores).reduce((s, sc) => s + (sc?.total_points || 0), 0)
-  const activeFest   = activeFestivals.find(f => f.id === selectedTab)
 
   // ── Handlers ──────────────────────────────────────────────────
   function showToast(text, type = 'success') {
@@ -271,8 +276,8 @@ export default function Picks() {
     setTimeout(() => setToast(null), 2800)
   }
 
-  function handleExpand(raceId) {
-    setExpandedRace(prev => prev === raceId ? null : raceId)
+  function closePanel(raceId) {
+    setOpenRunner(prev => ({ ...prev, [raceId]: null }))
   }
 
   function handleSelect(raceId, runnerId) {
@@ -308,7 +313,8 @@ export default function Picks() {
     if (error) { showToast('Failed to save — ' + error.message, 'error'); return }
     setUserPicks(prev => ({ ...prev, [raceId]: { ...(existing || {}), user_id: user.id, race_id: raceId, runner_id: runnerId, bet_type: effectiveBetType } }))
     showToast(existing ? 'Pick updated!' : 'Pick saved!')
-    setExpandedRace(null)
+    closePanel(raceId)
+    window.dispatchEvent(new Event(PICKS_CHANGED))
   }
 
   function handleFestSelect(raceId, runnerId) {
@@ -331,7 +337,7 @@ export default function Picks() {
     const nonWithdrawn = raceRunners.filter(r => !r.is_withdrawn).length
     const effectiveBetType = canOfferEachWay(runner?.odds_decimal, nonWithdrawn) ? (festBetType[raceId] || 'win') : 'win'
     setFestSaving(raceId)
-    await supabase.from('festival_picks').upsert({
+    const { error } = await supabase.from('festival_picks').upsert({
       festival_race_id: raceId,
       user_id: user.id,
       runner_id: runnerId,
@@ -339,665 +345,181 @@ export default function Picks() {
       picked_at: new Date().toISOString(),
     }, { onConflict: 'festival_race_id,user_id' })
     setFestSaving(null)
+    if (error) {
+      // Put the selection back to the last saved pick (or none).
+      setFestSelected(prev => ({ ...prev, [raceId]: festPicks[raceId] }))
+      setFestBetType(prev => ({ ...prev, [raceId]: festSavedBet.current[raceId] || 'win' }))
+      showToast('Failed to save — ' + error.message, 'error')
+      closePanel(raceId)
+      return
+    }
     const wasAlreadyPicked = !!festPicks[raceId]
     setFestPicks(prev => ({ ...prev, [raceId]: runnerId }))
     setFestBetType(prev => ({ ...prev, [raceId]: effectiveBetType }))
+    festSavedBet.current = { ...festSavedBet.current, [raceId]: effectiveBetType }
     showToast(wasAlreadyPicked ? 'Pick updated!' : 'Pick saved!')
-    setFestExpandedRace(null)
+    closePanel(raceId)
+  }
+
+  async function handleJoin(activeFest) {
+    await supabase.from('festival_entries').insert({ festival_id: activeFest.id, user_id: user.id, starting_points: 0 })
+    await loadFestivalData(activeFest)
   }
 
   // ── Loading ───────────────────────────────────────────────────
   if (loading) {
-    return (
-      <div style={st.loadingPage}>
-        <div style={st.loadingInner}>
-          <div style={st.loadingLogo}>Silks League</div>
-          <div style={st.loadingText}>Loading picks…</div>
-        </div>
-      </div>
-    )
+    return <div className="pk-loading"><div className="pk-loading__dot" /></div>
+  }
+
+  // ── What's on screen: the Saturday League or the selected festival ──
+  const isFest = !!selFest
+  const view = isFest
+    ? { races: festRaces, runners: festRunners, picks: festPicks, sel: festSelected, bet: festBetType,
+        saving: festSaving, locked: festDayLocked, joined: !!festEntry, idx: festIdx, setIdx: setFestIdx }
+    : { races, runners, picks: Object.fromEntries(Object.entries(userPicks).map(([id, p]) => [id, p.runner_id])),
+        sel: selected, bet: betType, saving, locked: isLocked, joined: true, idx: weekIdx, setIdx: setWeekIdx }
+  const wasReplaced = raceId => (isFest ? festReplaced[raceId] : userPicks[raceId]?.was_replaced)
+
+  const noRaces = isFest ? (!festLoading && festRaces.length === 0) : (noWeek || races.length === 0)
+  const lockIso = isFest ? festDay?.picks_deadline : currentWeek?.picks_deadline
+  const lockText = noRaces ? null : view.locked ? 'Picks locked' : lockLabel(lockIso, now.getTime())
+
+  const pillItems = [
+    { key: 'saturday', label: 'Saturday League' },
+    ...activeFestivals.map(f => ({ key: f.id, label: f.display_name || f.name })),
+  ]
+  const dayChoices = festDays.filter(d => openDayIds.includes(d.id))
+
+  function pickCompetition(item) {
+    if (item.key === 'saturday') setCompetition('saturday')
+    else setCompetition('festival', item.key)
+  }
+
+  function tapRunner(raceId, runnerId) {
+    if (view.sel[raceId] !== runnerId) (isFest ? handleFestSelect : handleSelect)(raceId, runnerId)
+    setOpenRunner(prev => ({ ...prev, [raceId]: prev[raceId] === runnerId ? null : runnerId }))
+  }
+
+  const idx = Math.max(0, Math.min(view.idx, view.races.length - 1))
+  const race = view.races[idx]
+  const raceRunners = race ? (view.runners[race.id] || []) : []
+  const nonWithdrawn = raceRunners.filter(r => !r.is_withdrawn).length
+  const isLastRace = idx >= view.races.length - 1
+  const pickedId = race ? view.picks[race.id] : undefined
+  const pickedRunner = raceRunners.find(r => r.id === pickedId)
+  const canTap = view.joined && !view.locked
+
+  function nextRace() {
+    if (isLastRace) { navigate('/dashboard'); return }
+    view.setIdx(idx + 1)
+    window.scrollTo({ top: 0 })
+  }
+
+  function panelFor(runner) {
+    if (!canTap || openRunner[race.id] !== runner.id) return null
+    const eachWayOffered = canOfferEachWay(runner.odds_decimal, nonWithdrawn)
+    const current = eachWayOffered ? (view.bet[race.id] || 'win') : 'win'
+    return {
+      eachWayOffered,
+      betType: current,
+      note: isWinOnly(runner.odds_decimal)
+        ? 'Win only — under 4/1'
+        : "Win only — each-way isn't offered in fields under 5 runners",
+      preview: previewPoints(current, runner.odds_decimal, nonWithdrawn),
+      isUpdate: !!pickedId,
+      saving: view.saving === race.id,
+    }
   }
 
   // ── Render ────────────────────────────────────────────────────
   return (
-    <div className="app-page" style={st.page}>
-
-      <style>{`@keyframes silksPulse { 0%,100% { opacity:1 } 50% { opacity:0.3 } }`}</style>
-
-      {/* Nav */}
+    <div className="app-page pk">
       <TopNav user={user} isAdmin={isAdmin} />
 
-      {/* Toast */}
       {toast && (
-        <div style={{ ...st.toast, ...(toast.type === 'error' ? st.toastError : st.toastSuccess) }}>
+        <div className={`pk-toast${toast.type === 'error' ? ' pk-toast--error' : ''}`} role="status">
           {toast.type === 'error' ? '⚠ ' : '✓ '}{toast.text}
         </div>
       )}
 
-      <main style={st.main} className="app-main-pad">
+      <main className="pk__main">
+        <header className="pk-head">
+          <h1 className="pk-title">Picks</h1>
+          {lockText && (
+            <div className={`pk-lock${view.locked ? ' pk-lock--locked' : ''}`}>
+              <Clock size={15} aria-hidden="true" />
+              <span>{lockText}</span>
+            </div>
+          )}
+        </header>
 
-        {/* ── Tab bar — only when at least one festival is active ── */}
         {activeFestivals.length > 0 && (
-          <div style={st.tabBar}>
-            <button
-              style={{ ...st.tabBtn, ...(selectedTab === 'week' ? st.tabBtnActive : {}) }}
-              onClick={() => setSelectedTab('week')}>
-              This Week
+          <CompetitionPills items={pillItems} activeKey={selFest ? selFest.id : 'saturday'} onSelect={pickCompetition} />
+        )}
+
+        {isFest && dayChoices.length > 1 && (
+          <DaySwitch days={dayChoices} activeId={festDay?.id} onSelect={handleFestDaySwitch} />
+        )}
+
+        {isFest && festLoading && <div className="pk-loading" style={{ minHeight: 160 }}><div className="pk-loading__dot" /></div>}
+
+        {isFest && !festLoading && !festEntry && (
+          <JoinCard name={selFest.display_name || selFest.name} onJoin={() => handleJoin(selFest)} />
+        )}
+
+        {!(isFest && festLoading) && noRaces && (
+          <EmptyState text={isFest ? "Picks open when this festival's races are published." : undefined} />
+        )}
+
+        {!noRaces && race && (
+          <>
+            <RaceChips
+              races={view.races}
+              activeIndex={idx}
+              picked={id => hasLivePick(view.picks[id], view.runners[id] || [])}
+              onSelect={view.setIdx}
+            />
+
+            <RaceHeader race={race} runnerCount={nonWithdrawn} />
+
+            {wasReplaced(race.id) && (
+              <p className="pk-note">Your original pick was withdrawn – replaced with the favourite</p>
+            )}
+            {pickedRunner?.is_withdrawn && !wasReplaced(race.id) && (
+              <p className="pk-note">Your pick was withdrawn – choose another runner</p>
+            )}
+            {view.locked && (
+              <p className="pk-note">Picks are locked – results will appear in Results</p>
+            )}
+
+            <div className="pk-list">
+              {raceRunners.map(runner => {
+                const shown = view.locked ? pickedId : (view.sel[race.id] ?? pickedId)
+                return (
+                  <RunnerRow
+                    key={runner.id}
+                    runner={runner}
+                    selected={shown === runner.id}
+                    isPick={pickedId === runner.id}
+                    disabled={!canTap}
+                    panel={panelFor(runner)}
+                    onTap={() => tapRunner(race.id, runner.id)}
+                    onBetType={type => (isFest ? handleFestBetTypeChange : handleBetTypeChange)(race.id, type)}
+                    onSave={() => (isFest ? handleFestSavePick : handleSavePick)(race.id)}
+                  />
+                )
+              })}
+              {raceRunners.length === 0 && <p className="pk-note">No runners added yet — check back soon.</p>}
+            </div>
+
+            <button type="button" className="pk-btn pk-btn--ghost" onClick={nextRace}>
+              {isLastRace ? 'Done – back to Home' : 'Next race'}
             </button>
-            {activeFestivals.map(fest => (
-              <button
-                key={fest.id}
-                style={{ ...st.tabBtn, ...(selectedTab === fest.id ? st.tabBtnActive : {}) }}
-                onClick={() => handleFestivalTabClick(fest)}>
-                <span style={{
-                  display: 'inline-block', width: '7px', height: '7px',
-                  borderRadius: '50%', background: '#c9a84c',
-                  marginRight: '6px', flexShrink: 0, verticalAlign: 'middle',
-                  animation: 'silksPulse 2s ease-in-out infinite',
-                }} />
-                {fest.display_name || fest.name}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* ════════════════ WEEKLY TAB ════════════════ */}
-        {selectedTab === 'week' && (
-          <>
-            {noWeek && (
-              <div style={st.emptyState}>
-                <div style={st.emptyIcon}>🏇</div>
-                <div style={st.emptyTitle}>Picks Not Open Yet</div>
-                <div style={st.emptySub}>
-                  No race week has been set up for this Saturday yet.<br />
-                  Check back on Friday — picks will open once the races are confirmed.
-                </div>
-                <button style={st.btnGold} onClick={() => navigate('/dashboard')}>← Back to Dashboard</button>
-              </div>
-            )}
-
-            {currentWeek && (
-              <>
-                {/* Deadline / locked banner */}
-                {isLocked ? (
-                  <div style={st.lockedBanner}>
-                    <span style={{ fontSize: '1.4rem' }}>🔒</span>
-                    <div>
-                      <div style={st.lockedTitle}>Picks Locked</div>
-                      <div style={st.lockedSub}>
-                        Locked at {deadline?.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} · Saturday {fmtDeadlineDate(currentWeek.saturday_date)}
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div style={st.deadlineBanner}>
-                    <div style={st.deadlineLeft}>
-                      <span style={{ fontSize: '1.3rem', flexShrink: 0 }}>⏱</span>
-                      <div>
-                        <div style={st.deadlineLabel}>Picks deadline</div>
-                        <div style={st.deadlineTime}>
-                          {deadline?.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} on Saturday {fmtDeadlineDate(currentWeek.saturday_date)}
-                        </div>
-                      </div>
-                    </div>
-                    {countdown && (
-                      <div style={st.countdownPill}>
-                        <span style={st.countdownValue}>{countdown}</span>
-                        <span style={st.countdownLabel}>remaining</span>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Progress card */}
-                <div style={st.progressCard}>
-                  <div style={st.progressTop}>
-                    <div>
-                      <div style={st.progressHeading}>
-                        {allPicked ? '🎉 All picks made!' : `${pickedCount} of ${races.length} picked`}
-                      </div>
-                      {allPicked && <div style={st.congratsMsg}>Your picks are in for Week {currentWeek.week_number}. Good luck!</div>}
-                    </div>
-                    {allPicked && (
-                      <button style={st.btnGold} onClick={() => navigate('/dashboard')}>View Leaderboard →</button>
-                    )}
-                  </div>
-                  <div style={st.progressBarWrap}>
-                    <div style={{ ...st.progressFill, width: races.length ? `${(pickedCount / races.length) * 100}%` : '0%' }} />
-                  </div>
-                  <div style={st.pipRow}>
-                    {races.map(race => {
-                      const picked = !!userPicks[race.id]
-                      return (
-                        <div key={race.id} style={{ ...st.pip, ...(picked ? st.pipDone : {}) }}>
-                          {picked ? '✓' : race.race_number}
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-
-                {/* Race rows */}
-                <div style={st.raceList}>
-                  {races.map(race => {
-                    const pick         = userPicks[race.id]
-                    const isPicked     = !!pick
-                    const isExpanded   = expandedRace === race.id
-                    const raceRunners  = runners[race.id] || []
-                    const selRunnerId  = selected[race.id]
-                    const selRunner    = raceRunners.find(r => r.id === selRunnerId)
-                    const pickedRunner = raceRunners.find(r => r.id === pick?.runner_id)
-                    const nonWithdrawnCount = raceRunners.filter(r => !r.is_withdrawn).length
-                    const eachWayOffered    = selRunner ? canOfferEachWay(selRunner.odds_decimal, nonWithdrawnCount) : false
-                    const currentBetType    = eachWayOffered ? (betType[race.id] || 'win') : 'win'
-                    const preview           = selRunner ? previewPoints(currentBetType, selRunner.odds_decimal, nonWithdrawnCount) : null
-                    return (
-                      <div key={race.id} style={{ ...st.raceOuter, ...(isPicked ? st.raceOuterPicked : {}) }}>
-                        <button style={st.raceSummaryRow} onClick={() => handleExpand(race.id)}>
-                          <div style={{ ...st.raceNumCircle, ...(isPicked ? st.raceNumCirclePicked : {}) }}>
-                            {race.race_number}
-                          </div>
-                          <div style={st.raceSummaryInfo}>
-                            <div style={st.raceSummaryVenue}>{race.venue}</div>
-                            <div style={st.raceSummaryMeta}>{race.race_time} · {race.race_name}</div>
-                          </div>
-                          <div style={st.raceSummaryRight}>
-                            {isPicked && pickedRunner ? (
-                              pick?.was_replaced ? (
-                                <span style={{ ...st.pickedBadge, background: 'rgba(201,168,76,0.12)', border: '1px solid rgba(201,168,76,0.4)', color: '#c9a84c' }}>⚠️ {pickedRunner.horse_name}</span>
-                              ) : pickedRunner.is_withdrawn ? (
-                                <span style={{ ...st.pickedBadge, background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171' }}>⚠ Withdrawn</span>
-                              ) : (
-                                <span style={st.pickedBadge}>✓ {pickedRunner.horse_name}</span>
-                              )
-                            ) : (
-                              <span style={st.notPickedText}>{isLocked ? 'No pick' : 'Not picked yet'}</span>
-                            )}
-                            <span style={{ ...st.chevron, transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}>›</span>
-                          </div>
-                        </button>
-                        {isExpanded && (
-                          <div style={st.expandedSection}>
-                            {pick?.was_replaced && pick?.original_runner_id && (
-                              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.6rem', background: 'rgba(201,168,76,0.15)', border: '1px solid #c9a84c', borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '0.75rem', lineHeight: 1.5 }}>
-                                <span style={{ fontSize: '1rem', flexShrink: 0, marginTop: '0.05rem' }}>⚠️</span>
-                                <div style={{ fontSize: '0.82rem', color: '#c9a84c' }}>
-                                  Your original pick <strong style={{ color: '#e8c96e' }}>{origRunners[pick.original_runner_id] || 'your horse'}</strong> was scratched and has been automatically replaced with the race favourite <strong style={{ color: '#e8c96e' }}>{pickedRunner?.horse_name || '—'}</strong>.
-                                </div>
-                              </div>
-                            )}
-                            {pickedRunner?.is_withdrawn && !pick?.was_replaced && (
-                              <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '0.75rem', fontSize: '0.85rem', color: '#f87171', lineHeight: 1.5 }}>
-                                <strong>⚠ Your pick ({pickedRunner.horse_name}) has been withdrawn.</strong>
-                              </div>
-                            )}
-                            {raceRunners.length === 0 ? (
-                              <p style={st.noRunners}>No runners added yet — check back soon.</p>
-                            ) : (
-                              <>
-                                <div style={st.runnerGrid}>
-                                  {raceRunners.map(runner => (
-                                    <RunnerCard
-                                      key={runner.id}
-                                      runner={runner}
-                                      selected={selRunnerId === runner.id}
-                                      showCircle
-                                      onClick={() => handleSelect(race.id, runner.id)}
-                                      disabled={isLocked}
-                                    />
-                                  ))}
-                                </div>
-                                {!isLocked && selRunner && (
-                                  <div style={st.betPreviewPanel}>
-                                    {eachWayOffered ? (
-                                      <div style={st.betTypeToggle}>
-                                        <button
-                                          style={{ ...st.betTypeBtn, ...(currentBetType === 'win' ? st.betTypeBtnActive : {}) }}
-                                          onClick={() => handleBetTypeChange(race.id, 'win')}>
-                                          All-in Win
-                                        </button>
-                                        <button
-                                          style={{ ...st.betTypeBtn, ...(currentBetType === 'each_way' ? st.betTypeBtnActive : {}) }}
-                                          onClick={() => handleBetTypeChange(race.id, 'each_way')}>
-                                          Each-way
-                                        </button>
-                                      </div>
-                                    ) : (
-                                      isWinOnly(selRunner.odds_decimal) ? (
-                                        <div style={st.betTypeNote}>Win only — under 4/1</div>
-                                      ) : (
-                                        <div style={st.betTypeNote}>Win only — each-way isn't offered in fields under 5 runners</div>
-                                      )
-                                    )}
-                                    {preview && (
-                                      <div style={st.previewRow}>
-                                        <span>If this wins: <strong style={{ color: '#c9a84c' }}>{preview.win} pts</strong></span>
-                                        {preview.place != null && (
-                                          <span>If it places (2nd): <strong style={{ color: '#c9a84c' }}>{preview.place} pts</strong></span>
-                                        )}
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                                {!isLocked && (
-                                  <div style={st.saveRow}>
-                                    <div style={st.selectedHint}>
-                                      {selRunner
-                                        ? <><span style={{ color: '#5a8a5a' }}>Selected: </span><strong style={{ color: '#e8f0e8' }}>{selRunner.horse_name}</strong></>
-                                        : <span style={{ color: '#5a8a5a', fontStyle: 'italic' }}>Tap a runner to select</span>}
-                                    </div>
-                                    <button
-                                      style={{ ...st.saveBtn, ...(!selRunnerId || saving === race.id ? st.saveBtnDisabled : {}) }}
-                                      onClick={() => handleSavePick(race.id)}
-                                      disabled={!selRunnerId || saving === race.id}>
-                                      {saving === race.id ? 'Saving…' : isPicked ? 'Update Pick' : 'Save Pick'}
-                                    </button>
-                                  </div>
-                                )}
-                                {isLocked && isPicked && pickedRunner && (
-                                  <div style={st.lockedPickDisplay}>
-                                    <span style={{ opacity: 0.6 }}>Your pick:</span>
-                                    <strong style={{ color: '#c9a84c', marginLeft: '0.5rem' }}>{pickedRunner.horse_name}</strong>
-                                  </div>
-                                )}
-                              </>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              </>
-            )}
           </>
         )}
-
-        {/* ════════════════ FESTIVAL TAB ════════════════ */}
-        {selectedTab !== 'week' && activeFest && (
-          <>
-            {festLoading ? (
-              <div style={{ textAlign: 'center', color: '#5a8a5a', padding: '3rem 1rem', fontSize: '0.9rem' }}>
-                Loading festival…
-              </div>
-            ) : (
-              <>
-                {/* Festival header card */}
-                <div style={st.festHeader}>
-                  <div style={st.festShimmer} />
-                  <div style={st.festHeaderInner}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.25rem' }}>
-                        <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>👑</span>
-                        <span style={st.festHeaderName}>
-                          {(activeFest.display_name || activeFest.name).toUpperCase()}
-                        </span>
-                      </div>
-                      <div style={st.festHeaderSub}>
-                        {activeFest.start_date} → {activeFest.end_date}
-                        {festDay && festDays.length > 0 && (
-                          <span style={{ color: '#c9a84c', marginLeft: '0.5rem' }}>
-                            · Day {festDay.day_number} of {festDays.length}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    {festEntry && (
-                      <div style={st.festHeaderPts}>
-                        <div style={st.festHeaderPtsNum}>{festTotalPts}</div>
-                        <div style={st.festHeaderPtsLabel}>TOTAL PTS</div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Join prompt */}
-                {!festEntry && (
-                  <div style={{ background: 'rgba(201,168,76,0.06)', border: '1px solid rgba(201,168,76,0.2)', borderLeft: '4px solid #c9a84c', borderRadius: '8px', padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
-                    <div>
-                      <div style={{ fontWeight: '600', fontSize: '0.9rem', color: '#e8f0e8', marginBottom: '0.15rem' }}>Join the {activeFest.display_name || activeFest.name}</div>
-                      <div style={{ fontSize: '0.78rem', color: '#5a8a5a' }}>Enter the festival tournament to start making picks.</div>
-                    </div>
-                    <button style={st.btnGold} onClick={async () => {
-                      await supabase.from('festival_entries').insert({ festival_id: activeFest.id, user_id: user.id, starting_points: 0 })
-                      await loadFestivalData(activeFest)
-                    }}>Join Festival →</button>
-                  </div>
-                )}
-
-                {/* Day pills */}
-                {festDays.length > 0 && (
-                  <div style={st.dayPillRow}>
-                    {festDays.map(day => {
-                      const isActive    = day.id === festDay?.id
-                      const isCompleted = !!(day.picks_deadline && now >= new Date(day.picks_deadline))
-                      const d           = new Date(day.race_date + 'T12:00:00')
-                      const shortDay    = d.toLocaleDateString('en-GB', { weekday: 'short' })
-                      return (
-                        <button
-                          key={day.id}
-                          style={{
-                            ...st.dayPill,
-                            ...(isActive ? st.dayPillActive : {}),
-                            ...(isCompleted && !isActive ? st.dayPillCompleted : {}),
-                            ...(!isActive && !isCompleted ? st.dayPillFuture : {}),
-                          }}
-                          onClick={() => handleFestDaySwitch(day)}>
-                          {shortDay}
-                          {isCompleted && <span style={{ marginLeft: '3px', fontSize: '9px' }}>✓</span>}
-                        </button>
-                      )
-                    })}
-                  </div>
-                )}
-
-                {/* Festival race list */}
-                {festEntry && (
-                  <div style={st.raceList}>
-                    {festRaces.length === 0 ? (
-                      <div style={{ color: '#5a8a5a', textAlign: 'center', padding: '1.5rem', fontSize: '0.875rem' }}>
-                        No races set up for this day yet.
-                      </div>
-                    ) : festRaces.map(race => {
-                      const pickedRunnerId = festPicks[race.id]
-                      const isPicked       = !!pickedRunnerId
-                      const isExpanded     = festExpandedRace === race.id
-                      const raceRunners    = festRunners[race.id] || []
-                      const selRunnerId    = festSelected[race.id]
-                      const selRunner      = raceRunners.find(r => r.id === selRunnerId)
-                      const pickedRunner   = raceRunners.find(r => r.id === pickedRunnerId)
-                      const nonWithdrawnCount = raceRunners.filter(r => !r.is_withdrawn).length
-                      const eachWayOffered    = selRunner ? canOfferEachWay(selRunner.odds_decimal, nonWithdrawnCount) : false
-                      const currentBetType    = eachWayOffered ? (festBetType[race.id] || 'win') : 'win'
-                      const preview           = selRunner ? previewPoints(currentBetType, selRunner.odds_decimal, nonWithdrawnCount) : null
-                      return (
-                        <div key={race.id} style={{ ...st.raceOuter, ...(isPicked ? st.raceOuterPicked : {}) }}>
-                          <button style={st.raceSummaryRow} onClick={() => setFestExpandedRace(prev => prev === race.id ? null : race.id)}>
-                            <div style={{ ...st.raceNumCircle, ...(isPicked ? st.raceNumCirclePicked : {}) }}>
-                              {race.race_number}
-                            </div>
-                            <div style={st.raceSummaryInfo}>
-                              <div style={st.raceSummaryVenue}>{race.venue}</div>
-                              <div style={st.raceSummaryMeta}>{race.race_time}{race.race_name ? ` · ${race.race_name}` : ''}</div>
-                            </div>
-                            <div style={st.raceSummaryRight}>
-                              {isPicked && pickedRunner ? (
-                                <span style={st.pickedBadge}>✓ {pickedRunner.horse_name}</span>
-                              ) : (
-                                <span style={festDayLocked ? st.notPickedText : st.pickPrompt}>
-                                  {festDayLocked ? 'No pick' : 'Pick →'}
-                                </span>
-                              )}
-                              <span style={{ ...st.chevron, transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}>›</span>
-                            </div>
-                          </button>
-                          {isExpanded && (
-                            <div style={st.expandedSection}>
-                              {raceRunners.length === 0 ? (
-                                <p style={st.noRunners}>No runners added yet — check back soon.</p>
-                              ) : (
-                                <>
-                                  <div style={st.runnerGrid}>
-                                    {raceRunners.map(runner => (
-                                      <RunnerCard
-                                        key={runner.id}
-                                        runner={runner}
-                                        selected={selRunnerId === runner.id}
-                                        showCircle
-                                        onClick={() => handleFestSelect(race.id, runner.id)}
-                                        disabled={festDayLocked}
-                                      />
-                                    ))}
-                                  </div>
-                                  {!festDayLocked && selRunner && (
-                                    <div style={st.betPreviewPanel}>
-                                      {eachWayOffered ? (
-                                        <div style={st.betTypeToggle}>
-                                          <button
-                                            style={{ ...st.betTypeBtn, ...(currentBetType === 'win' ? st.betTypeBtnActive : {}) }}
-                                            onClick={() => handleFestBetTypeChange(race.id, 'win')}>
-                                            All-in Win
-                                          </button>
-                                          <button
-                                            style={{ ...st.betTypeBtn, ...(currentBetType === 'each_way' ? st.betTypeBtnActive : {}) }}
-                                            onClick={() => handleFestBetTypeChange(race.id, 'each_way')}>
-                                            Each-way
-                                          </button>
-                                        </div>
-                                      ) : (
-                                        isWinOnly(selRunner.odds_decimal) ? (
-                                          <div style={st.betTypeNote}>Win only — under 4/1</div>
-                                        ) : (
-                                          <div style={st.betTypeNote}>Win only — each-way isn't offered in fields under 5 runners</div>
-                                        )
-                                      )}
-                                      {preview && (
-                                        <div style={st.previewRow}>
-                                          <span>If this wins: <strong style={{ color: '#c9a84c' }}>{preview.win} pts</strong></span>
-                                          {preview.place != null && (
-                                            <span>If it places (2nd): <strong style={{ color: '#c9a84c' }}>{preview.place} pts</strong></span>
-                                          )}
-                                        </div>
-                                      )}
-                                    </div>
-                                  )}
-                                  {!festDayLocked && (
-                                    <div style={st.saveRow}>
-                                      <div style={st.selectedHint}>
-                                        {selRunner
-                                          ? <><span style={{ color: '#5a8a5a' }}>Selected: </span><strong style={{ color: '#e8f0e8' }}>{selRunner.horse_name}</strong></>
-                                          : <span style={{ color: '#5a8a5a', fontStyle: 'italic' }}>Tap a runner to select</span>}
-                                      </div>
-                                      <button
-                                        style={{ ...st.saveBtn, ...(!selRunnerId || festSaving === race.id ? st.saveBtnDisabled : {}) }}
-                                        onClick={() => handleFestSavePick(race.id)}
-                                        disabled={!selRunnerId || festSaving === race.id}>
-                                        {festSaving === race.id ? 'Saving…' : isPicked ? 'Update Pick' : 'Save Pick'}
-                                      </button>
-                                    </div>
-                                  )}
-                                  {festDayLocked && isPicked && pickedRunner && (
-                                    <div style={st.lockedPickDisplay}>
-                                      <span style={{ opacity: 0.6 }}>Your pick:</span>
-                                      <strong style={{ color: '#c9a84c', marginLeft: '0.5rem' }}>{pickedRunner.horse_name}</strong>
-                                    </div>
-                                  )}
-                                </>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </>
-            )}
-          </>
-        )}
-
       </main>
 
-      {/* Mobile bottom bar */}
       <BottomNav />
-
     </div>
   )
-}
-
-// ── Styles ────────────────────────────────────────────────────
-const st = {
-  page: { minHeight: '100vh', background: '#0a1a08', fontFamily: "'DM Sans', sans-serif", color: '#e8f0e8', paddingBottom: '4rem' },
-  loadingPage: { minHeight: '100vh', background: '#0a1a08', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-  loadingInner: { textAlign: 'center' },
-  loadingLogo: { fontFamily: "'Bebas Neue', sans-serif", fontSize: '2rem', color: '#c9a84c', letterSpacing: '0.12em', marginBottom: '0.5rem' },
-  loadingText: { color: '#5a8a5a', fontSize: '0.9rem' },
-
-  // Nav
-
-  // Toast
-  toast: { position: 'fixed', top: '1.25rem', right: '1.25rem', padding: '0.75rem 1.25rem', borderRadius: '9px', fontSize: '0.875rem', fontWeight: '500', zIndex: 9999, fontFamily: "'DM Sans', sans-serif", boxShadow: '0 8px 32px rgba(0,0,0,0.4)' },
-  toastSuccess: { background: '#0d1f0d', border: '1px solid rgba(201,168,76,0.4)', color: '#c9a84c' },
-  toastError:   { background: '#0d1f0d', border: '1px solid rgba(239,68,68,0.4)', color: '#f87171' },
-
-  // Main
-  main: { maxWidth: '700px', margin: '0 auto', padding: '1.5rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' },
-
-  // Tab bar
-  tabBar: {
-    display: 'flex', gap: '0.25rem', flexWrap: 'wrap',
-    background: '#0d1f0d', borderRadius: '10px',
-    padding: '0.4rem 0.5rem',
-    border: '1px solid rgba(201,168,76,0.12)',
-  },
-  tabBtn: {
-    display: 'flex', alignItems: 'center',
-    background: 'none', border: 'none',
-    borderRadius: '7px', borderBottom: '2px solid transparent',
-    padding: '0.45rem 0.9rem',
-    fontSize: '0.85rem', fontWeight: '500',
-    color: '#5a8a5a', cursor: 'pointer',
-    fontFamily: "'DM Sans', sans-serif",
-    whiteSpace: 'nowrap',
-    transition: 'color 0.15s',
-  },
-  tabBtnActive: {
-    color: '#c9a84c',
-    background: 'rgba(201,168,76,0.08)',
-    borderBottom: '2px solid #c9a84c',
-  },
-
-  // Empty / no week
-  emptyState: { textAlign: 'center', padding: '4rem 2rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' },
-  emptyIcon:  { fontSize: '3rem' },
-  emptyTitle: { fontFamily: "'Bebas Neue', sans-serif", fontSize: '2rem', color: '#e8f0e8', letterSpacing: '0.06em' },
-  emptySub:   { color: '#5a8a5a', fontSize: '0.9rem', lineHeight: 1.7, maxWidth: '360px' },
-
-  // Buttons
-  btnGold: { background: '#c9a84c', color: '#0a1a08', fontWeight: '700', fontSize: '0.875rem', padding: '0.65rem 1.4rem', borderRadius: '8px', border: 'none', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", whiteSpace: 'nowrap', flexShrink: 0 },
-
-  // Deadline banner
-  deadlineBanner: { background: 'linear-gradient(180deg, #152e12 0%, #0a1a08 100%)', border: '1px solid #c9a84c', borderLeft: '4px solid #c9a84c', borderRadius: '8px', padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' },
-  deadlineLeft:  { display: 'flex', alignItems: 'center', gap: '0.75rem' },
-  deadlineLabel: { fontSize: '0.7rem', fontWeight: '700', color: '#5a8a5a', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '0.15rem' },
-  deadlineTime:  { fontSize: '0.875rem', color: '#e8f0e8', fontWeight: '500' },
-  countdownPill: { background: 'rgba(201,168,76,0.1)', border: '1px solid rgba(201,168,76,0.25)', borderRadius: '8px', padding: '0.5rem 1rem', display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '90px' },
-  countdownValue: { fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.4rem', color: '#c9a84c', letterSpacing: '0.06em', lineHeight: 1 },
-  countdownLabel: { fontSize: '0.65rem', color: '#5a8a5a', textTransform: 'uppercase', letterSpacing: '0.08em' },
-
-  // Locked banner
-  lockedBanner: { background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.25)', borderLeft: '4px solid #f87171', borderRadius: '8px', padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.85rem' },
-  lockedTitle: { fontWeight: '700', color: '#f87171', fontSize: '0.9rem' },
-  lockedSub:   { fontSize: '0.78rem', color: '#5a8a5a', marginTop: '0.1rem' },
-
-  // Progress card
-  progressCard: { background: 'linear-gradient(180deg, #152e12 0%, #0a1a08 100%)', border: '1px solid #c9a84c', borderLeft: '4px solid #c9a84c', borderRadius: '8px', padding: '1.25rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '0.85rem' },
-  progressTop:  { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem' },
-  progressHeading: { fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.4rem', color: '#e8f0e8', letterSpacing: '0.04em' },
-  congratsMsg: { fontSize: '0.82rem', color: '#5a8a5a', marginTop: '0.2rem' },
-  progressBarWrap: { height: '5px', background: 'rgba(0,0,0,0.35)', borderRadius: '999px', overflow: 'hidden' },
-  progressFill: { height: '100%', background: 'linear-gradient(90deg, #c9a84c, #e8c96a)', borderRadius: '999px', transition: 'width 0.5s ease' },
-  pipRow: { display: 'flex', gap: '0.4rem' },
-  pip: { width: '32px', height: '32px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: '700', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(201,168,76,0.15)', color: '#5a8a5a' },
-  pipDone: { background: 'rgba(201,168,76,0.1)', border: '1px solid rgba(201,168,76,0.35)', color: '#c9a84c' },
-
-  // Race list
-  raceList: { display: 'flex', flexDirection: 'column', gap: '0.6rem' },
-  raceOuter: { background: 'linear-gradient(180deg, #152e12 0%, #0a1a08 100%)', border: '1px solid rgba(201,168,76,0.25)', borderLeft: '4px solid rgba(201,168,76,0.25)', borderRadius: '8px', overflow: 'hidden', transition: 'border-color 0.2s' },
-  raceOuterPicked: { borderColor: '#c9a84c', borderLeftColor: '#c9a84c' },
-  raceSummaryRow: { display: 'flex', alignItems: 'center', gap: '0.85rem', padding: '0.9rem 1.1rem', width: '100%', background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", color: '#e8f0e8', textAlign: 'left' },
-  raceNumCircle: { width: '36px', height: '36px', borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Bebas Neue', sans-serif", fontSize: '1rem', letterSpacing: '0.05em', background: 'rgba(255,255,255,0.06)', border: '1.5px solid rgba(255,255,255,0.12)', color: '#5a8a5a' },
-  raceNumCirclePicked: { background: 'rgba(201,168,76,0.15)', border: '1.5px solid rgba(201,168,76,0.5)', color: '#c9a84c' },
-  raceSummaryInfo: { flex: 1, minWidth: 0 },
-  raceSummaryVenue: { fontSize: '0.9rem', fontWeight: '600', color: '#e8f0e8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-  raceSummaryMeta: { fontSize: '0.75rem', color: '#5a8a5a', marginTop: '0.1rem' },
-  raceSummaryRight: { display: 'flex', alignItems: 'center', gap: '0.6rem', flexShrink: 0 },
-  pickedBadge: { background: 'rgba(201,168,76,0.15)', border: '1.5px solid #c9a84c', color: '#c9a84c', fontSize: '0.75rem', fontWeight: '600', padding: '0.2rem 0.6rem', borderRadius: '999px', whiteSpace: 'nowrap', maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis' },
-  notPickedText: { fontSize: '0.78rem', color: '#5a8a5a', fontStyle: 'italic', whiteSpace: 'nowrap' },
-  pickPrompt:   { fontSize: '0.78rem', color: '#c9a84c', fontWeight: '600', whiteSpace: 'nowrap' },
-  chevron: { fontSize: '1.3rem', color: '#5a8a5a', transition: 'transform 0.22s ease', display: 'inline-block', lineHeight: 1, userSelect: 'none' },
-
-  // Expanded section
-  expandedSection: { borderTop: '1px solid rgba(201,168,76,0.08)', padding: '1rem 1.1rem 1.1rem', display: 'flex', flexDirection: 'column', gap: '0.85rem' },
-  noRunners: { color: '#5a8a5a', fontSize: '0.875rem', textAlign: 'center', padding: '1.5rem 0', margin: 0 },
-  runnerGrid: { display: 'flex', flexDirection: 'column', gap: '8px' },
-  saveRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', padding: '0.5rem 0 0' },
-  selectedHint: { fontSize: '0.82rem', flex: 1 },
-  saveBtn: { background: '#c9a84c', color: '#0a1a08', fontWeight: '700', fontSize: '0.9rem', padding: '0.75rem 1.75rem', borderRadius: '9px', border: 'none', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", whiteSpace: 'nowrap', flexShrink: 0, boxShadow: '0 4px 16px rgba(201,168,76,0.35)', transition: 'opacity 0.15s' },
-  saveBtnDisabled: { background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.25)', cursor: 'not-allowed', boxShadow: 'none' },
-  lockedPickDisplay: { fontSize: '0.85rem', color: '#5a8a5a', padding: '0.5rem 0', textAlign: 'center' },
-
-  // Bet type toggle + points preview
-  betPreviewPanel: { display: 'flex', flexDirection: 'column', gap: '0.6rem', padding: '0.75rem 0.9rem', background: 'rgba(201,168,76,0.05)', border: '1px solid rgba(201,168,76,0.15)', borderRadius: '8px' },
-  betTypeToggle: { display: 'flex', gap: '0.4rem' },
-  betTypeBtn: { flex: 1, textAlign: 'center', padding: '0.45rem 0.75rem', borderRadius: '7px', border: '1px solid rgba(201,168,76,0.25)', background: 'transparent', color: '#5a8a5a', fontSize: '0.8rem', fontWeight: '600', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" },
-  betTypeBtnActive: { border: '1px solid #c9a84c', background: 'rgba(201,168,76,0.12)', color: '#c9a84c' },
-  betTypeNote: { fontSize: '0.78rem', color: '#5a8a5a', fontStyle: 'italic' },
-  previewRow: { display: 'flex', gap: '1.25rem', flexWrap: 'wrap', fontSize: '0.8rem', color: '#e8f0e8' },
-
-  // Festival header card
-  festHeader: {
-    position: 'relative',
-    background: 'linear-gradient(135deg, #1a3512 0%, #0f2a0a 100%)',
-    border: '1.5px solid #c9a84c',
-    borderRadius: '10px',
-    overflow: 'hidden',
-  },
-  festShimmer: {
-    position: 'absolute', top: 0, left: 0, right: 0, height: '2px',
-    background: 'linear-gradient(90deg, transparent 0%, #c9a84c 30%, #f5d98b 50%, #c9a84c 70%, transparent 100%)',
-  },
-  festHeaderInner: {
-    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    gap: '1rem', padding: '1rem 1.25rem',
-  },
-  festHeaderName: {
-    fontFamily: "'Bebas Neue', sans-serif",
-    fontSize: '1.3rem', color: '#fff',
-    letterSpacing: '0.06em', lineHeight: 1,
-  },
-  festHeaderSub: {
-    fontSize: '0.75rem', color: 'rgba(232,240,232,0.55)',
-    marginTop: '0.2rem',
-  },
-  festHeaderPts: { textAlign: 'right', flexShrink: 0 },
-  festHeaderPtsNum: {
-    fontFamily: "'Bebas Neue', sans-serif",
-    fontSize: '2rem', color: '#c9a84c', lineHeight: 1,
-  },
-  festHeaderPtsLabel: {
-    fontSize: '0.58rem', fontWeight: '700',
-    color: 'rgba(201,168,76,0.6)',
-    textTransform: 'uppercase', letterSpacing: '0.1em',
-    marginTop: '1px',
-  },
-
-  // Day pills
-  dayPillRow: {
-    display: 'flex', gap: '0.4rem', flexWrap: 'wrap',
-  },
-  dayPill: {
-    display: 'flex', alignItems: 'center',
-    borderRadius: '20px', padding: '6px 12px',
-    fontSize: '11px', fontWeight: '600',
-    cursor: 'pointer', border: '1px solid transparent',
-    fontFamily: "'DM Sans', sans-serif",
-    transition: 'all 0.15s',
-    background: 'rgba(255,255,255,0.04)',
-    color: '#e8f0e8',
-  },
-  dayPillActive: {
-    border: '1px solid #c9a84c',
-    color: '#c9a84c',
-    background: 'rgba(201,168,76,0.1)',
-  },
-  dayPillCompleted: {
-    background: 'rgba(74,222,128,0.08)',
-    border: '1px solid rgba(74,222,128,0.25)',
-    color: '#4ade80',
-  },
-  dayPillFuture: {
-    opacity: 0.4,
-  },
-
 }
