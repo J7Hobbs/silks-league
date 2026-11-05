@@ -17,7 +17,22 @@
 }
 
 /* ── Header ── */
-.pk-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+/* The competition tag, the title row (lock time on the right) and a muted line under them. */
+.pk-head { display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
+.pk-head__row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.pk-tag {
+  align-self: flex-start;
+  max-width: 100%;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--gold);
+  color: #0a1a08;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: normal;
+  letter-spacing: 0.1em;
+}
+.pk-sub { margin: -2px 0 0; font-size: 13px; line-height: 1.35; color: var(--text-muted); }
 .pk-title { margin: 0; font-family: var(--font-heading); font-weight: 700; font-size: 26px; line-height: 1.15; letter-spacing: 0; color: var(--text); }
 .pk-lock { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--gold); white-space: nowrap; }
 .pk-lock--locked { color: var(--text-muted); }

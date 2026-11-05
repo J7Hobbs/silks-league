@@ -1,5 +1,7 @@
 // Small pure helpers for the Picks page, kept apart from Supabase so they are easy to test.
 
+import { weekdayShort, monthAbbr } from './format.js'
+
 // Festivals offered as competition pills: switched on and not yet finished.
 export function runningFestivals(festivals, today) {
   return (festivals || []).filter(f => f.is_active && (f.end_date || f.start_date) >= today)
@@ -36,4 +38,42 @@ export function hasLivePick(runnerId, raceRunners) {
 export function firstUnpickedIndex(races, isPicked) {
   const i = races.findIndex(r => !isPicked(r.id))
   return i === -1 ? 0 : i
+}
+
+// "Aintree", "Aintree & Ascot" or "3 courses" for a set of races ('' when none has a course).
+export function courseLabel(races) {
+  const courses = []
+  for (const r of races || []) {
+    const v = (r.venue || '').trim()
+    if (v && !courses.includes(v)) courses.push(v)
+  }
+  if (courses.length === 0) return ''
+  if (courses.length === 1) return courses[0]
+  if (courses.length === 2) return `${courses[0]} & ${courses[1]}`
+  return `${courses.length} courses`
+}
+
+// "Sat 7 Nov"
+function shortDay(dateStr) {
+  if (!dateStr) return ''
+  return `${weekdayShort(dateStr)} ${Number(dateStr.slice(8, 10))} ${monthAbbr(dateStr)}`
+}
+
+// The line under the Picks title:
+//   Saturday  "Week 1 · Sat 7 Nov · Aintree"
+//   Festival  "Day 1 of 3 · Fri 13 Nov · Cheltenham"
+// Parts that aren't known are left out; '' when there is nothing to say.
+export function competitionLine({ festival, week, day, dayCount, races, festivalVenue }) {
+  const parts = festival
+    ? [
+        day?.day_number ? (dayCount ? `Day ${day.day_number} of ${dayCount}` : `Day ${day.day_number}`) : '',
+        shortDay(day?.race_date),
+        courseLabel(races) || (festivalVenue || '').trim(),
+      ]
+    : [
+        week?.week_number ? `Week ${week.week_number}` : '',
+        shortDay(week?.saturday_date),
+        courseLabel(races),
+      ]
+  return parts.filter(Boolean).join(' · ')
 }

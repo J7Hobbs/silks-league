@@ -15,7 +15,7 @@ import { PICKS_CHANGED } from '../lib/navTabs.js'
 import { isWinOnly, canOfferEachWay, calcTokenPoints } from '../lib/scoring.js'
 import { daysBetween, localDateStr, lockLabel } from '../lib/format.js'
 import {
-  runningFestivals, selectedFestival, isDayOpen, defaultFestDay, hasLivePick, firstUnpickedIndex,
+  runningFestivals, selectedFestival, isDayOpen, defaultFestDay, hasLivePick, firstUnpickedIndex, competitionLine,
 } from '../lib/picksView.js'
 import CompetitionPills from '../components/picks/CompetitionPills.jsx'
 import DaySwitch from '../components/picks/DaySwitch.jsx'
@@ -379,6 +379,12 @@ export default function Picks() {
   const lockIso = isFest ? festDay?.picks_deadline : currentWeek?.picks_deadline
   const lockText = noRaces ? null : view.locked ? 'Picks locked' : lockLabel(lockIso, now.getTime())
 
+  // Under the title: which week or festival day this is. Left out until its data is in.
+  const headLine = noRaces || (isFest && festLoading) ? '' : competitionLine({
+    festival: isFest, week: currentWeek, day: festDay, dayCount: festDays.length,
+    races: view.races, festivalVenue: selFest?.venue,
+  })
+
   const pillItems = [
     { key: 'saturday', label: 'Saturday League' },
     ...activeFestivals.map(f => ({ key: f.id, label: f.display_name || f.name })),
@@ -437,13 +443,17 @@ export default function Picks() {
 
       <main className="pk__main">
         <header className="pk-head">
-          <h1 className="pk-title">Picks</h1>
-          {lockText && (
-            <div className={`pk-lock${view.locked ? ' pk-lock--locked' : ''}`}>
-              <Clock size={15} aria-hidden="true" />
-              <span>{lockText}</span>
-            </div>
-          )}
+          <span className="pk-tag">{isFest ? (selFest.display_name || selFest.name).toUpperCase() : 'SATURDAY LEAGUE'}</span>
+          <div className="pk-head__row">
+            <h1 className="pk-title">Picks</h1>
+            {lockText && (
+              <div className={`pk-lock${view.locked ? ' pk-lock--locked' : ''}`}>
+                <Clock size={15} aria-hidden="true" />
+                <span>{lockText}</span>
+              </div>
+            )}
+          </div>
+          {headLine && <p className="pk-sub">{headLine}</p>}
         </header>
 
         {activeFestivals.length > 0 && (
