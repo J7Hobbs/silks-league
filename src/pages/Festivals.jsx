@@ -91,7 +91,7 @@ export default function Festivals() {
         <Link to="/dashboard" className="fx-back">‹ Home</Link>
         <header className="fx-head">
           <h1 className="fx-title">Racing festivals</h1>
-          <p className="fx-intro">Every festival tournament on Silks League. Pick one horse per race each day – picks lock at 12:00 on each race day.</p>
+          <p className="fx-intro">Every festival tournament on Silks League. Pick one horse per race each day – picks lock 30 minutes before the first race.</p>
         </header>
 
         {failed && (

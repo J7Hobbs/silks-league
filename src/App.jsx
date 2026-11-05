@@ -18,7 +18,7 @@ const STEPS = [
   {
     num: '02',
     title: 'Pick your 7 horses',
-    desc: 'Each Saturday, pick one horse per race from the listed runners. Picks open on Friday and close at 12pm Saturday — change your mind as many times as you like before the cutoff.',
+    desc: 'Each Saturday, pick one horse per race from the listed runners. Picks open on Friday and lock 30 minutes before the first race on Saturday — change your mind as many times as you like before then.',
     icon: '✏️',
   },
   {
@@ -298,8 +298,8 @@ export default function App() {
                   <span className="gs-label">Top score</span>
                 </div>
                 <div className="group-stat">
-                  <span className="gs-val">12pm Sat</span>
-                  <span className="gs-label">Picks deadline</span>
+                  <span className="gs-val">30 min</span>
+                  <span className="gs-label">Picks lock before 1st race</span>
                 </div>
               </div>
             </div>

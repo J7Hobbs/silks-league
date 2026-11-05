@@ -62,6 +62,7 @@ import { supabase } from '../lib/supabase'
 import RunnerCard from '../components/RunnerCard.jsx'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { calcPoints, calcTokenPoints } from '../lib/scoring.js'
+import { ukClock, ukWallToMs } from '../lib/format.js'
 
 const APP_ORIGIN = 'https://silks-league.vercel.app'
 
@@ -154,6 +155,15 @@ function SilkColourPicker({ value, onChange }) {
 
 // ────────────────────────────────────────────────────────────
 
+// "Picks lock 12:10 UK (30 min before the first race)" — read-only; the database sets the time.
+function weekLockText(week, raceCount) {
+  if (!week?.picks_deadline) return 'Picks lock: not set'
+  const at = ukClock(new Date(week.picks_deadline).getTime())
+  return raceCount > 0
+    ? `Picks lock ${at} UK (30 min before the first race)`
+    : `Picks lock ${at} UK until races are added (then 30 min before the first race)`
+}
+
 export default function Admin() {
   const navigate = useNavigate()
 
@@ -179,9 +189,8 @@ export default function Admin() {
   const [currentWeek, setCurrentWeek]     = useState(null)   // the week currently being viewed/edited
   const [showWeekForm, setShowWeekForm]   = useState(false)
   const [weekDate, setWeekDate]           = useState('')
-  const [weekDeadlineTime, setWeekDeadlineTime] = useState('12:00')
   const [editingWeek, setEditingWeek]     = useState(false)
-  const [editWeekForm, setEditWeekForm]   = useState({ saturdayDate: '', picksDeadline: '' })
+  const [editWeekForm, setEditWeekForm]   = useState({ saturdayDate: '' })
 
   // ── Races ──
   const [races, setRaces]               = useState([])
@@ -549,7 +558,8 @@ export default function Admin() {
       season_id: activeSeason.id,
       week_number: (weekList?.length || 0) + 1,
       saturday_date: weekDate,
-      picks_deadline: `${weekDate}T${weekDeadlineTime}:00`,
+      // Placeholder (noon UK). Once races are added the database sets it to 30 minutes before the first race.
+      picks_deadline: new Date(ukWallToMs(weekDate, '12:00')).toISOString(),
       is_locked: false,
     }).select().single()
     setLoading(false)
@@ -557,21 +567,19 @@ export default function Admin() {
     showToast('success', `Week ${(weekList?.length || 0) + 1} created — now add your 7 races below`)
     setShowWeekForm(false)
     setWeekDate('')
-    setWeekDeadlineTime('12:00')
     await loadAllWeeks(activeSeason.id, newWeek?.id)
   }
 
   function startEditWeek() {
-    setEditWeekForm({
-      saturdayDate: currentWeek.saturday_date,
-      picksDeadline: currentWeek.picks_deadline?.slice(11, 16) || '12:00',
-    })
+    setEditWeekForm({ saturdayDate: currentWeek.saturday_date })
     setEditingWeek(true)
   }
 
   async function saveEditWeek() {
     setLoading(true)
-    const deadline = `${editWeekForm.saturdayDate}T${editWeekForm.picksDeadline}:00`
+    // Placeholder (noon UK) for a week with no races yet; with races the database sets the
+    // deadline to 30 minutes before the first race (and never changes one that has passed).
+    const deadline = new Date(ukWallToMs(editWeekForm.saturdayDate, '12:00')).toISOString()
     const { error } = await supabase.from('race_weeks').update({
       saturday_date: editWeekForm.saturdayDate, picks_deadline: deadline,
     }).eq('id', currentWeek.id)
@@ -2289,14 +2297,9 @@ export default function Admin() {
                     <input style={{ ...st.input, maxWidth: '220px' }} type="date" value={weekDate}
                       onChange={e => setWeekDate(e.target.value)} required />
                   </div>
-                  <div style={st.formField}>
-                    <label style={st.label}>Picks Deadline (time)</label>
-                    <input style={{ ...st.input, maxWidth: '160px' }} type="time" value={weekDeadlineTime}
-                      onChange={e => setWeekDeadlineTime(e.target.value)} />
-                  </div>
                 </div>
                 <p style={{ fontSize: '0.78rem', color: '#5a8a5a', margin: '0.5rem 0 1rem' }}>
-                  Picks deadline defaults to 12:00pm. Creates a fresh week with 7 race slots.
+                  Picks lock 30 minutes before the first race, set automatically once races are added. Creates a fresh week with 7 race slots.
                 </p>
                 <div style={st.formActions}>
                   <button type="submit" style={st.btnGold} disabled={loading}>{loading ? 'Creating…' : 'Create Race Week'}</button>
@@ -2364,9 +2367,8 @@ export default function Admin() {
                           onChange={e => setEditWeekForm({ ...editWeekForm, saturdayDate: e.target.value })} />
                       </div>
                       <div style={st.formField}>
-                        <label style={st.label}>Picks Deadline (time)</label>
-                        <input style={st.input} type="time" value={editWeekForm.picksDeadline}
-                          onChange={e => setEditWeekForm({ ...editWeekForm, picksDeadline: e.target.value })} />
+                        <label style={st.label}>Picks lock</label>
+                        <div style={{ ...st.infoCardSub, margin: 0 }}>{weekLockText(currentWeek, races.length)}</div>
                       </div>
                     </div>
                     <div style={st.formActions}>
@@ -2385,7 +2387,7 @@ export default function Admin() {
                           }
                         </div>
                         <div style={st.infoCardTitle}>Week {currentWeek.week_number} · {currentWeek.saturday_date}</div>
-                        <div style={st.infoCardSub}>Picks deadline: {currentWeek.picks_deadline?.slice(11, 16) || '12:00'} · {races.length}/7 races</div>
+                        <div style={st.infoCardSub}>{weekLockText(currentWeek, races.length)} · {races.length}/7 races</div>
                       </div>
                       {!isCurrentPastWeek && (
                         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
@@ -3348,11 +3350,11 @@ runners: 6`}</code>
                               const dateStr = d.toISOString().split('T')[0]
                               const dayName = DAY_NAMES[d.getDay()]
                               const deadlineStr = selectedDay.picks_deadline
-                                ? new Date(selectedDay.picks_deadline).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+                                ? ukClock(new Date(selectedDay.picks_deadline).getTime())
                                 : 'N/A'
                               return (
                                 <span style={{ fontSize: '0.85rem', color: '#5a8a5a' }}>
-                                  {`Day ${selectedDay.day_number} — ${dayName} · ${dateStr} · Deadline: ${deadlineStr}`}
+                                  {`Day ${selectedDay.day_number} — ${dayName} · ${dateStr} · Picks lock: ${deadlineStr}`}
                                 </span>
                               )
                             })()}

@@ -4,14 +4,8 @@ import { supabase } from '../lib/supabase'
 import TopNav from '../components/TopNav.jsx'
 import BottomNav from '../components/BottomNav.jsx'
 import RunnerCard from '../components/RunnerCard.jsx'
+import { picksRevealed } from '../lib/format.js'
 
-// ── Deadline: 12:00pm each Saturday ──────────────────────────────────────────
-function isAfterDeadline() {
-  const now = new Date()
-  const day  = now.getDay()   // 6 = Saturday
-  const hour = now.getHours()
-  return day === 6 && hour >= 12
-}
 
 export default function PlayerPicks() {
   const { userId }   = useParams()
@@ -24,7 +18,6 @@ export default function PlayerPicks() {
   const [scores,     setScores]     = useState({})
   const [results,    setResults]    = useState({})
   const [loading,    setLoading]    = useState(true)
-  const [deadlinePassed, setDeadlinePassed] = useState(false)
   const [isOwnPicks, setIsOwnPicks] = useState(false)
 
   // ── Season / week navigation ──────────────────────────────────
@@ -40,7 +33,6 @@ export default function PlayerPicks() {
       setMyUserId(user.id)
       const own = user.id === userId
       setIsOwnPicks(own)
-      setDeadlinePassed(own || isAfterDeadline())
       init(user.id)
     })
   }, [userId])
@@ -154,6 +146,8 @@ export default function PlayerPicks() {
     ? new Date(selectedWeek.saturday_date + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })
     : ''
   const isPastSeason = viewSeason && !viewSeason.is_active
+  // Other players' picks show once the week's picks have locked (picks_deadline, UK time; 12:00 on the Saturday if none).
+  const deadlinePassed = isOwnPicks || (!!selectedWeek && picksRevealed(selectedWeek.picks_deadline, selectedWeek.saturday_date))
 
   const posLabel = (p) => p === 1 ? '1st' : p === 2 ? '2nd' : p === 3 ? '3rd' : null
 
@@ -176,7 +170,7 @@ export default function PlayerPicks() {
           <div style={st.lockedCard}>
             <div style={st.lockIcon}>🔒</div>
             <div style={st.lockTitle}>Picks not yet revealed</div>
-            <div style={st.lockSub}>Picks are revealed at 12:00pm Saturday — come back then.</div>
+            <div style={st.lockSub}>Picks are revealed when they lock (30 minutes before the first race) — come back then.</div>
           </div>
         ) : (
           <>

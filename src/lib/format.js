@@ -124,6 +124,20 @@ export function ukWallToMs(dateStr, hhmm) {
   return wall - ukOffsetMs(wall - ukOffsetMs(wall))
 }
 
+// When a race day's picks lock, and so when other players' picks are revealed, as epoch ms.
+// Uses the stored picks_deadline; with none stored it falls back to 12:00 UK time on the race day.
+// null when there is neither.
+export function lockMs(iso, dateStr) {
+  const t = iso ? new Date(iso).getTime() : NaN
+  return Number.isNaN(t) ? ukWallToMs(dateStr, '12:00') : t
+}
+
+// Have picks locked (so are other players' picks visible) for this race day?
+export function picksRevealed(iso, dateStr, nowMs = Date.now()) {
+  const t = lockMs(iso, dateStr)
+  return t != null && nowMs >= t
+}
+
 // Countdown on the Saturday card: "2d 21h" from a day out, then hh:mm:ss.
 export function formatLockCountdown(ms) {
   const total = Math.max(0, Math.floor(ms / 1000))

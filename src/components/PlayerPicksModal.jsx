@@ -16,6 +16,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import RunnerCard from './RunnerCard.jsx'
+import { picksRevealed } from '../lib/format.js'
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
 
@@ -28,16 +29,15 @@ function posLabel(p) {
 
 // ── Saturday League helpers ───────────────────────────────────────────────────
 
+// Other players' picks show once picks have locked: the week's picks_deadline (UK time),
+// or 12:00 on the Saturday if none is stored.
 function isWeekRevealed(week) {
-  if (!week) return false
-  return new Date() >= new Date(week.saturday_date + 'T12:00:00')
+  return !!week && picksRevealed(week.picks_deadline, week.saturday_date)
 }
 
 function findDefaultWeekIndex(weeks) {
-  const now = new Date()
-  if (now.getDay() === 6 && now.getHours() >= 12) return 0
   for (let i = 0; i < weeks.length; i++) {
-    if (now >= new Date(weeks[i].saturday_date + 'T12:00:00')) return i
+    if (isWeekRevealed(weeks[i])) return i
   }
   return 0
 }
@@ -53,8 +53,7 @@ function formatWeekLabel(week) {
 // ── Festival helpers ──────────────────────────────────────────────────────────
 
 function isDayRevealed(day) {
-  if (!day?.race_date) return false
-  return new Date() >= new Date(day.race_date + 'T12:00:00')
+  return !!day?.race_date && picksRevealed(day.picks_deadline, day.race_date)
 }
 
 function findDefaultDayIndex(days) {
@@ -140,7 +139,7 @@ export default function PlayerPicksModal({
       if (!season) return
 
       const { data: weeksData } = await supabase
-        .from('race_weeks').select('id, week_number, saturday_date')
+        .from('race_weeks').select('id, week_number, saturday_date, picks_deadline')
         .eq('season_id', season.id)
         .order('saturday_date', { ascending: false })
       if (!weeksData?.length) return
@@ -211,7 +210,7 @@ export default function PlayerPicksModal({
     try {
       const [{ data: prof }, { data: daysData }] = await Promise.all([
         supabase.from('profiles').select('id, username, full_name, display_name').eq('id', userId).maybeSingle(),
-        supabase.from('festival_days').select('id, day_number, race_date')
+        supabase.from('festival_days').select('id, day_number, race_date, picks_deadline')
           .eq('festival_id', festivalId).order('day_number'),
       ])
       setProfile(prof)
@@ -364,7 +363,7 @@ export default function PlayerPicksModal({
                 <div style={m.lockedBox}>
                   <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🔒</div>
                   <div style={m.lockedTitle}>Picks not yet revealed</div>
-                  <div style={m.lockedSub}>Picks are locked at 12pm — come back then.</div>
+                  <div style={m.lockedSub}>Picks are hidden until they lock — come back then.</div>
                 </div>
               ) : dayLoading ? (
                 <div style={m.centreMsg}>Loading…</div>
@@ -480,7 +479,7 @@ export default function PlayerPicksModal({
                 <div style={m.lockedBox}>
                   <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🔒</div>
                   <div style={m.lockedTitle}>Picks not yet revealed</div>
-                  <div style={m.lockedSub}>Picks are locked at 12pm on Saturday — come back then.</div>
+                  <div style={m.lockedSub}>Picks are hidden until they lock — come back then.</div>
                 </div>
               ) : weekLoading ? (
                 <div style={m.centreMsg}>Loading…</div>

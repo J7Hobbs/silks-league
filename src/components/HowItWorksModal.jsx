@@ -50,15 +50,15 @@ export default function HowItWorksModal({ open, onClose }) {
           {/* 1 — The Basics */}
           <Section label="The Basics">
             Every Saturday, 7 races are selected from across the UK racing card. Pick one horse per race
-            before the 12pm Saturday deadline. During festival weeks like Royal Ascot, additional daily
+            before picks lock, 30 minutes before the first race. During festival weeks like Royal Ascot, additional daily
             races are also available alongside the Saturday league — giving you more chances to score points.
           </Section>
 
           {/* 2 — Making Your Picks */}
           <Section label="Making Your Picks">
-            Head to the Picks screen before 12pm on Saturday. Choose one horse per race. Once picks lock
-            at 12pm they're final — no changes. During festivals, picks for each day's races also close
-            at 12pm on that day.
+            Head to the Picks screen before picks lock, 30 minutes before the first race on Saturday. Choose
+            one horse per race. Once picks lock they're final — no changes. During festivals, each day's
+            picks lock 30 minutes before that day's first race.
           </Section>
 
           {/* 3 — Non-Runners */}
@@ -171,7 +171,7 @@ export default function HowItWorksModal({ open, onClose }) {
           <Section label="Festivals">
             During major race meetings like Royal Ascot and Cheltenham, special festival tournaments run
             alongside the regular weekly game with their own separate leaderboard. Festivals span multiple
-            days — picks close at 12pm each day, and the same scoring system applies. Points accumulate
+            days — picks lock 30 minutes before the first race each day, and the same scoring system applies. Points accumulate
             across all days of the festival, with a combined leaderboard updated after each day's racing.
           </Section>
 
