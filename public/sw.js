@@ -1,6 +1,6 @@
 // Silks League — Service Worker
 // Bump this version string whenever you deploy a new build so the cache refreshes
-const CACHE_VERSION = 'silks-v78'
+const CACHE_VERSION = 'silks-v79'
 const SHELL_CACHE   = `${CACHE_VERSION}-shell`
 const DATA_CACHE    = `${CACHE_VERSION}-data`
 
@@ -9,8 +9,10 @@ const SHELL_URLS = [
   '/',
   '/offline.html',
   '/manifest.json',
-  '/icons/icon-192x192.png',
-  '/icons/icon-512x512.png',
+  '/icons/icon-192.png',
+  '/icons/icon-512.png',
+  '/icons/apple-touch-icon.png',
+  '/favicon.svg',
 ]
 
 // ─── Install ─────────────────────────────────────────────────────────────────
