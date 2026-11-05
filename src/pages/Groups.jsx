@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { joinGroupByCode, cleanCode } from '../lib/invite.js'
 import TopNav from '../components/TopNav.jsx'
 import BottomNav from '../components/BottomNav.jsx'
 
@@ -42,6 +43,11 @@ export default function Groups() {
   useEffect(() => { init() }, [])
 
   async function init() {
+    // An old-style invite link (/groups?join=CODE) goes to the invite page, which keeps the
+    // code through sign-up and joins for you.
+    const inviteParam = cleanCode(searchParams.get('join'))
+    if (inviteParam) { navigate(`/join/${encodeURIComponent(inviteParam)}`, { replace: true }); return }
+
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { navigate('/auth'); return }
     setUser(user)
@@ -49,10 +55,6 @@ export default function Groups() {
     const { data: prof } = await supabase
       .from('profiles').select('is_admin').eq('id', user.id).single()
     setIsAdmin(prof?.is_admin || false)
-
-    // Pre-fill join code from URL
-    const codeParam = searchParams.get('join')
-    if (codeParam) { setJoinCode(codeParam); setShowJoin(true) }
 
     await loadMyGroups(user.id)
     setLoading(false)
@@ -206,34 +208,18 @@ export default function Groups() {
     setError('')
 
     try {
-      const { data: group, error: gErr } = await supabase
-        .from('groups')
-        .select('id, name')
-        .eq('invite_code', joinCode.trim().toLowerCase())
-        .single()
+      const result = await joinGroupByCode(user.id, joinCode)
 
-      if (gErr || !group) {
+      if (result.status === 'invalid') {
         setError('Invite code not found — double-check and try again.')
         return
       }
-
-      // Check already a member
-      const { data: existing } = await supabase
-        .from('group_members')
-        .select('id')
-        .eq('group_id', group.id)
-        .eq('user_id', user.id)
-        .maybeSingle()
-
-      if (existing) {
-        setError(`You're already in "${group.name}".`)
+      if (result.status === 'already') {
+        setError(`You're already in "${result.group.name}".`)
         return
       }
-
-      const { error: mErr } = await supabase
-        .from('group_members')
-        .insert({ group_id: group.id, user_id: user.id, is_founder: false })
-      if (mErr) throw mErr
+      if (result.status === 'error') throw new Error(result.message)
+      const group = result.group
 
       if (isWelcome) {
         await markOnboarded()
@@ -265,9 +251,18 @@ export default function Groups() {
     await loadMyGroups(user.id)
   }
 
-  // ── Copy invite link ──────────────────────────────────────────
+  // ── Share invite link (/join/CODE) ────────────────────────────
   async function handleCopyInvite(group) {
-    const url = `${window.location.origin}/groups?join=${group.invite_code}`
+    const url = `${window.location.origin}/join/${group.invite_code}`
+    // On a phone this opens the share sheet; otherwise the link is copied.
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: 'Silks League', text: `Join my group "${group.name}" on Silks League`, url })
+        return
+      } catch (err) {
+        if (err?.name === 'AbortError') return // they closed the share sheet
+      }
+    }
     try {
       await navigator.clipboard.writeText(url)
       setCopySuccess(group.id)

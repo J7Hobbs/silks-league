@@ -9,6 +9,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { cleanCode, savePendingCode, readPendingCode } from '../lib/invite.js'
+import { postAuthDestination } from '../lib/onboarding.js'
 
 function friendlyError(err) {
   const msg = err?.message || ''
@@ -39,6 +41,11 @@ export default function Auth() {
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState('')
   const [success, setSuccess] = useState('')
+
+  // An invite code that came with the link (/auth?join=CODE) or is waiting from the invite
+  // page. It is kept through sign-up and log-in, then the player is sent to join the group.
+  const [inviteCode] = useState(() => cleanCode(searchParams.get('join')) || readPendingCode(null))
+  useEffect(() => { if (inviteCode) savePendingCode(inviteCode) }, [inviteCode])
 
   const [form, setForm] = useState({
     fullName: '', username: '', email: '', password: '', confirmPassword: '',
@@ -112,7 +119,12 @@ export default function Auth() {
         const { error: signUpError } = await supabase.auth.signUp({
           email: form.email,
           password: form.password,
-          options: { data: { full_name: form.fullName.trim(), username: form.username.trim() } },
+          options: { data: {
+            full_name: form.fullName.trim(),
+            username: form.username.trim(),
+            // Stays on the account, so it still works if the confirmation email opens elsewhere.
+            ...(inviteCode ? { invite_code: inviteCode } : {}),
+          } },
         })
         if (signUpError) throw signUpError
 
@@ -141,25 +153,26 @@ export default function Auth() {
         const uid = data.user?.id
         if (uid) {
           const { data: prof } = await supabase
-            .from('profiles').select('has_onboarded, username').eq('id', uid).single()
+            .from('profiles').select('username').eq('id', uid).single()
+          // Waiting invite code first, then the welcome flow for new players, otherwise Home.
+          const dest = await postAuthDestination(data.user)
 
           // If username is missing, save it from metadata if available
           if (!prof?.username) {
             const metaUsername = data.user?.user_metadata?.username
             if (metaUsername) {
               await supabase.from('profiles').update({ username: metaUsername }).eq('id', uid)
-              // Head to normal destination
-              navigate(prof?.has_onboarded ? '/dashboard' : '/groups?welcome=1')
+              navigate(dest)
             } else {
               // Show modal to set username
               setModalUserId(uid)
-              setModalDest(prof?.has_onboarded ? '/dashboard' : '/groups?welcome=1')
+              setModalDest(dest)
               setLoading(false)
               setShowUnModal(true)
               return
             }
           } else {
-            navigate(prof?.has_onboarded ? '/dashboard' : '/groups?welcome=1')
+            navigate(dest)
           }
         } else {
           navigate('/dashboard')
@@ -251,6 +264,11 @@ export default function Auth() {
         <h1 style={s.heading}>{mode === 'login' ? 'Welcome back.' : 'Join for free.'}</h1>
         <p style={s.sub}>{mode === 'login' ? 'Log in to see your group and picks.' : 'Create an account to start playing.'}</p>
 
+        {inviteCode && (
+          <div style={s.inviteBox}>
+            You&rsquo;re joining a group with invite code <strong>{inviteCode.toUpperCase()}</strong>. You&rsquo;ll be added as soon as you&rsquo;re logged in.
+          </div>
+        )}
         {success && <div style={s.successBox}>{success}</div>}
         {error   && <div style={s.errorBox}>{error}</div>}
 
@@ -320,6 +338,7 @@ export default function Auth() {
 }
 
 const s = {
+  inviteBox: { background: 'rgba(201,168,76,0.1)', border: '1px solid rgba(201,168,76,0.35)', borderRadius: '8px', padding: '0.7rem 0.9rem', fontSize: '0.82rem', color: '#e8f0e8', lineHeight: 1.45, marginBottom: '1rem' },
   page:    { minHeight: '100vh', background: '#0a1a08', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem', fontFamily: "'DM Sans', sans-serif" },
   card:    { background: '#0d1f0d', border: '1px solid rgba(201,168,76,0.2)', borderRadius: '18px', padding: '2.5rem', width: '100%', maxWidth: '420px', boxShadow: '0 24px 80px rgba(0,0,0,0.5)', position: 'relative' },
   logo:    { fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.4rem', color: '#c9a84c', letterSpacing: '0.1em', marginBottom: '1.75rem' },

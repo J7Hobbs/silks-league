@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { currentUser } from './lib/session.js'
+import { postAuthDestination } from './lib/onboarding.js'
 import { loadNextFestival, festivalTeaser } from './lib/landingData.js'
 import PhoneMock from './components/landing/PhoneMock.jsx'
 import FestivalTeaser from './components/landing/FestivalTeaser.jsx'
@@ -29,14 +30,17 @@ export default function App() {
   const [teaser, setTeaser] = useState(null)
   const [showRules, setShowRules] = useState(false)
 
-  // Check the session once. Signed in: go to the app (no landing page is drawn first).
+  // Check the session once. Signed in: go to where they belong (a waiting invite, the welcome
+  // flow, or the app) without the landing page being drawn first.
   useEffect(() => {
     let done = false
     const finish = user => {
       if (done) return
       done = true
-      if (user) navigate('/dashboard', { replace: true })
-      else setReady(true)
+      if (!user) { setReady(true); return }
+      postAuthDestination(user)
+        .catch(() => '/dashboard')
+        .then(path => navigate(path, { replace: true }))
     }
     const wait = setTimeout(() => finish(null), SESSION_WAIT_MS)
     currentUser().then(finish, () => finish(null))
@@ -71,7 +75,7 @@ export default function App() {
           </h1>
           <p className="lp-lead">The racing game for you and your mates. No betting. No risk. Just bragging rights.</p>
           <Link to={SIGNUP} className="lp-btn">Join free</Link>
-          <Link to={SIGNUP} className="lp-link lp-link--invite">Got an invite code from a mate?</Link>
+          <Link to="/join" className="lp-link lp-link--invite">Got an invite code from a mate?</Link>
           <PhoneMock />
         </section>
 

@@ -1,8 +1,11 @@
 import { useEffect } from 'react'
 import { Outlet, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { loadOnboarding } from '../lib/onboarding.js'
 import TopNav from './TopNav.jsx'
 import BottomNav from './BottomNav.jsx'
+
+let onboardingChecked = false // module-wide: ask the database once per visit
 
 // Shared frame for the four tab pages (Home, Picks, Leaderboard, Results). The
 // bars are mounted once, so tapping a tab switches the highlight at once and the
@@ -20,7 +23,8 @@ export default function TabLayout() {
     let cancelled = false
     const timer = setTimeout(() => {
       supabase.auth.getUser().then(({ data: { user }, error }) => {
-        if (cancelled || user) return
+        if (cancelled) return
+        if (user) { sendToWelcomeIfNew(user.id); return }
         if (error?.name === 'AuthRetryableFetchError') return
         navigate('/auth')
       }).catch(() => {})
@@ -28,6 +32,17 @@ export default function TabLayout() {
     return () => { cancelled = true; clearTimeout(timer) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // A player who hasn't seen the welcome flow yet (they arrived by a bookmark or a
+  // notification, not through sign-in) is taken to it. Once per visit; if we can't tell,
+  // nobody is moved.
+  function sendToWelcomeIfNew(userId) {
+    if (onboardingChecked) return
+    loadOnboarding(userId).then(({ known, done }) => {
+      if (known) onboardingChecked = true
+      if (known && !done) navigate('/welcome', { replace: true })
+    })
+  }
 
   return (
     <div className="tab-shell">

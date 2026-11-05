@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import './styles/tokens.css'
 import './index.css'
+import './lib/installPrompt.js'   // remembers the browser's install event for the welcome flow
 import App            from './App.jsx'
 import Auth           from './pages/Auth.jsx'
 import Dashboard      from './pages/Dashboard.jsx'
@@ -19,6 +20,8 @@ import FestivalPicks       from './pages/FestivalPicks.jsx'
 import FestivalLeaderboard from './pages/FestivalLeaderboard.jsx'
 import RaceDay             from './pages/RaceDay.jsx'
 import Festivals           from './pages/Festivals.jsx'
+import Welcome             from './pages/Welcome.jsx'
+import Join                from './pages/Join.jsx'
 import TabLayout           from './components/TabLayout.jsx'
 import InstallPrompt       from './components/InstallPrompt.jsx'
 import OneSignalInit       from './components/OneSignalInit.jsx'
@@ -31,6 +34,9 @@ createRoot(document.getElementById('root')).render(
         <Routes>
           <Route path="/"          element={<App />}       />
           <Route path="/auth"      element={<Auth />}      />
+          <Route path="/welcome"   element={<Welcome />}   />
+          <Route path="/join"      element={<Join />}      />
+          <Route path="/join/:code" element={<Join />}     />
           <Route element={<TabLayout />}>
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/picks"     element={<Picks />}     />

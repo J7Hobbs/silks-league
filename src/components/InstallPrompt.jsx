@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 
 const DISMISSED_KEY = 'silks_install_dismissed' // Android/desktop — permanent
 const IOS_DISMISSED_AT_KEY = 'silks_ios_a2hs_dismissed_at' // iOS — timestamp, re-shown after 7 days
@@ -6,6 +7,7 @@ const IOS_REPROMPT_MS = 7 * 24 * 60 * 60 * 1000
 const IOS_SHOW_DELAY_MS = 10000
 
 export default function InstallPrompt() {
+  const { pathname } = useLocation()
   const [deferredPrompt, setDeferredPrompt] = useState(null)
   const [visible, setVisible] = useState(false)
 
@@ -58,7 +60,8 @@ export default function InstallPrompt() {
     }
   }
 
-  if (!visible) return null
+  // The welcome flow has its own add-to-home-screen step.
+  if (!visible || pathname.startsWith('/welcome')) return null
 
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent)
 

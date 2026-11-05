@@ -1,0 +1,169 @@
+/* The welcome flow (/welcome) and the invite page (/join). Built on the tokens in tokens.css.
+   Mobile first (390px); on larger screens it stays a single centred column. */
+
+.wl {
+  --wl-body: #c9d3c4;
+  height: 100vh;
+  height: 100dvh;
+  max-width: 480px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-left: max(20px, env(safe-area-inset-left, 0px));
+  padding-right: max(20px, env(safe-area-inset-right, 0px));
+}
+.wl--boot { background: var(--bg); }
+body:has(.wl) { background: var(--bg); }
+
+/* ── Top row: progress dots (or the wordmark), Skip ── */
+.wl-top { flex: none; min-height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.wl-dots { display: flex; align-items: center; gap: 6px; }
+.wl-dot { width: 7px; height: 7px; border-radius: 99px; background: rgba(242, 239, 228, 0.18); transition: width 0.2s ease, background 0.2s ease; }
+.wl-dot--on { width: 22px; background: var(--gold); }
+.wl-skip {
+  min-height: 44px; min-width: 44px; padding: 0 4px;
+  background: none; border: 0; cursor: pointer;
+  font-family: var(--font-body); font-size: 15px; font-weight: 600; color: var(--text-muted);
+}
+.wl-brand { font-family: var(--font-heading); font-weight: 800; font-size: 19px; letter-spacing: 0.02em; color: var(--gold); text-decoration: none; }
+.wl-brand__b { color: var(--text); }
+
+/* ── Content ── */
+.wl-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; padding: 8px 0 24px; }
+.wl-label { margin: 0 0 12px; font-size: 11px; font-weight: 700; letter-spacing: 0.14em; color: var(--gold); }
+.wl-h1 {
+  margin: 0 0 14px;
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 30px;
+  line-height: 1.1;
+  letter-spacing: 0;
+  color: var(--text);
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+.wl-text { margin: 0; font-size: 16px; line-height: 1.5; color: var(--wl-body); }
+
+/* ── Buttons (pinned to the bottom) ── */
+.wl-actions {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 0 max(20px, env(safe-area-inset-bottom, 0px));
+}
+.wl-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 100%; height: 52px;
+  border-radius: 12px; border: 1px solid transparent;
+  font-family: var(--font-body); font-weight: 600; font-size: 16px;
+  text-decoration: none; cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+.wl-btn:hover { opacity: 0.9; }
+.wl-btn:disabled { opacity: 0.6; cursor: default; }
+.wl-btn--solid { background: var(--gold); border-color: var(--gold); color: #0a1a08; }
+.wl-btn--outline { background: transparent; border-color: rgba(201, 168, 76, 0.5); color: var(--gold); }
+.wl-btn--text { height: 44px; background: none; color: var(--wl-body); font-weight: 500; font-size: 15px; }
+.wl-link {
+  align-self: flex-start; margin-top: 12px; min-height: 44px; padding: 0;
+  background: none; border: 0; cursor: pointer;
+  font-family: var(--font-body); font-size: 15px; font-weight: 600; color: var(--gold);
+  text-decoration: underline; text-underline-offset: 3px; text-decoration-color: rgba(201, 168, 76, 0.5);
+}
+.wl-skip:focus-visible, .wl-btn:focus-visible, .wl-link:focus-visible, .wl-input:focus-visible, .wl-brand:focus-visible {
+  outline: 2px solid var(--gold); outline-offset: 3px;
+}
+
+/* ── Numbered steps (add to home screen) ── */
+.wl-steps { list-style: none; margin: 20px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.wl-step { display: flex; align-items: center; gap: 14px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; }
+.wl-step__num {
+  flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--gold); color: #0a1a08; font-family: var(--font-heading); font-weight: 800; font-size: 14px;
+}
+.wl-step__text { font-size: 15px; line-height: 1.4; color: var(--text); }
+.wl-share { display: inline-block; vertical-align: -5px; color: var(--gold); margin: 0 2px; }
+.wl-nobreak { white-space: nowrap; font-weight: 700; color: var(--gold); }
+.wl-hint { margin: 14px 0 0; font-size: 14px; line-height: 1.45; color: var(--text-muted); }
+.wl-warn {
+  display: flex; flex-direction: column; gap: 2px; margin-top: 20px; padding: 14px 16px;
+  background: var(--gold-tint); border: 1px solid rgba(201, 168, 76, 0.4); border-radius: 16px;
+  font-size: 14px; line-height: 1.4; color: var(--wl-body);
+}
+.wl-warn strong { font-size: 16px; color: var(--text); }
+
+/* ── Illustrations ── */
+.wl-art { margin: 4px 0 24px; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.wl-art--ring { position: relative; overflow: hidden; padding: 28px 0 6px; }
+.wl-ring { position: relative; width: 148px; height: 148px; }
+.wl-echo { position: absolute; left: 50%; top: 50%; width: 771px; height: 771px; margin: -385px 0 0 -385px; z-index: -1; pointer-events: none; }
+.wl-echo__ring { fill: none; stroke: var(--gold); stroke-width: 1.5; }
+.wl-art--ring { isolation: isolate; }
+.wl-ring__svg { position: relative; display: block; }
+.wl-ring__disc { fill: var(--surface-deep); }
+.wl-seg { fill: none; stroke-width: 13; stroke-linecap: butt; }
+.wl-seg--on { stroke: var(--gold); }
+.wl-seg--off { stroke: rgba(242, 239, 228, 0.1); }
+.wl-ring__centre { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+.wl-ring__num { font-family: var(--font-heading); font-weight: 800; font-size: 32px; letter-spacing: 0; font-variant-numeric: tabular-nums; }
+.wl-pill {
+  padding: 7px 14px; border-radius: 999px; background: var(--surface-deep);
+  border: 1px solid rgba(201, 168, 76, 0.35); color: var(--gold); font-size: 13px; font-weight: 600; text-align: center;
+}
+
+.wl-art--cards { align-items: stretch; gap: 10px; }
+.wl-horse { display: flex; flex-direction: column; gap: 12px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; }
+.wl-horse:not(.wl-horse--gold) { flex-direction: row; align-items: center; justify-content: space-between; }
+.wl-horse--gold { background: var(--gold-tint); border-color: rgba(201, 168, 76, 0.45); }
+.wl-horse__row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.wl-horse__text { display: flex; flex-direction: column; gap: 2px; }
+.wl-horse__cap { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold); }
+.wl-horse__main { font-size: 16px; font-weight: 600; color: var(--text); }
+.wl-horse__price { font-family: var(--font-heading); font-weight: 800; font-size: 28px; line-height: 1; letter-spacing: 0; font-variant-numeric: tabular-nums; }
+.wl-toggle { display: grid; grid-template-columns: 1fr 1fr; padding: 3px; background: var(--surface-deep); border-radius: 12px; border: 1px solid var(--border); }
+.wl-toggle span { display: grid; place-items: center; height: 38px; border-radius: 9px; font-size: 14px; font-weight: 600; }
+.wl-toggle__on { background: var(--gold); color: #0a1a08; }
+.wl-toggle__off { color: var(--text-muted); }
+
+.wl-art--notifs { align-items: stretch; gap: 10px; margin-top: 8px; }
+.wl-notif { display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: 0 10px 24px rgba(0, 0, 0, 0.3); }
+.wl-notif__icon { flex: none; width: 36px; height: 36px; border-radius: 9px; display: grid; place-items: center; background: var(--gold); color: #0a1a08; font-family: var(--font-heading); font-weight: 800; font-size: 18px; }
+.wl-notif__text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.wl-notif__title { font-size: 15px; font-weight: 600; color: var(--text); }
+.wl-notif__body { font-size: 14px; color: var(--wl-body); }
+
+/* ── Group card (step 4, invited) ── */
+.wl-group { margin-top: 22px; padding: 16px; background: var(--surface); border: 1px solid rgba(201, 168, 76, 0.3); border-radius: 18px; display: flex; flex-direction: column; gap: 14px; }
+.wl-group__top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.wl-group__name { font-family: var(--font-heading); font-weight: 700; font-size: 18px; letter-spacing: 0; overflow-wrap: anywhere; }
+.wl-group__code { flex: none; padding: 3px 8px; border-radius: 6px; border: 1px solid rgba(201, 168, 76, 0.4); color: var(--gold); font-size: 12px; font-weight: 700; letter-spacing: 0.1em; }
+.wl-group__members { display: flex; align-items: center; gap: 12px; }
+.wl-avatars { display: flex; }
+.wl-avatar { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; margin-left: -8px; background: var(--surface-deep); border: 2px solid var(--surface); color: var(--text); font-size: 12px; font-weight: 700; }
+.wl-avatar:first-child { margin-left: 0; background: var(--gold); color: #0a1a08; }
+.wl-group__count { font-size: 14px; color: var(--wl-body); }
+
+/* ── Join page ── */
+.wl-form { display: flex; flex-direction: column; gap: 10px; margin-top: 22px; }
+.wl-field-label { font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); }
+.wl-input {
+  height: 52px; padding: 0 14px; border-radius: 12px; border: 1px solid rgba(242, 239, 228, 0.2);
+  background: var(--surface-deep); color: var(--text);
+  font-family: var(--font-body); font-size: 18px; letter-spacing: 0.06em;
+}
+.wl-input::placeholder { color: var(--nav-inactive); letter-spacing: 0.02em; }
+.wl-error { margin: 0; font-size: 14px; color: #e88a7a; }
+.wl-codechip { margin: 22px 0 0; font-size: 14px; color: var(--text-muted); }
+.wl-codechip strong { margin-left: 6px; padding: 3px 8px; border-radius: 6px; border: 1px solid rgba(201, 168, 76, 0.4); color: var(--gold); letter-spacing: 0.1em; }
+
+@media (max-width: 359px) {
+  .wl-h1 { font-size: 27px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wl-dot { transition: none; }
+}
