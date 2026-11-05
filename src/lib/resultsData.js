@@ -78,7 +78,7 @@ export async function loadWeekPeriod(userId, period) {
   const runnerIds = [...new Set(picks.map(p => p.runner_id).filter(Boolean))]
   const runners = runnerIds.length
     ? must(await supabase.from('runners')
-        .select('id, horse_name, silk_colour, silk_colour_secondary, is_withdrawn').in('id', runnerIds))
+        .select('id, horse_name, silk_colour, silk_colour_secondary, silk_pattern, is_withdrawn').in('id', runnerIds))
     : []
   return { races, results, picks, runners, scores }
 }
@@ -105,7 +105,7 @@ export async function loadFestivalPeriod(userId, period) {
   const runnerIds = [...new Set(picks.map(p => p.runner_id).filter(Boolean))]
   const runners = runnerIds.length
     ? must(await supabase.from('festival_runners')
-        .select('id, horse_name, silk_colour, silk_colour_secondary, is_withdrawn').in('id', runnerIds))
+        .select('id, horse_name, silk_colour, silk_colour_secondary, silk_pattern, is_withdrawn').in('id', runnerIds))
     : []
   const toRace = ({ festival_race_id, ...rest }) => ({ race_id: festival_race_id, ...rest })
   return { races, results: results.map(toRace), picks: picks.map(toRace), runners, scores: scores.map(toRace) }

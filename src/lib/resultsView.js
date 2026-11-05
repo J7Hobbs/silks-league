@@ -96,7 +96,7 @@ const sameHorse = (a, b) => !!a && !!b && a.trim().toLowerCase() === b.trim().to
 //   races    [{ id, race_number, race_time, venue, race_name }]
 //   results  [{ race_id, position, horse_name, starting_price_display }]
 //   picks    [{ race_id, runner_id, was_replaced }]
-//   runners  [{ id, horse_name, silk_colour, silk_colour_secondary, is_withdrawn }]
+//   runners  [{ id, horse_name, silk_colour, silk_colour_secondary, silk_pattern, is_withdrawn }]
 //   scores   [{ race_id, total_points, position_achieved, bet_type, place_token_points }]
 export function buildRaceRows({ races, results, picks, runners, scores }, venueFallback = '') {
   const resultsByRace = byKey(results, 'race_id')
@@ -116,7 +116,7 @@ export function buildRaceRows({ races, results, picks, runners, scores }, venueF
     const runner = p ? runnerById[p.runner_id] : null
     const pick = p ? {
       name: runner?.horse_name || '—',
-      silk: runner ? { silk_colour: runner.silk_colour, silk_colour_secondary: runner.silk_colour_secondary } : null,
+      silk: runner ? { silk_colour: runner.silk_colour, silk_colour_secondary: runner.silk_colour_secondary, silk_pattern: runner.silk_pattern } : null,
       replaced: !!p.was_replaced,
       withdrawn: !p.was_replaced && !!runner?.is_withdrawn,
     } : null

@@ -188,7 +188,7 @@ export function saturdayCard(sat, nowMs) {
       main: `${runner?.horse_name || 'Your pick'}${time ? ` · ${time}` : ''}${where(race)}`,
       sub: winWorth(pick, runner, runnersByRace[race.id] || []),
       pill: runner?.odds_fractional || '',
-      silk: runner ? { silk_colour: runner.silk_colour, silk_colour_secondary: runner.silk_colour_secondary } : null,
+      silk: runner ? { silk_colour: runner.silk_colour, silk_colour_secondary: runner.silk_colour_secondary, silk_pattern: runner.silk_pattern } : null,
     }
   }
 

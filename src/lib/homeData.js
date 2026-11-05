@@ -20,7 +20,7 @@ function groupBy(rows, key) {
 // returns  nothing recent: "returns soon" with the position in the active season
 // The card itself (homeCards.js) works out what to show from this, as the clock moves on.
 const RACE_COLS = 'id, race_week_id, race_number, race_time, venue, race_name'
-const RUNNER_COLS = 'id, race_id, horse_name, horse_number, silk_colour, silk_colour_secondary, odds_fractional, odds_decimal, is_withdrawn'
+const RUNNER_COLS = 'id, race_id, horse_name, horse_number, silk_colour, silk_colour_secondary, silk_pattern, odds_fractional, odds_decimal, is_withdrawn'
 
 // A race week's races, the player's picks and scores, the results and the season table.
 async function loadWeekDetail(userId, races, season, referenceWeekId) {
