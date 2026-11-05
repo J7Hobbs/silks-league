@@ -258,7 +258,7 @@ export default function Welcome() {
         {body}
       </div>
       <div className="wl-actions">{actions}</div>
-      <HowItWorksModal open={rules} onClose={() => setRules(false)} />
+      <HowItWorksModal open={rules} onClose={() => setRules(false)} section="scoring" />
     </div>
   )
 }

@@ -121,7 +121,7 @@ export default function App() {
         </div>
       </footer>
 
-      <HowItWorksModal open={showRules} onClose={() => setShowRules(false)} />
+      <HowItWorksModal open={showRules} onClose={() => setShowRules(false)} section="scoring" />
     </div>
   )
 }

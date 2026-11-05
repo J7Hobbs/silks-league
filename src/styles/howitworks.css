@@ -1,0 +1,164 @@
+/* How it works: the full-screen rules sheet (HowItWorksModal).
+   Built on tokens.css. It renders in <body> through a portal. 16px side padding, one centred column. */
+
+.hw {
+  --hw-body: #c9d3c4;
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  -webkit-text-size-adjust: 100%;
+}
+
+/* ── Header ── */
+.hw-head {
+  flex: none;
+  position: relative;
+  border-bottom: 1px solid var(--border);
+  padding: max(16px, env(safe-area-inset-top, 0px)) 0 16px;
+}
+.hw-head__in {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 0 calc(max(16px, env(safe-area-inset-right, 0px)) + 52px) 0 max(16px, env(safe-area-inset-left, 0px));
+  box-sizing: border-box;
+}
+.hw-title { margin: 0; font-family: var(--font-heading); font-weight: 700; font-size: 26px; line-height: 1.15; letter-spacing: 0; color: var(--text); }
+.hw-sub { margin: 6px 0 0; font-size: 15px; line-height: 1.45; color: var(--hw-body); }
+.hw-close {
+  position: absolute;
+  top: max(8px, env(safe-area-inset-top, 0px));
+  right: max(8px, env(safe-area-inset-right, 0px));
+  width: 44px; height: 44px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 50%;
+  color: var(--text); cursor: pointer;
+}
+.hw-close:hover { border-color: rgba(201, 168, 76, 0.5); }
+.hw-close svg { width: 18px; height: 18px; display: block; }
+.hw-close:focus-visible, .hw-acc__btn:focus-visible, .hw-sub-btn:focus-visible {
+  outline: 2px solid var(--gold); outline-offset: 2px;
+}
+
+/* ── Scrolling body ── */
+.hw-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.hw-main {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 16px max(16px, env(safe-area-inset-right, 0px)) calc(32px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ── Accordion ── */
+.hw-acc {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  scroll-margin-top: 12px;
+}
+.hw-acc__btn {
+  width: 100%; min-height: 56px; box-sizing: border-box;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 0 16px; background: none; border: 0; border-radius: var(--radius-card); cursor: pointer;
+  text-align: left; color: var(--text);
+  font-family: var(--font-heading); font-weight: 600; font-size: 17px; line-height: 1.25;
+}
+.hw-chev { flex: none; width: 20px; height: 20px; color: var(--gold); transition: transform 0.2s ease; }
+.hw-acc--open .hw-acc__btn .hw-chev { transform: rotate(180deg); }
+.hw-acc__panel { padding: 0 16px 18px; display: flex; flex-direction: column; gap: 14px; }
+.hw-acc__panel[hidden] { display: none; }
+
+/* ── Text ── */
+.hw p, .hw h1, .hw h2 { margin: 0; }
+.hw-p { font-size: 15px; line-height: 1.55; color: var(--hw-body); }
+.hw-p strong { color: var(--text); font-weight: 600; }
+.hw-label { font-family: var(--font-body); font-size: 12px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold); }
+.hw-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.hw-list li { position: relative; padding-left: 18px; font-size: 15px; line-height: 1.55; color: var(--hw-body); }
+.hw-list li::before { content: ''; position: absolute; left: 2px; top: 0.62em; width: 6px; height: 6px; border-radius: 50%; background: var(--gold); }
+.hw-list strong { color: var(--text); font-weight: 600; }
+
+/* ── Numbered steps ── */
+.hw-steps { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 16px; }
+.hw-step { display: flex; gap: 14px; align-items: flex-start; }
+.hw-step__num {
+  flex: none; width: 32px; height: 32px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--gold-tint); border: 1px solid rgba(201, 168, 76, 0.45);
+  font-family: var(--font-heading); font-weight: 700; font-size: 15px; color: var(--gold);
+}
+.hw-step__body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.hw-step__title { font-family: var(--font-heading); font-weight: 600; font-size: 16px; line-height: 1.3; color: var(--text); }
+.hw-step__text { font-size: 15px; line-height: 1.5; color: var(--hw-body); }
+
+/* ── Choice (all-in win / each-way) ── */
+.hw-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.hw-choice { background: var(--surface-deep); border: 1px solid var(--border); border-radius: var(--radius-inner); padding: 12px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.hw-choice__name { font-family: var(--font-heading); font-weight: 600; font-size: 15px; color: var(--text); }
+.hw-choice__text { font-size: 14px; line-height: 1.45; color: var(--hw-body); }
+
+/* ── Example cards ── */
+.hw-examples { display: flex; flex-direction: column; gap: 10px; }
+.hw-ex {
+  display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: center; gap: 12px;
+  background: var(--surface-deep); border: 1px solid var(--border); border-radius: var(--radius-inner); padding: 10px 14px 10px 10px;
+}
+.hw-ex__silk { width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; }
+.hw-ex__silk svg { width: 44px; height: 44px; display: block; }
+.hw-ex__main { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.hw-ex__top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
+.hw-ex__odds { font-family: var(--font-heading); font-weight: 700; font-size: 17px; color: var(--text); }
+.hw-ex__bet { font-size: 14px; font-weight: 600; color: var(--hw-body); }
+.hw-ex__fin { font-size: 13px; line-height: 1.4; color: var(--text-muted); }
+.hw-ex__pts { text-align: right; font-family: var(--font-heading); font-weight: 800; font-size: 22px; line-height: 1; color: var(--gold); font-variant-numeric: tabular-nums; }
+.hw-ex__pts small { display: block; margin-top: 3px; font-family: var(--font-body); font-weight: 600; font-size: 12px; letter-spacing: 0.04em; color: var(--gold); }
+
+.hw-callout { background: var(--gold-tint); border: 1px solid rgba(201, 168, 76, 0.45); border-radius: var(--radius-inner); padding: 12px 14px; font-size: 15px; line-height: 1.45; color: var(--text); }
+.hw-callout strong { color: var(--gold); font-weight: 700; }
+
+/* ── "How the maths works" sub-section ── */
+.hw-sub-acc { background: var(--surface-deep); border: 1px solid var(--border); border-radius: var(--radius-inner); }
+.hw-sub-btn {
+  width: 100%; min-height: 48px; box-sizing: border-box; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 0 14px; background: none; border: 0; border-radius: var(--radius-inner); cursor: pointer; text-align: left; color: var(--text);
+  font-family: var(--font-heading); font-weight: 600; font-size: 15px;
+}
+.hw-sub-acc--open .hw-chev { transform: rotate(180deg); }
+.hw-sub-panel { padding: 0 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+.hw-sub-panel[hidden] { display: none; }
+.hw-formula { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.hw-formula li { font-size: 14px; line-height: 1.5; color: var(--hw-body); }
+.hw-formula strong { color: var(--text); font-weight: 600; }
+
+/* ── Tables ── */
+.hw-table { width: 100%; border-collapse: collapse; font-size: 15px; }
+.hw-table th {
+  text-align: left; padding: 0 0 8px; font-family: var(--font-body); font-size: 12px; font-weight: 600;
+  letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold); border-bottom: 1px solid var(--border);
+}
+.hw-table td { padding: 11px 0; color: var(--hw-body); border-bottom: 1px solid var(--border); line-height: 1.4; vertical-align: top; }
+.hw-table tr:last-child td { border-bottom: 0; }
+.hw-table th:not(:first-child), .hw-table td:not(:first-child) { text-align: right; padding-left: 12px; }
+.hw-table td:first-child { color: var(--text); font-weight: 600; }
+.hw-table .hw-num { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+@media (prefers-reduced-motion: reduce) {
+  .hw-chev { transition: none; }
+}
+@media (min-width: 720px) {
+  .hw-title { font-size: 30px; }
+  .hw-main { padding-top: 24px; gap: 14px; }
+}

@@ -67,3 +67,40 @@ export function calcPoints(position, spDecimal) {
   }
   return { base, bonus, total: Math.min(base + bonus, 40) }
 }
+
+// ── Display helpers for the How It Works screen ──
+// Read-only views of the constants and rules above, so the rules screen can never drift
+// from what scoring does. Nothing here is used by scoring itself.
+export const SCORING_RULES = Object.freeze({
+  tokens: 2,
+  multiplier: MULTIPLIER,
+  baseFraction: BASE_FRACTION,
+  winOnlyBelowDecimal: WIN_ONLY_THRESHOLD,
+})
+
+// Field-size bands from getPlaceTerms: [{ from, to, placesPaid, eachWayAvailable }].
+// The last band has to: null (and up).
+export function placeTermTiers(maxRunners = 20) {
+  const tiers = []
+  for (let n = 1; n <= maxRunners; n++) {
+    const { placesPaid, eachWayAvailable } = getPlaceTerms(n)
+    const last = tiers[tiers.length - 1]
+    if (last && last.placesPaid === placesPaid) last.to = n
+    else tiers.push({ from: n, to: n, placesPaid, eachWayAvailable })
+  }
+  if (tiers.length) tiers[tiers.length - 1].to = null
+  return tiers
+}
+
+// One row per finishing position that scores: { position, share, minRunners }.
+// share is the part of the place value paid (1 = all of it); minRunners is the smallest
+// field where that finishing position is paid.
+export function placeTapers() {
+  return Object.keys(POSITION_TAPER).map(Number).sort((a, b) => a - b).map(position => {
+    let minRunners = null
+    for (let n = 1; n <= 40 && minRunners === null; n++) {
+      if (getPlaceTerms(n).placesPaid >= position) minRunners = n
+    }
+    return { position, share: POSITION_TAPER[position], minRunners }
+  })
+}
