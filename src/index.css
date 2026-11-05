@@ -42,6 +42,18 @@ body {
   max-width: 100%;
 }
 
+/* ── Hidden scroll bars, so the app feels native ──
+   Scrolling still works (wheel, trackpad, touch, keyboard); only the bar is hidden.
+   The Admin page keeps its bar (wide tables): it is left out while .admin-main is on the page.
+   A browser without :has() just ignores the first rule and keeps the bar. */
+html:not(:has(.admin-main)),
+html:not(:has(.admin-main)) body { scrollbar-width: none; }
+html:not(:has(.admin-main))::-webkit-scrollbar,
+html:not(:has(.admin-main)) body::-webkit-scrollbar { display: none; }
+/* Full-screen scrollers in the app shell: How it works, the welcome flow, and the Groups sheets. */
+.hw-scroll, .wl-scroll, .gr-sheet { scrollbar-width: none; }
+.hw-scroll::-webkit-scrollbar, .wl-scroll::-webkit-scrollbar, .gr-sheet::-webkit-scrollbar { display: none; }
+
 h1, h2, h3, h4 {
   font-family: 'Bebas Neue', sans-serif;
   letter-spacing: 0.03em;
