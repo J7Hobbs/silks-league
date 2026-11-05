@@ -153,14 +153,6 @@ export default function HowItWorksModal({ open, onClose }) {
             reset at the start of each new month and everyone competes for the monthly title.
           </Section>
 
-          {/* 8 — Joining Mid-Season */}
-          <Section label="Joining Mid-Season">
-            Joined part way through the month? No problem. As soon as the first race week of the season
-            has been played, any new joiner is automatically credited with points equal to the lowest score
-            on the active leaderboard — so you're competitive from your very first Saturday, never starting
-            from zero while everyone else has a head start.
-          </Section>
-
           {/* 9 — Groups */}
           <Section label="Groups">
             Create or join a private group to compete against friends, family or colleagues alongside the
