@@ -227,7 +227,7 @@ export default function Welcome() {
       actions = (
         <>
           <button type="button" className="wl-btn wl-btn--solid" onClick={() => finish('/groups')}>Start a group</button>
-          <button type="button" className="wl-btn wl-btn--outline" onClick={() => finish('/groups')}>Join with a code</button>
+          <button type="button" className="wl-btn wl-btn--outline" onClick={() => finish('/join')}>Join with a code</button>
           <button type="button" className="wl-btn wl-btn--text" onClick={next}>Maybe later</button>
         </>
       )
