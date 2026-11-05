@@ -188,7 +188,11 @@ export default function SaturdayCard({ card, onAction }) {
       <header className="sc-head">
         <div className="sc-top">
           <span className={`sc-tag${card.faint ? ' sc-tag--faint' : ''}`}>SATURDAY LEAGUE</span>
-          <span className="sc-eyebrow"><Marker kind={eyebrow.kind} />{eyebrow.text}</span>
+          <span className="sc-eyebrow"><Marker kind={eyebrow.kind} />
+            {eyebrow.short
+              ? <><span className="sc-st-long">{eyebrow.text}</span><span className="sc-st-short">{eyebrow.short}</span></>
+              : eyebrow.text}
+          </span>
         </div>
         <div className="sc-main">
           <div className="sc-copy">
