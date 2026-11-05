@@ -187,8 +187,8 @@ export default function SaturdayCard({ card, onAction }) {
     <article className={`sc${card.gold ? ' sc--gold' : ''}${card.soft ? ' sc--soft' : ''}`} aria-label={`Saturday League, ${eyebrow.text.toLowerCase()}`}>
       <header className="sc-head">
         <div className="sc-top">
+          <span className={`sc-tag${card.faint ? ' sc-tag--faint' : ''}`}>SATURDAY LEAGUE</span>
           <span className="sc-eyebrow"><Marker kind={eyebrow.kind} />{eyebrow.text}</span>
-          <span className="sc-eyebrow">SATURDAY LEAGUE</span>
         </div>
         <div className="sc-main">
           <div className="sc-copy">

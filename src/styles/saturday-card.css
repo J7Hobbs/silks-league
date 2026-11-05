@@ -23,13 +23,29 @@
 }
 
 .sc-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+/* Left: the solid gold card tag (same style as "NEXT FESTIVAL"). */
+.sc-tag {
+  flex: none;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--gold);
+  color: #0a1a08;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: normal;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+}
+.sc-tag--faint { opacity: 0.6; }
+
+/* Right: the status. */
 .sc-eyebrow {
   display: inline-flex;
   align-items: center;
   gap: 7px;
   font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.12em;
   color: var(--nav-inactive);
   white-space: nowrap;
 }
