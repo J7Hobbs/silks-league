@@ -49,7 +49,7 @@ export default function HowItWorksModal({ open, onClose }) {
 
           {/* 1 — The Basics */}
           <Section label="The Basics">
-            Every Saturday, 7 races are selected from across the UK racing card. Pick one horse per race
+            Each Saturday, a card of races from across UK racing is selected. Pick one horse per race
             before picks lock, 30 minutes before the first race. During festival weeks like Royal Ascot, additional daily
             races are also available alongside the Saturday league — giving you more chances to score points.
           </Section>

@@ -1,430 +1,123 @@
-import { useNavigate } from 'react-router-dom'
-import './index.css'
+import { useEffect, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { currentUser } from './lib/session.js'
+import { loadNextFestival, festivalTeaser } from './lib/landingData.js'
+import PhoneMock from './components/landing/PhoneMock.jsx'
+import FestivalTeaser from './components/landing/FestivalTeaser.jsx'
+import HowItWorksModal from './components/HowItWorksModal.jsx'
+import './styles/landing.css'
 
-const STATS = [
-  { value: '7', label: 'Races every Saturday' },
-  { value: '2', label: 'Tokens per race' },
-  { value: 'No cap', label: 'Points on offer' },
-  { value: '£0', label: 'Cost to play' },
-]
+// The public page at "/". Signed-in players are sent straight to the app; everyone else
+// sees the landing page. All text is static except the festival card, which comes from
+// the public get_next_festival() function and is left out when there is nothing to show.
+
+const SIGNUP = '/auth?mode=signup'
+const LOGIN = '/auth?mode=login'
 
 const STEPS = [
-  {
-    num: '01',
-    title: 'Create or join a group',
-    desc: 'Set up a private group with friends or join the public top-10 league. Invite mates with a unique group code.',
-    icon: '🏇',
-  },
-  {
-    num: '02',
-    title: 'Pick your 7 horses',
-    desc: 'Each Saturday, pick one horse per race from the listed runners. Picks open on Friday and lock 30 minutes before the first race on Saturday — change your mind as many times as you like before then.',
-    icon: '✏️',
-  },
-  {
-    num: '03',
-    title: 'Follow the results',
-    desc: 'Results update automatically each Saturday after the final race. See how your picks scored, check the leaderboard, and see who rose to the top.',
-    icon: '📊',
-  },
-  {
-    num: '04',
-    title: 'Chase the championship',
-    desc: 'Points stack up each week. Win the weekly prize, top your monthly group, or go all out for the annual champion title.',
-    icon: '🏆',
-  },
+  { title: 'Pick a horse in every race', desc: 'Each Saturday and at the big festivals. Change your mind until picks lock.' },
+  { title: 'Score on the result', desc: 'Winners and placed horses score, and bigger prices score bigger.' },
+  { title: 'Beat your mates', desc: 'Start a private group, share the code, and fight it out on your own table.' },
 ]
 
-const PLACE_TERMS = [
-  { range: '2 – 4 runners', places: 'Win only' },
-  { range: '5 – 7 runners', places: 'Top 2' },
-  { range: '8 – 15 runners', places: 'Top 3' },
-  { range: '16+ runners', places: 'Top 4' },
-]
-
-const LEADERBOARD = [
-  { pos: 1, name: 'Charlie H.', races: [25, 15, 0, 30, 10], total: 80 },
-  { pos: 2, name: 'Sarah M.', races: [0, 30, 15, 10, 25], total: 80 },
-  { pos: 3, name: 'James T.', races: [25, 0, 25, 15, 10], total: 75 },
-  { pos: 4, name: 'Emma R.', races: [10, 15, 25, 0, 15], total: 65 },
-  { pos: 5, name: 'Tom B.', races: [25, 10, 0, 15, 0], total: 50 },
-]
-
-function PipCell({ pts }) {
-  const cls =
-    pts >= 25 ? 'pip pip-gold' :
-    pts >= 10 ? 'pip pip-silver' :
-    pts > 0   ? 'pip pip-bronze' : 'pip pip-empty'
-  return (
-    <span className="lb-race-cell">
-      <span className={cls}>{pts > 0 ? pts : '—'}</span>
-    </span>
-  )
-}
-
-const ghostBtn = {
-  background: 'transparent',
-  border: '1.5px solid #c9a84c',
-  color: '#c9a84c',
-  borderRadius: '8px',
-  padding: '0.55rem 1.25rem',
-  fontFamily: "'DM Sans', sans-serif",
-  fontWeight: '600',
-  fontSize: '0.9rem',
-  cursor: 'pointer',
-  letterSpacing: '0.02em',
-  transition: 'background 0.2s',
-  whiteSpace: 'nowrap',
-}
+// How long to wait for the saved session before showing the page anyway (slow or offline).
+const SESSION_WAIT_MS = 3000
 
 export default function App() {
   const navigate = useNavigate()
-  const goToSignup = () => navigate('/auth?mode=signup')
-  const goToLogin  = () => navigate('/auth?mode=login')
+  const [ready, setReady] = useState(false) // false while we check for a saved session
+  const [teaser, setTeaser] = useState(null)
+  const [showRules, setShowRules] = useState(false)
+
+  // Check the session once. Signed in: go to the app (no landing page is drawn first).
+  useEffect(() => {
+    let done = false
+    const finish = user => {
+      if (done) return
+      done = true
+      if (user) navigate('/dashboard', { replace: true })
+      else setReady(true)
+    }
+    const wait = setTimeout(() => finish(null), SESSION_WAIT_MS)
+    currentUser().then(finish, () => finish(null))
+    return () => { done = true; clearTimeout(wait) }
+  }, [navigate])
+
+  // Only visitors who stay need the festival card.
+  useEffect(() => {
+    if (!ready) return undefined
+    let cancelled = false
+    loadNextFestival().then(row => { if (!cancelled) setTeaser(festivalTeaser(row)) })
+    return () => { cancelled = true }
+  }, [ready])
+
+  if (!ready) return <div className="lp lp--boot" />
 
   return (
-    <div className="app">
-
-      {/* ── NAV ── */}
-      <nav className="nav">
-        <div className="nav-inner">
-          <div className="nav-logo">Silks League</div>
-          <div className="nav-links">
-            <a href="#how-it-works" className="nav-link">How it works</a>
-            <a href="#points" className="nav-link">Points</a>
-            <a href="#leaderboard" className="nav-link">Leaderboard</a>
-            <a href="#groups" className="nav-link">Groups</a>
-            <a href="#festivals" className="nav-link">Festivals</a>
-          </div>
-          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-            <button style={ghostBtn} onClick={goToLogin}>Log in</button>
-            <button className="btn-gold nav-cta" onClick={goToSignup}>Join free</button>
-          </div>
+    <div className="lp">
+      <header className="lp-header">
+        <div className="lp-col lp-header__row">
+          <div className="lp-wordmark"><span>SILKS</span> <span className="lp-wordmark__b">LEAGUE</span></div>
+          <Link to={LOGIN} className="lp-login">Log in</Link>
         </div>
-      </nav>
+      </header>
 
-      {/* ── HERO ── */}
-      <section className="hero">
-        <div className="hero-glow" />
-        <div className="hero-inner">
-          <div className="hero-badge">
-            <span className="badge-pulse" />
-            Every Saturday &middot; 7 races &middot; Free to play
-          </div>
-          <h1 className="hero-headline">
-            Pick your horses.<br />Rule the league.
+      <main className="lp-col">
+        <section className="lp-hero">
+          <span className="lp-tag">FREE-TO-PLAY RACING GAME</span>
+          <h1 className="lp-h1">
+            <span>Pick your horses.</span>
+            <span className="lp-h1__gold">Rule the league.</span>
           </h1>
-          <p className="hero-sub">
-            The ultimate free-to-play horse racing game for you and your friends.
-            No betting. No risk. Just pure competition.
-          </p>
-          <div className="hero-ctas">
-            <button className="btn-gold btn-large" onClick={goToSignup}>
-              Create your group
-            </button>
-            <a href="#how-it-works" className="btn-outline btn-large">
-              See how it works
-            </a>
-          </div>
-        </div>
-      </section>
+          <p className="lp-lead">The racing game for you and your mates. No betting. No risk. Just bragging rights.</p>
+          <Link to={SIGNUP} className="lp-btn">Join free</Link>
+          <Link to={SIGNUP} className="lp-link lp-link--invite">Got an invite code from a mate?</Link>
+          <PhoneMock />
+        </section>
 
-      {/* ── STATS STRIP ── */}
-      <div className="stats-strip">
-        {STATS.map((s) => (
-          <div key={s.label} className="stat-item">
-            <span className="stat-value">{s.value}</span>
-            <span className="stat-label">{s.label}</span>
-          </div>
-        ))}
-      </div>
-
-      {/* ── HOW IT WORKS ── */}
-      <section className="section" id="how-it-works">
-        <div className="section-inner">
-          <div className="section-eyebrow">How it works</div>
-          <h2 className="section-title">Four steps to glory</h2>
-          <div className="steps-grid">
-            {STEPS.map((s) => (
-              <div key={s.num} className="step-card">
-                <div className="step-icon">{s.icon}</div>
-                <div className="step-num">{s.num}</div>
-                <h3 className="step-title">{s.title}</h3>
-                <p className="step-desc">{s.desc}</p>
-              </div>
+        <section className="lp-section" aria-labelledby="lp-how">
+          <h2 className="lp-label" id="lp-how">HOW IT WORKS</h2>
+          <ol className="lp-steps">
+            {STEPS.map((s, i) => (
+              <li key={s.title} className="lp-step">
+                <span className="lp-step__num" aria-hidden="true">{i + 1}</span>
+                <div>
+                  <h3 className="lp-step__title">{s.title}</h3>
+                  <p className="lp-step__desc">{s.desc}</p>
+                </div>
+              </li>
             ))}
-          </div>
-        </div>
-      </section>
+          </ol>
+          <button type="button" className="lp-link lp-link--rules" onClick={() => setShowRules(true)}>Full scoring rules</button>
+        </section>
 
-      {/* ── POINTS SYSTEM ── */}
-      <section className="section section-alt" id="points">
-        <div className="section-inner split">
-          <div className="split-text">
-            <div className="section-eyebrow">Points system</div>
-            <h2 className="section-title">Simple.<br />Transparent.<br />Competitive.</h2>
-            <p className="split-body">
-              Every race, every Saturday — you get 2 tokens to back your pick with. Horses shorter
-              than 4/1 are win-only; horses 4/1 or bigger let you choose All-in Win or Each-way.
-              Pick the winner at a big price and there's no ceiling on what you can score.
-            </p>
-            <p className="split-body">
-              With 7 races and no cap on points, every pick matters. Silks League runs on monthly
-              seasons — each calendar month is a fresh start, with 4–5 Saturdays per month. Compete
-              for the weekly prize, the monthly title, or go all out for the annual championship.
-            </p>
-          </div>
-          <div className="points-stack">
-            <div className="points-card points-gold">
-              <span className="points-pos">All-in Win</span>
-              <span className="points-val-small">Both tokens on the win</span>
-            </div>
-            <div className="points-card points-silver">
-              <span className="points-pos">Each-way</span>
-              <span className="points-val-small">1 win token + 1 place token</span>
-            </div>
+        {teaser && (
+          <section className="lp-section" aria-labelledby="lp-coming">
+            <h2 className="lp-label" id="lp-coming">COMING UP</h2>
+            <FestivalTeaser teaser={teaser} />
+          </section>
+        )}
 
-            {/* Place terms table */}
-            <div style={oddsBoxStyle}>
-              <div style={oddsTitleStyle}>Each-way place terms</div>
-              <div style={oddsNoteStyle}>
-                How many places pay out depends on the number of runners in the race
-              </div>
-              <table style={oddsTableStyle}>
-                <thead>
-                  <tr>
-                    <th style={oddsTh}>Field size</th>
-                    <th style={{ ...oddsTh, textAlign: 'center' }}>Places paid</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {PLACE_TERMS.map((row) => (
-                    <tr key={row.range}>
-                      <td style={oddsTd}>{row.range}</td>
-                      <td style={{ ...oddsTd, textAlign: 'center', color: '#c9a84c', fontWeight: '600' }}>{row.places}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+        <section className="lp-cta" aria-labelledby="lp-cta-h">
+          <h2 className="lp-h2" id="lp-cta-h">Your mates are already picking.</h2>
+          <Link to={SIGNUP} className="lp-btn">Join free</Link>
+          <p className="lp-already">Already playing? <Link to={LOGIN} className="lp-link">Log in</Link></p>
+        </section>
+      </main>
 
-            <div className="points-max-banner">
-              No cap — the bigger the odds, the bigger the reward
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── LEADERBOARD PREVIEW ── */}
-      <section className="section" id="leaderboard">
-        <div className="section-inner">
-          <div className="section-eyebrow">Live leaderboard</div>
-          <h2 className="section-title">See who's leading the pack</h2>
-
-          <div className="lb-card">
-            <div className="lb-week-label">Week 12 · Cheltenham · 22 Mar 2025</div>
-            <div className="lb-table">
-              <div className="lb-head">
-                <span className="lb-pos">#</span>
-                <span className="lb-name">Player</span>
-                <span className="lb-race">R1</span>
-                <span className="lb-race">R2</span>
-                <span className="lb-race">R3</span>
-                <span className="lb-race">R4</span>
-                <span className="lb-race">R5</span>
-                <span className="lb-total">Pts</span>
-              </div>
-              {LEADERBOARD.map((p) => (
-                <div key={p.pos} className={`lb-row ${p.pos === 1 ? 'lb-row-leader' : ''}`}>
-                  <span className="lb-pos">{p.pos === 1 ? '👑' : p.pos}</span>
-                  <span className="lb-name lb-name-val">{p.name}</span>
-                  {p.races.map((pts, i) => (
-                    <PipCell key={i} pts={pts} />
-                  ))}
-                  <span className="lb-total lb-total-val">{p.total}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <p className="lb-note">
-            Live results update automatically each Saturday after the final race.
-            No cap per race or per week · 2 tokens per race · Win or Each-way at 4/1 and bigger.
-          </p>
-        </div>
-      </section>
-
-      {/* ── PRIVATE GROUPS ── */}
-      <section className="section section-alt" id="groups">
-        <div className="section-inner split split-reverse">
-          <div className="split-text">
-            <div className="section-eyebrow">Private groups &amp; public league</div>
-            <h2 className="section-title">Your circle.<br />Your competition.</h2>
-            <p className="split-body">
-              Create a private group and invite your friends, family, or workmates with a
-              unique code. No strangers, no noise — just the people you actually want to beat.
-              Run multiple groups at once: a work sweepstake, a family league, a mates'
-              competition — all separate, all free.
-            </p>
-            <p className="split-body">
-              Prefer a wider stage? Jump into the public league and see how you rank against
-              all players — the top 10 are featured on the live public leaderboard every week.
-            </p>
-            <button className="btn-gold" onClick={goToSignup}>Start a group</button>
-          </div>
-
-          <div className="groups-visual">
-            <div className="group-card">
-              <div className="group-card-header">
-                <span className="group-name">The Friday Firm</span>
-                <span className="group-live">● Live</span>
-              </div>
-              <div className="group-code">Invite code: <strong>FIRM88</strong></div>
-              <div className="group-members-row">
-                {['C', 'S', 'J', 'E', 'T', 'R'].map((l, i) => (
-                  <div key={i} className="avatar" style={{ zIndex: 10 - i, marginLeft: i === 0 ? 0 : '-8px' }}>
-                    {l}
-                  </div>
-                ))}
-                <span className="members-count">6 members</span>
-              </div>
-              <div className="group-stats-row">
-                <div className="group-stat">
-                  <span className="gs-val">Week 12</span>
-                  <span className="gs-label">Current week</span>
-                </div>
-                <div className="group-stat">
-                  <span className="gs-val">80 pts</span>
-                  <span className="gs-label">Top score</span>
-                </div>
-                <div className="group-stat">
-                  <span className="gs-val">30 min</span>
-                  <span className="gs-label">Picks lock before 1st race</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── FESTIVALS ── */}
-      <section className="section" id="festivals">
-        <div className="section-inner split">
-          <div className="split-text">
-            <div className="section-eyebrow">Racing festivals</div>
-            <h2 className="section-title">Cheltenham.<br />Royal Ascot.<br />The big ones.</h2>
-            <p className="split-body">
-              When the major festivals come around, Silks League runs special tournament games
-              alongside the regular weekly competition. Festival picks are completely separate —
-              their own leaderboard, their own scoring, their own bragging rights.
-            </p>
-            <p className="split-body">
-              Festival tournaments follow the same simple format: pick one horse per race,
-              score points for winners and placed horses, and see where you finish on the
-              festival leaderboard at the end of the meeting. Your weekly league score is
-              never affected.
-            </p>
-            <button className="btn-gold" onClick={goToSignup}>Join free</button>
-          </div>
-
-          <div className="groups-visual">
-            <div className="group-card">
-              <div className="group-card-header">
-                <span className="group-name">🏆 Royal Ascot 2025</span>
-                <span className="group-live">● Live</span>
-              </div>
-              <div className="group-code" style={{ color: '#8ab88a', fontSize: '0.8rem', marginTop: '0.25rem' }}>
-                5-day festival · Separate leaderboard
-              </div>
-              <div className="group-stats-row" style={{ marginTop: '1rem' }}>
-                <div className="group-stat">
-                  <span className="gs-val">Day 3</span>
-                  <span className="gs-label">Current day</span>
-                </div>
-                <div className="group-stat">
-                  <span className="gs-val">7</span>
-                  <span className="gs-label">Races today</span>
-                </div>
-                <div className="group-stat">
-                  <span className="gs-val">142 pts</span>
-                  <span className="gs-label">Top score</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── FINAL CTA ── */}
-      <section className="section cta-section">
-        <div className="cta-glow" />
-        <div className="section-inner cta-inner">
-          <div className="section-eyebrow">Ready to play?</div>
-          <h2 className="section-title cta-headline">
-            Free to join.<br />Free to play.<br />Every Saturday.
-          </h2>
-          <button className="btn-gold btn-xl" onClick={goToSignup}>
-            Create your group →
-          </button>
-          <p className="cta-sub">No card required. No betting. Just racing.</p>
-        </div>
-      </section>
-
-      {/* ── FOOTER ── */}
-      <footer className="footer">
-        <div className="footer-inner">
-          <div className="footer-logo">Silks League</div>
-          <p className="footer-tagline">Free-to-play horse racing. No betting. No risk.</p>
-          <div className="footer-links">
-            <a href="#" className="footer-link">Privacy</a>
-            <a href="#" className="footer-link">Terms</a>
-            <a href="#" className="footer-link">Contact</a>
-          </div>
-          <p className="footer-copy">© 2025 Silks League. All rights reserved.</p>
+      <footer className="lp-footer">
+        <div className="lp-col lp-footer__col">
+          <p className="lp-footer__tag">Free-to-play. No betting. No risk.</p>
+          <nav className="lp-footer__links" aria-label="Footer">
+            <a href="#" className="lp-link">Privacy</a>
+            <a href="#" className="lp-link">Terms</a>
+            <a href="#" className="lp-link">Contact</a>
+          </nav>
+          <p className="lp-footer__copy">© {new Date().getFullYear()} Silks League</p>
         </div>
       </footer>
 
+      <HowItWorksModal open={showRules} onClose={() => setShowRules(false)} />
     </div>
   )
-}
-
-/* ── Odds bonus inline styles ── */
-const oddsBoxStyle = {
-  background: 'rgba(0,0,0,0.25)',
-  border: '1px solid rgba(201,168,76,0.15)',
-  borderRadius: '10px',
-  padding: '1rem 1.1rem',
-}
-const oddsTitleStyle = {
-  fontFamily: "'Bebas Neue', sans-serif",
-  fontSize: '1rem',
-  color: '#c9a84c',
-  letterSpacing: '0.08em',
-  marginBottom: '0.35rem',
-}
-const oddsNoteStyle = {
-  fontSize: '0.72rem',
-  color: '#5a8a5a',
-  marginBottom: '0.75rem',
-  lineHeight: 1.45,
-}
-const oddsTableStyle = {
-  width: '100%',
-  borderCollapse: 'collapse',
-}
-const oddsTh = {
-  fontSize: '0.7rem',
-  fontWeight: '600',
-  color: '#5a8a5a',
-  letterSpacing: '0.06em',
-  textTransform: 'uppercase',
-  paddingBottom: '0.4rem',
-  borderBottom: '1px solid rgba(201,168,76,0.12)',
-  textAlign: 'left',
-}
-const oddsTd = {
-  fontSize: '0.8rem',
-  color: '#e8f0e8',
-  padding: '0.35rem 0',
-  borderBottom: '1px solid rgba(255,255,255,0.04)',
 }
