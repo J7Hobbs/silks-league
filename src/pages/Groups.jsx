@@ -1,46 +1,57 @@
-import { useState, useEffect } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useState, useEffect, useRef } from 'react'
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { joinGroupByCode, cleanCode } from '../lib/invite.js'
+import { currentUser } from '../lib/session.js'
+import { cleanCode } from '../lib/invite.js'
+import { loadMembers, loadStandings } from '../lib/groupStandings.js'
+import { standingLine, playersLine, circlesFor } from '../lib/groupsView.js'
+import { shareInvite } from '../lib/groupShare.js'
+import { useCompetition } from '../context/competition.js'
 import TopNav from '../components/TopNav.jsx'
 import BottomNav from '../components/BottomNav.jsx'
+import Sheet from '../components/groups/Sheet.jsx'
+import '../styles/groups.css'
+
+function ShareIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 15V3.5" />
+      <path d="M8 7.2 12 3.2l4 4" />
+      <path d="M8 10.5H6.5A1.5 1.5 0 0 0 5 12v7a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19v-7a1.5 1.5 0 0 0-1.5-1.5H16" />
+    </svg>
+  )
+}
 
 export default function Groups() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [searchParams] = useSearchParams()
+  const { setCompetition } = useCompetition()
 
-  // ── Nav ───────────────────────────────────────────────────────
-  const [user,     setUser]     = useState(null)
-  const [isAdmin,  setIsAdmin]  = useState(false)
-  const [menuOpen, setMenuOpen] = useState(false)
-  const [loading,  setLoading]  = useState(true)
-
-  // ── Groups data ───────────────────────────────────────────────
-  const [myGroups,    setMyGroups]    = useState([])
-  const [selectedId,  setSelectedId]  = useState(null)
-  const [leaderboard, setLeaderboard] = useState([])
-  const [lbLoading,   setLbLoading]   = useState(false)
-
-  // ── Create form ───────────────────────────────────────────────
-  const [showCreate, setShowCreate] = useState(false)
+  const [user, setUser] = useState(null)
+  const [groups, setGroups] = useState(null)       // null while loading
+  const [loadError, setLoadError] = useState(false)
+  const [sheet, setSheet] = useState(null)         // { type: 'create' | 'options' | 'leave' | 'created', id?, group? }
   const [createName, setCreateName] = useState('')
-  const [creating,   setCreating]   = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState('')
+  const [leaving, setLeaving] = useState(false)
+  const [toast, setToast] = useState('')
+  const toastTimer = useRef(null)
+  const loadId = useRef(0)
 
-  // ── Join form ─────────────────────────────────────────────────
-  const [showJoin, setShowJoin] = useState(false)
-  const [joinCode, setJoinCode] = useState('')
-  const [joining,  setJoining]  = useState(false)
-
-  // ── Feedback ──────────────────────────────────────────────────
-  const [error,       setError]       = useState('')
-  const [success,     setSuccess]     = useState('')
-  const [copySuccess, setCopySuccess] = useState(null)  // groupId
-
-  // ── Welcome / onboarding ──────────────────────────────────────
-  const isWelcome = searchParams.get('welcome') === '1'
+  function showToast(text) {
+    setToast(text)
+    clearTimeout(toastTimer.current)
+    toastTimer.current = setTimeout(() => setToast(''), 2400)
+  }
+  useEffect(() => () => clearTimeout(toastTimer.current), [])
 
   // ── Init ──────────────────────────────────────────────────────
-  useEffect(() => { init() }, [])
+  useEffect(() => {
+    init()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   async function init() {
     // An old-style invite link (/groups?join=CODE) goes to the invite page, which keeps the
@@ -48,132 +59,57 @@ export default function Groups() {
     const inviteParam = cleanCode(searchParams.get('join'))
     if (inviteParam) { navigate(`/join/${encodeURIComponent(inviteParam)}`, { replace: true }); return }
 
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { navigate('/auth'); return }
-    setUser(user)
-
-    const { data: prof } = await supabase
-      .from('profiles').select('is_admin').eq('id', user.id).single()
-    setIsAdmin(prof?.is_admin || false)
-
-    await loadMyGroups(user.id)
-    setLoading(false)
+    const u = await currentUser()
+    if (!u) { navigate('/auth'); return }
+    setUser(u)
+    await loadMyGroups(u.id)
   }
 
-  // ── Load all groups the user belongs to ───────────────────────
+  // ── Load the groups the player belongs to ─────────────────────
+  // Cards appear as soon as the groups and their members are known; the "You're 2nd of 9"
+  // line and member circles fill in when the standings arrive.
   async function loadMyGroups(userId) {
-    const { data: memberships } = await supabase
+    const id = ++loadId.current
+    const { data: memberships, error } = await supabase
       .from('group_members')
       .select('is_founder, joined_at, groups(id, name, invite_code, created_by, created_at)')
       .eq('user_id', userId)
+    if (id !== loadId.current) return
+    if (error) { setLoadError(true); setGroups([]); return }
+    setLoadError(false)
 
-    if (!memberships?.length) { setMyGroups([]); return }
+    const mine = (memberships || [])
+      .filter(m => m.groups)
+      .map(m => ({ ...m.groups, isFounder: m.is_founder, joinedAt: m.joined_at }))
+      .sort((a, b) => String(b.joinedAt || '').localeCompare(String(a.joinedAt || '')))
+    const members = await loadMembers(mine.map(g => g.id))
+    if (id !== loadId.current) return
+    setGroups(mine.map(g => ({ ...g, memberCount: members[g.id]?.length || 0, info: null })))
+    if (!mine.length) return
 
-    const enriched = await Promise.all(
-      memberships.map(async m => {
-        const g = m.groups
-        const { count } = await supabase
-          .from('group_members')
-          .select('id', { count: 'exact', head: true })
-          .eq('group_id', g.id)
-        return { ...g, memberCount: count || 0, isFounder: m.is_founder }
-      })
-    )
-
-    setMyGroups(enriched)
-
-    // Auto-select first group and load its leaderboard
-    if (enriched.length > 0) {
-      setSelectedId(enriched[0].id)
-      await loadLeaderboard(userId, enriched[0].id)
-    }
+    let standings = null
+    try { standings = await loadStandings(userId, members) } catch { /* shown as "See the group table" */ }
+    if (id !== loadId.current) return
+    setGroups(prev => prev && prev.map(g => ({ ...g, info: standings?.[g.id] || { failed: true } })))
   }
 
-  // ── Load leaderboard for a specific group ─────────────────────
-  async function loadLeaderboard(userId, groupId) {
-    setLbLoading(true)
-    try {
-      const { data: members } = await supabase
-        .from('group_members').select('user_id').eq('group_id', groupId)
-      const memberIds = (members || []).map(m => m.user_id)
-      if (!memberIds.length) { setLeaderboard([]); return }
-
-      const { data: season } = await supabase
-        .from('seasons').select('id').eq('is_active', true).single()
-      if (!season) { setLeaderboard([]); return }
-
-      const { data: weeks } = await supabase
-        .from('race_weeks').select('id').eq('season_id', season.id)
-      const weekIds = (weeks || []).map(w => w.id)
-      if (!weekIds.length) { setLeaderboard([]); return }
-
-      const { data: races } = await supabase
-        .from('races').select('id').in('race_week_id', weekIds)
-      const raceIds = (races || []).map(r => r.id)
-      if (!raceIds.length) { setLeaderboard([]); return }
-
-      const { data: scores } = await supabase
-        .from('scores')
-        .select('user_id, total_points')
-        .in('race_id', raceIds)
-        .in('user_id', memberIds)
-
-      // Aggregate totals
-      const totals = {}
-      for (const uid of memberIds) totals[uid] = 0
-      for (const s of (scores || [])) {
-        totals[s.user_id] = (totals[s.user_id] || 0) + s.total_points
-      }
-
-      // Fetch names
-      const groupProfileIds = [...new Set([...memberIds, ...(userId ? [userId] : [])])]
-      const { data: profiles } = await supabase
-        .rpc('get_user_names', { user_ids: groupProfileIds })
-      const nameMap = {}
-      profiles?.forEach(p => { nameMap[p.id] = p.username || p.full_name || null })
-
-      const ranked = Object.entries(totals)
-        .sort((a, b) => b[1] - a[1])
-        .map(([uid, pts], i) => ({
-          rank: i + 1,
-          userId: uid,
-          name: nameMap[uid] || 'Player',
-          points: pts,
-          isMe: uid === userId,
-        }))
-
-      setLeaderboard(ranked)
-    } finally {
-      setLbLoading(false)
-    }
-  }
-
-  // ── Mark user as onboarded in DB ─────────────────────────────
-  async function markOnboarded() {
-    if (!user) return
-    await supabase
-      .from('profiles')
-      .update({ has_onboarded: true })
-      .eq('id', user.id)
-  }
-
-  // ── Skip group prompt ─────────────────────────────────────────
-  async function handleSkip() {
-    await markOnboarded()
-    navigate('/dashboard')
+  // ── Open a group's table on the Leaderboard ───────────────────
+  function openTable(group) {
+    setCompetition('group', group.id)
+    navigate('/league')
   }
 
   // ── Create group ──────────────────────────────────────────────
   async function handleCreate(e) {
     e.preventDefault()
-    if (!createName.trim()) return
+    const name = createName.trim()
+    if (!name || creating) return
     setCreating(true)
-    setError('')
-
+    setCreateError('')
     try {
       const { data: group, error: gErr } = await supabase
         .from('groups')
-        .insert({ name: createName.trim(), created_by: user.id })
+        .insert({ name, created_by: user.id })
         .select()
         .single()
       if (gErr) throw gErr
@@ -183,386 +119,194 @@ export default function Groups() {
         .insert({ group_id: group.id, user_id: user.id, is_founder: true })
       if (mErr) throw mErr
 
-      if (isWelcome) {
-        await markOnboarded()
-        navigate('/dashboard')
-        return
-      }
-
-      setSuccess(`"${group.name}" created! Share the invite link with your friends.`)
+      setSheet(null)
       setCreateName('')
-      setShowCreate(false)
-      await loadMyGroups(user.id)
+      loadMyGroups(user.id)   // the new card appears while the share sheet opens
+
+      // Straight after the tap, so the phone lets the share sheet open. If it refuses, offer a button.
+      const result = await shareInvite(group, { copyOnBlocked: false })
+      if (result === 'copied') showToast('Invite link copied')
+      else if (result === 'blocked') setSheet({ type: 'created', group })
     } catch (err) {
-      setError(err.message || 'Failed to create group.')
+      setCreateError(err.message || 'Failed to create group.')
     } finally {
       setCreating(false)
     }
   }
 
-  // ── Join group ────────────────────────────────────────────────
-  async function handleJoin(e) {
-    e.preventDefault()
-    if (!joinCode.trim()) return
-    setJoining(true)
-    setError('')
+  // ── Share the invite link (/join/CODE) ────────────────────────
+  async function handleInvite(group) {
+    const result = await shareInvite(group)
+    if (result === 'copied') showToast('Invite link copied')
+    else if (result === 'failed') showToast('Couldn’t share the link')
+  }
 
+  async function handleCopyCode(group) {
+    setSheet(null)
     try {
-      const result = await joinGroupByCode(user.id, joinCode)
-
-      if (result.status === 'invalid') {
-        setError('Invite code not found — double-check and try again.')
-        return
-      }
-      if (result.status === 'already') {
-        setError(`You're already in "${result.group.name}".`)
-        return
-      }
-      if (result.status === 'error') throw new Error(result.message)
-      const group = result.group
-
-      if (isWelcome) {
-        await markOnboarded()
-        navigate('/dashboard')
-        return
-      }
-
-      setSuccess(`Joined "${group.name}" successfully!`)
-      setJoinCode('')
-      setShowJoin(false)
-      await loadMyGroups(user.id)
-    } catch (err) {
-      setError(err.message || 'Failed to join group.')
-    } finally {
-      setJoining(false)
+      await navigator.clipboard.writeText(String(group.invite_code).toUpperCase())
+      showToast('Copied')
+    } catch {
+      showToast('Couldn’t copy the code')
     }
   }
 
   // ── Leave group ───────────────────────────────────────────────
-  async function handleLeave(groupId, groupName) {
-    if (!window.confirm(`Leave "${groupName}"? You can rejoin with the invite code.`)) return
-    await supabase
+  async function handleLeave(group) {
+    if (leaving) return
+    setLeaving(true)
+    const { error } = await supabase
       .from('group_members')
       .delete()
       .eq('user_id', user.id)
-      .eq('group_id', groupId)
-
-    if (selectedId === groupId) { setSelectedId(null); setLeaderboard([]) }
+      .eq('group_id', group.id)
+    setLeaving(false)
+    setSheet(null)
+    if (error) { showToast('Couldn’t leave the group. Try again.'); return }
+    showToast(`You left ${group.name}`)
     await loadMyGroups(user.id)
   }
 
-  // ── Share invite link (/join/CODE) ────────────────────────────
-  async function handleCopyInvite(group) {
-    const url = `${window.location.origin}/join/${group.invite_code}`
-    // On a phone this opens the share sheet; otherwise the link is copied.
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: 'Silks League', text: `Join my group "${group.name}" on Silks League`, url })
-        return
-      } catch (err) {
-        if (err?.name === 'AbortError') return // they closed the share sheet
-      }
-    }
-    try {
-      await navigator.clipboard.writeText(url)
-      setCopySuccess(group.id)
-      setTimeout(() => setCopySuccess(null), 2500)
-    } catch { /* ignore */ }
-  }
+  const back = () => (location.key === 'default' ? navigate('/dashboard') : navigate(-1))
+  const closeSheet = () => setSheet(null)
+  const optionsGroup = sheet && (sheet.type === 'options' || sheet.type === 'leave') ? groups?.find(g => g.id === sheet.id) : null
 
-  // ── Switch group leaderboard ──────────────────────────────────
-  async function handleSelectGroup(groupId) {
-    if (groupId === selectedId) return
-    setSelectedId(groupId)
-    if (user) await loadLeaderboard(user.id, groupId)
-  }
-
-  const handleSignOut = async () => { await supabase.auth.signOut(); navigate('/auth') }
-  const getFirstName  = () => user?.user_metadata?.full_name?.split(' ')[0] || user?.email?.split('@')[0] || 'Player'
-  const getInitial    = () => getFirstName().charAt(0).toUpperCase()
-
-  // ── Loading ───────────────────────────────────────────────────
-  if (loading) {
-    return <div style={st.loadingPage}><div style={st.loadingDot} /></div>
-  }
-
-  const selectedGroup = myGroups.find(g => g.id === selectedId)
-
-  return (
-    <div className="app-page" style={st.page}>
-
-      {/* ── Nav ── */}
-      <TopNav user={user} isAdmin={isAdmin} />
-
-      {/* ── Main ── */}
-      <main style={st.main} className="app-main-pad">
-
-        {/* ── Welcome banner ── */}
-        {isWelcome && (
-          <div style={st.welcomeBanner}>
-            <div style={st.welcomeIcon}>👋</div>
-            <div style={{ flex: 1 }}>
-              <div style={st.welcomeTitle}>Welcome to Silks League!</div>
-              <div style={st.welcomeSub}>Create a private group to play with friends, or join one with an invite code.</div>
-            </div>
-            <button style={st.skipBtn} onClick={handleSkip}>Skip for now →</button>
-          </div>
-        )}
-
-        {/* ── Page heading ── */}
-        <div style={st.pageHeader}>
-          <div>
-            <h1 style={st.pageTitle}>Groups</h1>
-            <p style={st.pageSub}>Play privately with friends in your own leaderboard.</p>
-          </div>
-          <div style={st.headerActions}>
-            <button
-              style={{ ...st.btnGold, ...(showCreate ? st.btnActive : {}) }}
-              onClick={() => { setShowCreate(v => !v); setShowJoin(false); setError('') }}
-            >
-              {showCreate ? '✕ Cancel' : '+ Create group'}
-            </button>
-            <button
-              style={{ ...st.btnGhost, ...(showJoin ? st.btnActive : {}) }}
-              onClick={() => { setShowJoin(v => !v); setShowCreate(false); setError('') }}
-            >
-              {showJoin ? '✕ Cancel' : '↩ Join group'}
-            </button>
-          </div>
-        </div>
-
-        {/* ── Feedback ── */}
-        {success && (
-          <div style={st.successBox}>
-            ✓ {success}
-            <button style={st.dismissBtn} onClick={() => setSuccess('')}>✕</button>
-          </div>
-        )}
-        {error && (
-          <div style={st.errorBox}>
-            ⚠ {error}
-            <button style={st.dismissBtn} onClick={() => setError('')}>✕</button>
-          </div>
-        )}
-
-        {/* ── Create Group form ── */}
-        {showCreate && (
-          <div style={st.formCard}>
-            <div style={st.formTitle}>CREATE A NEW GROUP</div>
-            <form onSubmit={handleCreate} style={st.formRow}>
-              <input
-                style={st.input}
-                placeholder="Group name, e.g. The Somerset Silks"
-                value={createName}
-                onChange={e => setCreateName(e.target.value)}
-                required
-                autoFocus
-              />
-              <button type="submit" style={st.btnGold} disabled={creating}>
-                {creating ? 'Creating…' : 'Create →'}
-              </button>
-            </form>
-          </div>
-        )}
-
-        {/* ── Join Group form ── */}
-        {showJoin && (
-          <div style={st.formCard}>
-            <div style={st.formTitle}>JOIN WITH AN INVITE CODE</div>
-            <form onSubmit={handleJoin} style={st.formRow}>
-              <input
-                style={st.input}
-                placeholder="Paste invite code here"
-                value={joinCode}
-                onChange={e => setJoinCode(e.target.value)}
-                required
-                autoFocus={!searchParams.get('join')}
-              />
-              <button type="submit" style={st.btnGold} disabled={joining}>
-                {joining ? 'Joining…' : 'Join →'}
-              </button>
-            </form>
-          </div>
-        )}
-
-        {/* ── My Groups ── */}
-        {myGroups.length === 0 ? (
-          <div style={st.emptyCard}>
-            <div style={st.emptyIcon}>👥</div>
-            <div style={st.emptyTitle}>No groups yet</div>
-            <div style={st.emptySub}>Create a group or ask your commissioner for an invite link.</div>
-          </div>
-        ) : (
-          <div style={st.groupsList}>
-            {myGroups.map(group => (
-              <div
-                key={group.id}
-                style={{ ...st.groupCard, ...(group.id === selectedId ? st.groupCardActive : {}) }}
-              >
-                <div style={st.groupCardTop}>
-                  <div style={st.groupCardLeft}>
-                    <div style={st.groupCardName}>{group.name}</div>
-                    <div style={st.groupCardMeta}>
-                      {group.memberCount} member{group.memberCount !== 1 ? 's' : ''}
-                      {group.isFounder && <span style={st.founderBadge}>Founder</span>}
-                    </div>
-                  </div>
-                  <div style={st.groupCardActions}>
-                    <button
-                      style={group.id === selectedId ? st.btnSmallActive : st.btnSmall}
-                      onClick={() => handleSelectGroup(group.id)}
-                    >
-                      {group.id === selectedId ? '✓ Leaderboard' : 'Leaderboard'}
-                    </button>
-                    <button
-                      style={copySuccess === group.id ? st.btnSmallSuccess : st.btnSmallGhost}
-                      onClick={() => handleCopyInvite(group)}
-                    >
-                      {copySuccess === group.id ? '✓ Copied!' : '🔗 Invite'}
-                    </button>
-                    <button style={st.btnSmallDanger} onClick={() => handleLeave(group.id, group.name)}>
-                      Leave
-                    </button>
-                  </div>
-                </div>
-
-                {/* Invite code chip */}
-                <div style={st.inviteRow}>
-                  <span style={st.inviteLabel}>INVITE CODE</span>
-                  <code style={st.inviteCode}>{group.invite_code}</code>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* ── Group Leaderboard ── */}
-        {selectedGroup && (
-          <div style={st.card}>
-            <div style={st.cardHeader}>
-              <span style={st.cardTitle}>{selectedGroup.name} — Leaderboard</span>
-              <span style={st.cardBadge}>{selectedGroup.memberCount} member{selectedGroup.memberCount !== 1 ? 's' : ''}</span>
-            </div>
-
-            {lbLoading ? (
-              <div style={{ color: '#5a8a5a', fontSize: '0.85rem', padding: '1rem 0' }}>Loading…</div>
-            ) : leaderboard.length === 0 ? (
-              <div style={{ color: '#5a8a5a', fontSize: '0.85rem', padding: '0.5rem 0' }}>
-                No scores yet — results will appear once races are submitted.
-              </div>
-            ) : (
-              <div style={st.lbList}>
-                {leaderboard.map(row => (
-                  <div
-                    key={row.userId}
-                    style={{ ...st.lbRow, ...(row.isMe ? st.lbRowMe : {}) }}
-                  >
-                    <div style={st.lbRank}>
-                      {row.rank === 1 ? '🥇' : row.rank === 2 ? '🥈' : row.rank === 3 ? '🥉' : `#${row.rank}`}
-                    </div>
-                    <div style={{ ...st.lbName, cursor: 'pointer', textDecoration: 'underline dotted', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
-                      onClick={() => navigate(`/player-picks/${row.userId}`)}>
-                      {row.name}
-                      {row.isMe && <span style={st.youBadge}>You</span>}
-                    </div>
-                    <div style={st.lbPoints}>{row.points} pts</div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-      </main>
-
-      {/* ── Mobile bottom bar ── */}
-      <BottomNav />
-
+  const actions = (
+    <div className="gr-actions">
+      <button type="button" className="gr-btn gr-btn--solid" onClick={() => { setCreateError(''); setSheet({ type: 'create' }) }}>Create a group</button>
+      <button type="button" className="gr-btn gr-btn--outline" onClick={() => navigate('/join')}>Join with a code</button>
     </div>
   )
-}
 
-// ── Styles ────────────────────────────────────────────────────────────────────
-const st = {
-  page:        { minHeight: '100vh', background: '#0a1a08', fontFamily: "'DM Sans', sans-serif", color: '#e8f0e8', paddingBottom: '5rem' },
-  loadingPage: { minHeight: '100vh', background: '#0a1a08', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-  loadingDot:  { width: '12px', height: '12px', borderRadius: '50%', background: '#c9a84c' },
+  return (
+    <div className="app-page gr">
+      <TopNav />
 
-  // Nav
-  avatar:        { width: '36px', height: '36px', borderRadius: '50%', background: 'rgba(201,168,76,0.15)', border: '1.5px solid rgba(201,168,76,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '700', fontSize: '0.85rem', color: '#c9a84c', cursor: 'pointer', userSelect: 'none' },
-  dropdownMenu:  { position: 'absolute', top: 'calc(100% + 8px)', right: 0, background: '#0d1f0d', border: '1px solid rgba(201,168,76,0.2)', borderRadius: '10px', padding: '0.35rem', minWidth: '180px', zIndex: 200, boxShadow: '0 8px 32px rgba(0,0,0,0.4)' },
-  dropdownEmail: { padding: '0.5rem 0.75rem', fontSize: '0.75rem', color: '#5a8a5a', fontStyle: 'italic' },
-  dropdownDivider:{ margin: '0.25rem 0', border: 'none', borderTop: '1px solid rgba(201,168,76,0.1)' },
-  dropdownItem:  { display: 'block', width: '100%', padding: '0.55rem 0.75rem', background: 'none', border: 'none', borderRadius: '6px', fontSize: '0.85rem', color: '#e8f0e8', cursor: 'pointer', textAlign: 'left', fontFamily: "'DM Sans', sans-serif" },
+      <main className="gr-main">
+        <div className="gr-head">
+          <button type="button" className="gr-back" onClick={back}>&lsaquo; Back</button>
+          <h1 className="gr-title">Groups</h1>
+          <p className="gr-lede">Your private leagues with your mates.</p>
+        </div>
 
-  // Main
-  main:         { maxWidth: '1100px', margin: '0 auto', padding: '2rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' },
+        {groups !== null && groups.length > 0 && actions}
 
-  // Welcome banner
-  welcomeBanner: { background: 'rgba(201,168,76,0.07)', border: '1px solid rgba(201,168,76,0.25)', borderLeft: '4px solid #c9a84c', borderRadius: '10px', padding: '1.25rem 1.5rem', display: 'flex', alignItems: 'flex-start', gap: '1rem' },
-  welcomeIcon:   { fontSize: '1.75rem', flexShrink: 0 },
-  welcomeTitle:  { fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.3rem', letterSpacing: '0.05em', color: '#c9a84c', marginBottom: '0.2rem' },
-  welcomeSub:    { fontSize: '0.875rem', color: '#7a9e85', lineHeight: 1.5 },
-  skipBtn:       { background: 'none', border: 'none', color: '#5a8a5a', fontSize: '0.8rem', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", whiteSpace: 'nowrap', flexShrink: 0, alignSelf: 'center' },
+        {groups === null && (
+          <ul className="gr-list" aria-busy="true" aria-label="Loading your groups">
+            {[0, 1].map(k => <li key={k} className="gr-card gr-card--skel" aria-hidden="true" />)}
+          </ul>
+        )}
 
-  // Page heading
-  pageHeader:   { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' },
-  pageTitle:    { fontFamily: "'Bebas Neue', sans-serif", fontSize: '2.2rem', color: '#e8f0e8', letterSpacing: '0.03em', margin: 0 },
-  pageSub:      { fontSize: '0.875rem', color: '#5a8a5a', marginTop: '0.2rem' },
-  headerActions:{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' },
+        {loadError && (
+          <div className="gr-error" role="alert">
+            We couldn&rsquo;t load your groups.{' '}
+            <button type="button" className="gr-inline" onClick={() => { setGroups(null); setLoadError(false); loadMyGroups(user.id) }}>Try again</button>
+          </div>
+        )}
 
-  // Buttons
-  btnGold:        { background: '#c9a84c', color: '#0a1a08', fontWeight: '700', fontSize: '0.875rem', padding: '0.6rem 1.25rem', borderRadius: '7px', border: 'none', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", whiteSpace: 'nowrap' },
-  btnGhost:       { background: 'transparent', border: '1.5px solid rgba(201,168,76,0.3)', color: '#c9a84c', fontWeight: '600', fontSize: '0.875rem', padding: '0.6rem 1.25rem', borderRadius: '7px', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", whiteSpace: 'nowrap' },
-  btnActive:      { background: 'rgba(201,168,76,0.12)', border: '1.5px solid rgba(201,168,76,0.4)', color: '#c9a84c' },
-  btnSmall:       { background: 'rgba(201,168,76,0.08)', border: '1px solid rgba(201,168,76,0.22)', color: '#c9a84c', fontWeight: '600', fontSize: '0.78rem', padding: '0.35rem 0.75rem', borderRadius: '5px', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", whiteSpace: 'nowrap' },
-  btnSmallActive: { background: 'rgba(201,168,76,0.2)', border: '1px solid rgba(201,168,76,0.5)', color: '#c9a84c', fontWeight: '700', fontSize: '0.78rem', padding: '0.35rem 0.75rem', borderRadius: '5px', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", whiteSpace: 'nowrap' },
-  btnSmallGhost:  { background: 'transparent', border: '1px solid rgba(201,168,76,0.22)', color: '#c9a84c', fontWeight: '600', fontSize: '0.78rem', padding: '0.35rem 0.75rem', borderRadius: '5px', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", whiteSpace: 'nowrap' },
-  btnSmallSuccess:{ background: 'rgba(74,222,128,0.1)', border: '1px solid rgba(74,222,128,0.3)', color: '#4ade80', fontWeight: '600', fontSize: '0.78rem', padding: '0.35rem 0.75rem', borderRadius: '5px', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", whiteSpace: 'nowrap' },
-  btnSmallDanger: { background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.22)', color: '#f87171', fontWeight: '600', fontSize: '0.78rem', padding: '0.35rem 0.75rem', borderRadius: '5px', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", whiteSpace: 'nowrap' },
+        {groups !== null && groups.length === 0 && !loadError && (
+          <section className="gr-empty">
+            <h2 className="gr-empty__title">No groups yet</h2>
+            <p className="gr-empty__text">Start one and invite your mates, or join with a code from a mate.</p>
+            {actions}
+          </section>
+        )}
 
-  // Feedback
-  successBox:  { background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.25)', borderRadius: '8px', padding: '0.85rem 1rem', fontSize: '0.875rem', color: '#4ade80', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' },
-  errorBox:    { background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: '8px', padding: '0.85rem 1rem', fontSize: '0.875rem', color: '#f87171', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' },
-  dismissBtn:  { background: 'none', border: 'none', color: 'inherit', opacity: 0.6, cursor: 'pointer', fontSize: '0.85rem', fontFamily: "'DM Sans', sans-serif", flexShrink: 0 },
+        {groups !== null && groups.length > 0 && (
+          <ul className="gr-list">
+            {groups.map(g => {
+              const circles = circlesFor(g.info, user?.id)
+              const line = standingLine(g.info)
+              return (
+                <li key={g.id} className="gr-card">
+                  <div className="gr-card__top">
+                    <div className="gr-card__title">
+                      <button type="button" className="gr-name" onClick={() => openTable(g)}>{g.name}</button>
+                      <p className="gr-sub">{playersLine(g.memberCount, g.isFounder)}</p>
+                    </div>
+                    <button
+                      type="button" className="gr-more" aria-label="Group options" aria-haspopup="dialog"
+                      data-return={`opts-${g.id}`}
+                      onClick={() => setSheet({ type: 'options', id: g.id })}
+                    >&middot;&middot;&middot;</button>
+                  </div>
 
-  // Create / Join form
-  formCard:  { background: '#162a1a', border: '1px solid #c9a84c', borderLeft: '4px solid #c9a84c', borderRadius: '8px', padding: '1.25rem 1.5rem' },
-  formTitle: { fontFamily: "'Bebas Neue', sans-serif", fontSize: '0.95rem', color: '#c9a84c', letterSpacing: '0.1em', marginBottom: '0.85rem' },
-  formRow:   { display: 'flex', gap: '0.75rem', flexWrap: 'wrap' },
-  input:     { flex: 1, minWidth: '200px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(201,168,76,0.2)', borderRadius: '7px', padding: '0.65rem 0.9rem', fontFamily: "'DM Sans', sans-serif", fontSize: '0.9rem', color: '#e8f0e8', outline: 'none', boxSizing: 'border-box' },
+                  <button type="button" className="gr-standing" onClick={() => openTable(g)}>
+                    <span className="gr-circles" aria-hidden="true">
+                      {circles.map(c => <span key={c.id} className={`gr-circle${c.isMe ? ' gr-circle--me' : ''}`}>{c.initials}</span>)}
+                    </span>
+                    {line ? <span className="gr-standing__text">{line}</span> : <span className="gr-standing__text gr-skel-line" aria-hidden="true" />}
+                    <span className="gr-standing__cta">Table &rsaquo;</span>
+                  </button>
 
-  // Empty state
-  emptyCard:  { background: '#162a1a', border: '1px solid rgba(201,168,76,0.2)', borderRadius: '10px', padding: '3rem 2rem', textAlign: 'center' },
-  emptyIcon:  { fontSize: '2.5rem', marginBottom: '0.75rem' },
-  emptyTitle: { fontWeight: '600', color: '#e8f0e8', fontSize: '1rem', marginBottom: '0.35rem' },
-  emptySub:   { fontSize: '0.875rem', color: '#7a9e85', lineHeight: 1.5 },
+                  <button type="button" className="gr-invite" onClick={() => handleInvite(g)}>
+                    <ShareIcon />Invite mates
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </main>
 
-  // Group cards
-  groupsList:       { display: 'flex', flexDirection: 'column', gap: '0.75rem' },
-  groupCard:        { background: '#162a1a', border: '1px solid rgba(201,168,76,0.2)', borderLeft: '4px solid rgba(201,168,76,0.2)', borderRadius: '8px', padding: '1.1rem 1.25rem', transition: 'border-color 0.2s' },
-  groupCardActive:  { borderColor: '#c9a84c', borderLeftColor: '#c9a84c' },
-  groupCardTop:     { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', marginBottom: '0.75rem' },
-  groupCardLeft:    { flex: 1, minWidth: 0 },
-  groupCardName:    { fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.2rem', color: '#e8f0e8', letterSpacing: '0.05em', marginBottom: '0.2rem' },
-  groupCardMeta:    { fontSize: '0.8rem', color: '#7a9e85', display: 'flex', alignItems: 'center', gap: '0.5rem' },
-  groupCardActions: { display: 'flex', gap: '0.5rem', flexWrap: 'wrap' },
-  founderBadge:     { background: 'rgba(201,168,76,0.12)', color: '#c9a84c', fontSize: '0.68rem', fontWeight: '700', padding: '0.15rem 0.55rem', borderRadius: '999px', letterSpacing: '0.06em', textTransform: 'uppercase' },
-  inviteRow:        { display: 'flex', alignItems: 'center', gap: '0.6rem' },
-  inviteLabel:      { fontSize: '0.65rem', fontWeight: '700', letterSpacing: '0.1em', color: '#5a8a5a', textTransform: 'uppercase' },
-  inviteCode:       { fontFamily: 'monospace', fontSize: '0.85rem', color: '#c9a84c', background: 'rgba(201,168,76,0.06)', padding: '0.2rem 0.55rem', borderRadius: '4px', border: '1px solid rgba(201,168,76,0.15)', letterSpacing: '0.05em' },
+      <BottomNav />
 
-  // Leaderboard card
-  card:       { background: '#162a1a', border: '1px solid #c9a84c', borderLeft: '4px solid #c9a84c', borderRadius: '8px', padding: '1.25rem 1.5rem' },
-  cardHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', gap: '0.75rem', flexWrap: 'wrap' },
-  cardTitle:  { fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.15rem', color: '#e8f0e8', letterSpacing: '0.05em' },
-  cardBadge:  { fontSize: '0.72rem', fontWeight: '700', color: '#7a9e85', background: 'rgba(0,0,0,0.25)', padding: '0.25rem 0.75rem', borderRadius: '999px', border: '1px solid rgba(201,168,76,0.12)' },
-  lbList:     { display: 'flex', flexDirection: 'column', gap: '0.35rem' },
-  lbRow:      { display: 'flex', alignItems: 'center', gap: '0.85rem', padding: '0.65rem 0.75rem', borderRadius: '6px', background: 'rgba(0,0,0,0.15)' },
-  lbRowMe:    { background: 'rgba(201,168,76,0.08)', border: '1px solid rgba(201,168,76,0.2)' },
-  lbRank:     { fontSize: '1.1rem', minWidth: '32px', textAlign: 'center' },
-  lbName:     { flex: 1, fontSize: '0.9rem', color: '#e8f0e8', fontWeight: '500' },
-  youBadge:   { fontSize: '0.55rem', fontWeight: '700', letterSpacing: '0.08em', textTransform: 'uppercase', color: '#0a1a08', background: '#c9a84c', padding: '0.1rem 0.35rem', borderRadius: '3px', whiteSpace: 'nowrap', flexShrink: 0 },
-  lbPoints:   { fontSize: '0.875rem', color: '#c9a84c', fontWeight: '700', fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.05rem', letterSpacing: '0.04em' },
+      {toast && <div className="gr-toast" role="status">{toast}</div>}
 
+      {sheet?.type === 'create' && (
+        <Sheet onClose={closeSheet} labelledBy="gr-sheet-title">
+          <h2 className="gr-sheet__title" id="gr-sheet-title">Create a group</h2>
+          <form className="gr-form" onSubmit={handleCreate}>
+            <label className="gr-label" htmlFor="gr-name-input">Group name</label>
+            <input
+              id="gr-name-input" className="gr-input" type="text" autoComplete="off" enterKeyHint="done" data-autofocus
+              value={createName} onChange={e => { setCreateName(e.target.value); setCreateError('') }}
+              aria-describedby={createError ? 'gr-create-error' : undefined}
+            />
+            {createError && <p className="gr-error gr-error--tight" id="gr-create-error" role="alert">{createError}</p>}
+            <button type="submit" className="gr-btn gr-btn--solid" disabled={!createName.trim() || creating}>{creating ? 'Creating…' : 'Create group'}</button>
+          </form>
+        </Sheet>
+      )}
+
+      {sheet?.type === 'options' && optionsGroup && (
+        <Sheet onClose={closeSheet} labelledBy="gr-sheet-title" returnKey={`opts-${optionsGroup.id}`}>
+          <h2 className="gr-sheet__title gr-sheet__title--wrap" id="gr-sheet-title">{optionsGroup.name}</h2>
+          <div className="gr-rows">
+            <button type="button" className="gr-row" onClick={() => { closeSheet(); openTable(optionsGroup) }}>
+              <span>View group table</span><span className="gr-row__chev" aria-hidden="true">&rsaquo;</span>
+            </button>
+            <button type="button" className="gr-row" onClick={() => handleCopyCode(optionsGroup)}>
+              <span>Copy invite code</span><span className="gr-code">{String(optionsGroup.invite_code).toUpperCase()}</span>
+            </button>
+            <button type="button" className="gr-row gr-row--danger" onClick={() => setSheet({ type: 'leave', id: optionsGroup.id })}>
+              <span>Leave group</span>
+            </button>
+          </div>
+        </Sheet>
+      )}
+
+      {sheet?.type === 'leave' && optionsGroup && (
+        <Sheet onClose={closeSheet} labelledBy="gr-sheet-title" returnKey={`opts-${optionsGroup.id}`}>
+          <h2 className="gr-sheet__title gr-sheet__title--wrap" id="gr-sheet-title">Leave {optionsGroup.name}?</h2>
+          <p className="gr-sheet__text">You&rsquo;ll come off the group table. Your Saturday League points aren&rsquo;t affected, and you can rejoin with the code.</p>
+          <div className="gr-actions gr-actions--stack">
+            <button type="button" className="gr-btn gr-btn--danger" onClick={() => handleLeave(optionsGroup)} disabled={leaving}>{leaving ? 'Leaving…' : 'Leave group'}</button>
+            <button type="button" className="gr-btn gr-btn--text" onClick={closeSheet}>Cancel</button>
+          </div>
+        </Sheet>
+      )}
+
+      {sheet?.type === 'created' && (
+        <Sheet onClose={closeSheet} labelledBy="gr-sheet-title">
+          <h2 className="gr-sheet__title gr-sheet__title--wrap" id="gr-sheet-title">{sheet.group.name} is ready</h2>
+          <p className="gr-sheet__text">Send your mates the invite link so they can join.</p>
+          <div className="gr-actions gr-actions--stack">
+            <button type="button" className="gr-btn gr-btn--solid" data-autofocus onClick={async () => { closeSheet(); await handleInvite(sheet.group) }}>Share invite link</button>
+            <button type="button" className="gr-btn gr-btn--text" onClick={closeSheet}>Done</button>
+          </div>
+        </Sheet>
+      )}
+    </div>
+  )
 }
