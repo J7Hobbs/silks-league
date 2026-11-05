@@ -122,6 +122,8 @@
   overflow: hidden;
 }
 .pk-runner--on { background: var(--gold-tint); border-color: var(--gold); }
+/* The saved pick: gold border, a warmer fill, and a solid gold price (see .pk-price--pick). */
+.pk-runner--pick { background: #1f2b12; border: 1.5px solid var(--gold); }
 .pk-runner--wd { opacity: 0.5; }
 
 .pk-runner__row {
@@ -155,10 +157,36 @@
 .pk-runner__num { flex: none; font-size: 12px; color: var(--text-muted); }
 .pk-runner__name { font-size: 15px; font-weight: 600; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pk-runner__sub { font-size: 12px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pk-runner__side { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
-.pk-runner__odds { font-family: var(--font-heading); font-weight: 700; font-size: 15px; line-height: 1.1; }
-.pk-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; line-height: 1; padding: 3px 6px; border-radius: 5px; background: var(--gold); color: var(--bg); white-space: nowrap; }
-.pk-nr { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; line-height: 1; padding: 3px 6px; border-radius: 5px; border: 1px solid rgba(242, 239, 228, 0.3); color: var(--text-muted); }
+.pk-runner__side { flex: none; display: flex; align-items: center; }
+
+/* The price button. Outlined by default; solid gold once the runner is the saved pick. */
+.pk-price {
+  flex: none;
+  box-sizing: border-box;
+  min-width: 58px;
+  height: 42px;
+  padding: 0 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: var(--surface-deep);
+  border: 1.5px solid rgba(201, 168, 76, 0.55);
+  color: var(--gold);
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 19px;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+  white-space: nowrap;
+}
+.pk-price--pick { background: var(--gold); border-color: transparent; color: var(--bg); }
+.pk-price--wd { border-color: rgba(242, 239, 228, 0.15); color: var(--nav-inactive); }
+
+/* Read by screen readers only. */
+.pk-sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 
 /* ── Expanded bet panel (under the selected runner) ── */
 .pk-panel { display: flex; flex-direction: column; gap: 12px; padding: 12px; border-top: 1px solid rgba(201, 168, 76, 0.3); }
