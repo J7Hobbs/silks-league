@@ -1,369 +1,370 @@
 /**
- * Silks League — Auth Page (Login + Sign Up)
+ * Silks League — Auth page
  *
- * Signup collects: full_name, username, email, password
- * Username is stored in profiles.username after account creation.
- * On login, if profile has no username set, a modal prompts them to set one.
+ * One page, five views: sign up, check your email (after sign-up), log in, forgot password,
+ * and reset-link-sent. Sign-up collects full_name, username, email, password. The username is
+ * saved to profiles.username after the account exists; if a profile has none on log-in, a
+ * small modal asks for one.
  */
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { cleanCode, savePendingCode, readPendingCode } from '../lib/invite.js'
+import { cleanCode, savePendingCode, readPendingCode, checkInviteCode } from '../lib/invite.js'
 import { postAuthDestination } from '../lib/onboarding.js'
-
-function friendlyError(err) {
-  const msg = err?.message || ''
-  if (msg === 'Failed to fetch')
-    return 'Cannot connect to the server. The Supabase project may be paused.'
-  if (msg.toLowerCase().includes('user already registered') ||
-      msg.toLowerCase().includes('already been registered') ||
-      msg.toLowerCase().includes('email address is already'))
-    return 'An account with this email already exists. Please log in instead.'
-  if (msg.toLowerCase().includes('invalid login credentials') ||
-      msg.toLowerCase().includes('invalid email or password'))
-    return 'Incorrect email or password. Please try again.'
-  if (msg.toLowerCase().includes('email not confirmed'))
-    return 'Please check your email and click the confirmation link before logging in.'
-  if (msg.toLowerCase().includes('rate limit') || msg.toLowerCase().includes('too many'))
-    return 'Too many attempts. Please wait a few minutes and try again.'
-  if (msg.toLowerCase().includes('database error'))
-    return 'There was a problem creating your account. Please try again or contact support.'
-  return msg || 'Something went wrong. Please try again.'
-}
-
-const USERNAME_REGEX = /^[a-zA-Z0-9]{3,20}$/
+import { friendlyAuthError, isUnconfirmed, signUpFoundExisting, USERNAME_REGEX } from '../lib/authFlow.js'
+import { mailLinkFor } from '../lib/mailLink.js'
+import { currentDevice } from '../lib/device.js'
+import { Brand, EnvelopeIcon, PasswordField, InviteCard, UsernameHint } from '../components/auth/AuthBits.jsx'
+import { useCooldown, useUsernameStatus } from '../components/auth/authHooks.js'
+import '../styles/auth.css'
 
 export default function Auth() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const [mode, setMode] = useState(searchParams.get('mode') === 'signup' ? 'signup' : 'login')
+  const mode = searchParams.get('mode')
+  const [view, setView] = useState(mode === 'signup' ? 'signup' : mode === 'forgot' ? 'forgot' : 'login')
+  const [form, setForm] = useState({ fullName: '', username: '', email: '', password: '' })
   const [loading, setLoading] = useState(false)
-  const [error, setError]     = useState('')
-  const [success, setSuccess] = useState('')
+  const [error, setError] = useState('')
+  const [exists, setExists] = useState(false)           // sign-up: that email already has an account
+  const [unconfirmed, setUnconfirmed] = useState(false) // log-in: account exists but the email isn't confirmed
+  const [sent, setSent] = useState(false)               // an email was re-sent from this view
+  const [resendError, setResendError] = useState('')
+  const [sending, setSending] = useState(false)
+  const [left, startCooldown] = useCooldown()
 
   // An invite code that came with the link (/auth?join=CODE) or is waiting from the invite
   // page. It is kept through sign-up and log-in, then the player is sent to join the group.
   const [inviteCode] = useState(() => cleanCode(searchParams.get('join')) || readPendingCode(null))
   useEffect(() => { if (inviteCode) savePendingCode(inviteCode) }, [inviteCode])
 
-  const [form, setForm] = useState({
-    fullName: '', username: '', email: '', password: '', confirmPassword: '',
-  })
-
-  // ── Username availability check ──────────────────────────────
-  const [unStatus, setUnStatus] = useState(null) // null | 'checking' | 'ok' | 'taken' | 'invalid'
-  const unTimer = useRef(null)
-
+  // The group's name for the "You're joining" card: a string (name, or '' if we couldn't look it up),
+  // false when no such group exists (no card), null while we find out.
+  const [group, setGroup] = useState(null)
   useEffect(() => {
-    const val = form.username.trim()
-    if (!val || mode !== 'signup') { setUnStatus(null); return }
-    if (!USERNAME_REGEX.test(val)) { setUnStatus('invalid'); return }
-    setUnStatus('checking')
-    clearTimeout(unTimer.current)
-    unTimer.current = setTimeout(async () => {
-      const { data } = await supabase
-        .from('profiles').select('id').eq('username', val).maybeSingle()
-      setUnStatus(data ? 'taken' : 'ok')
-    }, 450)
-    return () => clearTimeout(unTimer.current)
-  }, [form.username, mode])
+    if (!inviteCode) return
+    let off = false
+    checkInviteCode(inviteCode).then(name => { if (!off) setGroup(name === null ? false : (name || '')) })
+    return () => { off = true }
+  }, [inviteCode])
+  const showInvite = !!inviteCode && typeof group === 'string'
 
-  // ── Username-setup modal (for existing users with no username) ─
-  const [showUnModal, setShowUnModal]   = useState(false)
-  const [modalUn, setModalUn]           = useState('')
-  const [modalUnStatus, setModalUnStatus] = useState(null)
-  const [modalUserId, setModalUserId]   = useState(null)
-  const [modalDest, setModalDest]       = useState('/dashboard')
-  const modalTimer = useRef(null)
+  // A new view starts at the top (the previous one may have been scrolled on a small screen).
+  useEffect(() => { window.scrollTo(0, 0) }, [view])
 
-  useEffect(() => {
-    const val = modalUn.trim()
-    if (!val) { setModalUnStatus(null); return }
-    if (!USERNAME_REGEX.test(val)) { setModalUnStatus('invalid'); return }
-    setModalUnStatus('checking')
-    clearTimeout(modalTimer.current)
-    modalTimer.current = setTimeout(async () => {
-      const { data } = await supabase
-        .from('profiles').select('id').eq('username', val).maybeSingle()
-      setModalUnStatus(data ? 'taken' : 'ok')
-    }, 450)
-    return () => clearTimeout(modalTimer.current)
-  }, [modalUn])
+  const unStatus = useUsernameStatus(form.username, view === 'signup')
 
+  // ── Username-setup modal (for existing players with no username) ──
+  const [showUnModal, setShowUnModal] = useState(false)
+  const [modalUn, setModalUn] = useState('')
+  const [modalUserId, setModalUserId] = useState(null)
+  const [modalDest, setModalDest] = useState('/dashboard')
+  const modalStatus = useUsernameStatus(modalUn, showUnModal)
+
+  const go = (next) => {
+    setView(next)
+    setError(''); setExists(false); setUnconfirmed(false); setSent(false); setResendError('')
+  }
   const update = (field) => (e) => {
-    setForm({ ...form, [field]: e.target.value })
-    setError('')
+    setForm(f => ({ ...f, [field]: e.target.value }))
+    setError(''); setExists(false)
   }
 
-  const handleSubmit = async (e) => {
+  // ── Sign up ──
+  const handleSignUp = async (e) => {
     e.preventDefault()
-    setError('')
-    setSuccess('')
-
-    if (mode === 'signup') {
-      if (!form.fullName.trim())        { setError('Please enter your full name.'); return }
-      if (!form.username.trim())        { setError('Please choose a username.'); return }
-      if (!USERNAME_REGEX.test(form.username.trim())) {
-        setError('Username must be 3–20 characters, letters and numbers only.'); return
-      }
-      if (unStatus === 'taken')         { setError('That username is already taken.'); return }
-      if (unStatus === 'checking')      { setError('Still checking username — please wait a moment.'); return }
-      if (form.password !== form.confirmPassword) { setError('Passwords do not match.'); return }
-      if (form.password.length < 6)    { setError('Password must be at least 6 characters.'); return }
-    }
+    setError(''); setExists(false)
+    const username = form.username.trim()
+    if (!form.fullName.trim())        { setError('Please enter your name.'); return }
+    if (!username)                    { setError('Please choose a username.'); return }
+    if (!USERNAME_REGEX.test(username)) { setError('Username must be 3–20 characters, letters and numbers only.'); return }
+    if (unStatus === 'taken')         { setError('That username is already taken.'); return }
+    if (unStatus === 'checking')      { setError('Still checking your username. Please wait a moment.'); return }
+    if (form.password.length < 6)     { setError('Password must be at least 6 characters.'); return }
 
     setLoading(true)
     try {
-      if (mode === 'signup') {
-        const { error: signUpError } = await supabase.auth.signUp({
-          email: form.email,
-          password: form.password,
-          options: { data: {
-            full_name: form.fullName.trim(),
-            username: form.username.trim(),
-            // Stays on the account, so it still works if the confirmation email opens elsewhere.
-            ...(inviteCode ? { invite_code: inviteCode } : {}),
-          } },
-        })
-        if (signUpError) throw signUpError
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email: form.email.trim(),
+        password: form.password,
+        options: { data: {
+          full_name: form.fullName.trim(),
+          username,
+          // Stays on the account, so it still works if the confirmation email opens elsewhere.
+          ...(inviteCode ? { invite_code: inviteCode } : {}),
+        } },
+      })
+      if (signUpFoundExisting(data, signUpError)) { setExists(true); return }
+      if (signUpError) throw signUpError
 
-        // Try to save username to profiles immediately (works if email confirmation is disabled)
-        // If it fails it's fine — the modal will prompt on first login
-        try {
-          const { data: { user } } = await supabase.auth.getUser()
-          if (user) {
-            await supabase.from('profiles')
-              .update({ username: form.username.trim(), full_name: form.fullName.trim(), email: form.email.trim() })
-              .eq('id', user.id)
-          }
-        } catch (_) {}
-
-        setSuccess('Account created! Check your email to confirm, then log in.')
-        setMode('login')
-        setForm({ fullName: '', username: '', email: form.email, password: '', confirmPassword: '' })
-
-      } else {
-        const { data, error: signInError } = await supabase.auth.signInWithPassword({
-          email: form.email,
-          password: form.password,
-        })
-        if (signInError) throw signInError
-
-        const uid = data.user?.id
-        if (uid) {
-          const { data: prof } = await supabase
-            .from('profiles').select('username').eq('id', uid).single()
-          // Waiting invite code first, then the welcome flow for new players, otherwise Home.
-          const dest = await postAuthDestination(data.user)
-
-          // If username is missing, save it from metadata if available
-          if (!prof?.username) {
-            const metaUsername = data.user?.user_metadata?.username
-            if (metaUsername) {
-              await supabase.from('profiles').update({ username: metaUsername }).eq('id', uid)
-              navigate(dest)
-            } else {
-              // Show modal to set username
-              setModalUserId(uid)
-              setModalDest(dest)
-              setLoading(false)
-              setShowUnModal(true)
-              return
-            }
-          } else {
-            navigate(dest)
-          }
-        } else {
-          navigate('/dashboard')
+      // Try to save the username to profiles straight away (works only if the player is already
+      // signed in). If it fails that's fine: the username modal asks on first log-in.
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user) {
+          await supabase.from('profiles')
+            .update({ username, full_name: form.fullName.trim(), email: form.email.trim() })
+            .eq('id', user.id)
         }
+      } catch { /* ignore */ }
+
+      if (data?.session && data.user) { navigate(await postAuthDestination(data.user)); return }
+
+      setForm(f => ({ ...f, email: f.email.trim(), password: '' }))
+      startCooldown()   // the sign-up email counts as the first send
+      setView('check')
+    } catch (err) {
+      console.error('[Auth] sign-up error:', err)
+      setError(friendlyAuthError(err))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // ── Log in ──
+  const handleLogin = async (e) => {
+    e.preventDefault()
+    setError(''); setUnconfirmed(false); setSent(false); setResendError('')
+    setLoading(true)
+    try {
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({
+        email: form.email.trim(),
+        password: form.password,
+      })
+      if (signInError) throw signInError
+
+      const uid = data.user?.id
+      if (!uid) { navigate('/dashboard'); return }
+      const { data: prof } = await supabase.from('profiles').select('username').eq('id', uid).single()
+      // Waiting invite code first, then the welcome flow for new players, otherwise Home.
+      const dest = await postAuthDestination(data.user)
+
+      if (prof?.username) { navigate(dest); return }
+      // No username yet: take it from the account if we can, otherwise ask.
+      const metaUsername = data.user?.user_metadata?.username
+      if (metaUsername) {
+        await supabase.from('profiles').update({ username: metaUsername }).eq('id', uid)
+        navigate(dest)
+      } else {
+        setModalUserId(uid)
+        setModalDest(dest)
+        setShowUnModal(true)
       }
     } catch (err) {
-      console.error('[Auth] error:', err)
-      setError(friendlyError(err))
+      if (isUnconfirmed(err)) { setUnconfirmed(true); return }
+      console.error('[Auth] log-in error:', err)
+      setError(friendlyAuthError(err))
     } finally {
       setLoading(false)
     }
   }
 
   const handleSaveModalUsername = async () => {
-    const val = modalUn.trim()
-    if (!USERNAME_REGEX.test(val))  { return }
-    if (modalUnStatus !== 'ok')     { return }
+    if (modalStatus !== 'ok') return
     setLoading(true)
-    const { error } = await supabase.from('profiles')
-      .update({ username: val }).eq('id', modalUserId)
+    const { error: saveError } = await supabase.from('profiles').update({ username: modalUn.trim() }).eq('id', modalUserId)
     setLoading(false)
-    if (error) { setError('Could not save username. Please try again.'); return }
+    if (saveError) { setError('Could not save your username. Please try again.'); return }
     setShowUnModal(false)
     navigate(modalDest)
   }
 
-  // ── Username status indicator ─────────────────────────────────
-  const unIndicator = (status) => {
-    if (status === 'checking') return <span style={s.unChecking}>Checking…</span>
-    if (status === 'ok')       return <span style={s.unOk}>✓ Available</span>
-    if (status === 'taken')    return <span style={s.unTaken}>✗ Already taken</span>
-    if (status === 'invalid')  return <span style={s.unTaken}>3–20 chars, letters & numbers only</span>
-    return null
+  // ── Emails: re-send the confirmation, send or re-send the reset link ──
+  async function resend(kind) {
+    if (left > 0 || sending) return
+    const email = form.email.trim()
+    setSending(true); setResendError('')
+    const { error: sendError } = kind === 'reset'
+      ? await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${window.location.origin}/reset-password` })
+      : await supabase.auth.resend({ type: 'signup', email })
+    setSending(false)
+    if (sendError) { setResendError(friendlyAuthError(sendError)); return }
+    setSent(true)
+    startCooldown()
+  }
+
+  const handleForgot = async (e) => {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+    const { error: sendError } = await supabase.auth.resetPasswordForEmail(form.email.trim(), {
+      redirectTo: `${window.location.origin}/reset-password`,
+    })
+    setLoading(false)
+    if (sendError) { setError(friendlyAuthError(sendError)); return }
+    setSent(false)
+    startCooldown()
+    setView('reset-sent')
+  }
+
+  const mail = mailLinkFor(form.email, currentDevice(false).os)
+  const resendLabel = sending ? 'Sending…' : left > 0 ? `Resend in ${left}s` : 'Resend email'
+  const groupLine = inviteCode && group !== false
+    ? `You’ll be logged in and into ${group || 'your group'}`
+    : 'You’ll be logged in and ready to play'
+
+  const mailButton = mail && (
+    <a className="au-btn au-btn--solid" href={mail.href} {...(mail.newTab ? { target: '_blank', rel: 'noopener noreferrer' } : {})}>Open Mail</a>
+  )
+  const resendStatus = (sent || resendError) && (
+    <p className={resendError ? 'au-error au-error--tight' : 'au-sent'} role={resendError ? 'alert' : 'status'}>
+      {resendError || 'Sent. It can take a minute to arrive.'}
+    </p>
+  )
+
+  let content
+  if (view === 'check') {
+    content = (
+      <>
+        <EnvelopeIcon />
+        <div className="au-label-top">ONE MORE STEP</div>
+        <h1 className="au-h1">Check your email</h1>
+        <p className="au-text">We&rsquo;ve sent a confirmation link to <strong className="au-email">{form.email}</strong></p>
+        <ol className="au-steps">
+          <li className="au-step"><span className="au-step__num" aria-hidden="true">1</span><span>Open the email from Silks League</span></li>
+          <li className="au-step"><span className="au-step__num" aria-hidden="true">2</span><span>Tap <strong>Confirm my account</strong></span></li>
+          <li className="au-step"><span className="au-step__num" aria-hidden="true">3</span><span>{groupLine}</span></li>
+        </ol>
+        <p className="au-hint au-hint--spaced">Can&rsquo;t see it? Check your junk folder. It can take a minute.</p>
+        <div className="au-actions">
+          {mailButton}
+          <button type="button" className="au-btn au-btn--outline" onClick={() => resend('signup')} disabled={left > 0 || sending}>{resendLabel}</button>
+          {resendStatus}
+          <button type="button" className="au-btn au-btn--text" onClick={() => go('signup')}>Wrong email? Start again</button>
+        </div>
+      </>
+    )
+  } else if (view === 'reset-sent') {
+    content = (
+      <>
+        <EnvelopeIcon />
+        <div className="au-label-top">PASSWORD RESET</div>
+        <h1 className="au-h1">Check your email for a reset link</h1>
+        <p className="au-text">We&rsquo;ve sent it to <strong className="au-email">{form.email}</strong>. Tap <strong>Set a new password</strong> in the email.</p>
+        <p className="au-hint au-hint--spaced">Can&rsquo;t see it? Check your junk folder. It can take a minute.</p>
+        <div className="au-actions">
+          {mailButton}
+          <button type="button" className="au-btn au-btn--outline" onClick={() => resend('reset')} disabled={left > 0 || sending}>{resendLabel}</button>
+          {resendStatus}
+          <button type="button" className="au-btn au-btn--text" onClick={() => go('login')}>Back to log in</button>
+        </div>
+      </>
+    )
+  } else if (view === 'forgot') {
+    content = (
+      <>
+        <h1 className="au-h1">Reset your password</h1>
+        <p className="au-text">Enter your email and we&rsquo;ll send you a link to set a new password.</p>
+        <form className="au-form" onSubmit={handleForgot}>
+          <div className="au-field">
+            <label className="au-label" htmlFor="fg-email">Email</label>
+            <input id="fg-email" className="au-input" type="email" inputMode="email" autoComplete="email" autoCapitalize="none" autoCorrect="off" spellCheck="false"
+              value={form.email} onChange={update('email')} required />
+          </div>
+          {error && <div className="au-error" role="alert">{error}</div>}
+          <button type="submit" className="au-btn au-btn--solid" disabled={loading}>{loading ? 'Sending…' : 'Send reset link'}</button>
+          <button type="button" className="au-btn au-btn--text" onClick={() => go('login')}>Back to log in</button>
+        </form>
+      </>
+    )
+  } else if (view === 'signup') {
+    content = (
+      <>
+        <h1 className="au-h1">Join free</h1>
+        <p className="au-text">Create an account to start playing.</p>
+        {showInvite && <InviteCard name={group} />}
+        <form className="au-form" onSubmit={handleSignUp}>
+          <div className="au-field">
+            <label className="au-label" htmlFor="su-name">Your name</label>
+            <input id="su-name" className="au-input" type="text" autoComplete="name" autoCapitalize="words"
+              value={form.fullName} onChange={update('fullName')} required />
+          </div>
+          <div className="au-field">
+            <label className="au-label" htmlFor="su-username">Username</label>
+            <input id="su-username" className="au-input" type="text" autoComplete="off" autoCapitalize="none" autoCorrect="off" spellCheck="false" maxLength={20}
+              value={form.username} onChange={update('username')} required aria-invalid={unStatus === 'taken' || unStatus === 'invalid' || undefined} />
+            <UsernameHint status={unStatus} idle="Shown on the leaderboard" />
+          </div>
+          <div className="au-field">
+            <label className="au-label" htmlFor="su-email">Email</label>
+            <input id="su-email" className="au-input" type="email" inputMode="email" autoComplete="email" autoCapitalize="none" autoCorrect="off" spellCheck="false"
+              value={form.email} onChange={update('email')} required />
+          </div>
+          <PasswordField id="su-password" label="Password" value={form.password} onChange={update('password')} autoComplete="new-password" hint="At least 6 characters" />
+          {exists && (
+            <div className="au-error" role="alert">
+              An account with this email already exists.{' '}
+              <button type="button" className="au-inline" onClick={() => go('login')}>Log in instead</button>
+            </div>
+          )}
+          {error && <div className="au-error" role="alert">{error}</div>}
+          <button type="submit" className="au-btn au-btn--solid" disabled={loading}>{loading ? 'Creating account…' : 'Create account'}</button>
+          <p className="au-fine">We&rsquo;ll email you a link to confirm your account.</p>
+        </form>
+        <p className="au-switch">Already have an account? <button type="button" className="au-link" onClick={() => go('login')}>Log in</button></p>
+      </>
+    )
+  } else {
+    content = (
+      <>
+        <h1 className="au-h1">Welcome back</h1>
+        <p className="au-text">Log in to make your picks.</p>
+        {showInvite && <InviteCard name={group} />}
+        <form className="au-form" onSubmit={handleLogin}>
+          <div className="au-field">
+            <label className="au-label" htmlFor="li-email">Email</label>
+            <input id="li-email" className="au-input" type="email" inputMode="email" autoComplete="email" autoCapitalize="none" autoCorrect="off" spellCheck="false"
+              value={form.email} onChange={update('email')} required />
+          </div>
+          <PasswordField
+            id="li-password" label="Password" value={form.password} onChange={update('password')} autoComplete="current-password"
+            labelExtra={<button type="button" className="au-link au-link--small" onClick={() => go('forgot')}>Forgot password?</button>}
+          />
+          {unconfirmed && (
+            <div className="au-note" role="alert">
+              <span>You haven&rsquo;t confirmed your email yet. Check your inbox (and junk) for the link.</span>
+              {resendError
+                ? <span className="au-note__err">{resendError}</span>
+                : sent && left > 0
+                  ? <span className="au-note__sent">Sent. Resend in {left}s</span>
+                  : <button type="button" className="au-link" onClick={() => resend('signup')} disabled={left > 0 || sending}>
+                      {sending ? 'Sending…' : left > 0 ? `Resend in ${left}s` : 'Resend it'}
+                    </button>}
+            </div>
+          )}
+          {error && <div className="au-error" role="alert">{error}</div>}
+          <button type="submit" className="au-btn au-btn--solid" disabled={loading}>{loading ? 'Logging in…' : 'Log in'}</button>
+        </form>
+        <p className="au-switch">New here? <button type="button" className="au-link" onClick={() => go('signup')}>Join free</button></p>
+      </>
+    )
   }
 
   return (
-    <div style={s.page}>
-      <div style={s.card}>
+    <div className="au">
+      <Brand />
+      <main className="au-main">{content}</main>
 
-        {/* Username-setup modal */}
-        {showUnModal && (
-          <div style={s.modalOverlay}>
-            <div style={s.modal}>
-              <div style={s.modalTitle}>Choose a username</div>
-              <p style={s.modalSub}>This is how you'll appear on leaderboards. You can change it later in your profile.</p>
-              <input
-                style={s.input}
-                type="text"
-                placeholder="e.g. jackh99"
-                value={modalUn}
-                onChange={e => setModalUn(e.target.value)}
-                autoFocus
-                maxLength={20}
-              />
-              <div style={{ minHeight: '1.2rem', marginTop: '0.35rem' }}>{unIndicator(modalUnStatus)}</div>
-              <button
-                style={{ ...s.submitBtn, marginTop: '1rem', ...(modalUnStatus !== 'ok' || loading ? s.submitBtnLoading : {}) }}
-                disabled={modalUnStatus !== 'ok' || loading}
-                onClick={handleSaveModalUsername}
-              >
-                {loading ? 'Saving…' : 'Save username →'}
-              </button>
-              <button
-                style={{ ...s.toggleLink, display: 'block', marginTop: '0.75rem', textAlign: 'center' }}
-                onClick={() => { setShowUnModal(false); navigate(modalDest) }}
-                type="button"
-              >
-                Skip for now
-              </button>
+      {showUnModal && (
+        <div className="au-overlay">
+          <div className="au-modal" role="dialog" aria-modal="true" aria-labelledby="au-modal-title">
+            <h2 className="au-modal__title" id="au-modal-title">Choose a username</h2>
+            <p className="au-text au-text--small">This is how you&rsquo;ll appear on leaderboards. You can change it later in your profile.</p>
+            <div className="au-field">
+              <label className="au-label" htmlFor="un-modal">Username</label>
+              <input id="un-modal" className="au-input" type="text" autoComplete="off" autoCapitalize="none" autoCorrect="off" spellCheck="false" maxLength={20} autoFocus
+                value={modalUn} onChange={e => setModalUn(e.target.value)} />
+              <UsernameHint status={modalStatus} idle="Shown on the leaderboard" />
             </div>
+            {error && <div className="au-error" role="alert">{error}</div>}
+            <button type="button" className="au-btn au-btn--solid" disabled={modalStatus !== 'ok' || loading} onClick={handleSaveModalUsername}>
+              {loading ? 'Saving…' : 'Save username'}
+            </button>
+            <button type="button" className="au-btn au-btn--text" onClick={() => { setShowUnModal(false); navigate(modalDest) }}>Skip for now</button>
           </div>
-        )}
-
-        {/* Logo */}
-        <div style={s.logo}>Silks League</div>
-
-        {/* Tabs */}
-        <div style={s.tabs}>
-          <button style={{ ...s.tab, ...(mode === 'login' ? s.tabActive : {}) }}
-            onClick={() => { setMode('login'); setError(''); setSuccess('') }} type="button">
-            Log in
-          </button>
-          <button style={{ ...s.tab, ...(mode === 'signup' ? s.tabActive : {}) }}
-            onClick={() => { setMode('signup'); setError(''); setSuccess('') }} type="button">
-            Sign up
-          </button>
         </div>
-
-        <h1 style={s.heading}>{mode === 'login' ? 'Welcome back.' : 'Join for free.'}</h1>
-        <p style={s.sub}>{mode === 'login' ? 'Log in to see your group and picks.' : 'Create an account to start playing.'}</p>
-
-        {inviteCode && (
-          <div style={s.inviteBox}>
-            You&rsquo;re joining a group with invite code <strong>{inviteCode.toUpperCase()}</strong>. You&rsquo;ll be added as soon as you&rsquo;re logged in.
-          </div>
-        )}
-        {success && <div style={s.successBox}>{success}</div>}
-        {error   && <div style={s.errorBox}>{error}</div>}
-
-        <form onSubmit={handleSubmit} style={s.form}>
-          {mode === 'signup' && (
-            <div style={s.field}>
-              <label style={s.label}>Full name</label>
-              <input style={s.input} type="text" placeholder="Jack Hobbs"
-                value={form.fullName} onChange={update('fullName')} required autoComplete="name" />
-            </div>
-          )}
-
-          {mode === 'signup' && (
-            <div style={s.field}>
-              <label style={s.label}>Username</label>
-              <input style={s.input} type="text" placeholder="e.g. jackh99"
-                value={form.username}
-                onChange={e => { update('username')(e); setError('') }}
-                required maxLength={20} autoComplete="off"
-              />
-              <div style={{ minHeight: '1.1rem' }}>{unIndicator(unStatus)}</div>
-            </div>
-          )}
-
-          <div style={s.field}>
-            <label style={s.label}>Email address</label>
-            <input style={s.input} type="email" placeholder="you@example.com"
-              value={form.email} onChange={update('email')} required autoComplete="email" />
-          </div>
-
-          <div style={s.field}>
-            <label style={s.label}>Password</label>
-            <input style={s.input} type="password"
-              placeholder={mode === 'signup' ? 'Min. 6 characters' : '••••••••'}
-              value={form.password} onChange={update('password')} required
-              autoComplete={mode === 'signup' ? 'new-password' : 'current-password'} />
-          </div>
-
-          {mode === 'signup' && (
-            <div style={s.field}>
-              <label style={s.label}>Confirm password</label>
-              <input style={s.input} type="password" placeholder="Re-enter your password"
-                value={form.confirmPassword} onChange={update('confirmPassword')} required
-                autoComplete="new-password" />
-            </div>
-          )}
-
-          <button type="submit"
-            style={{ ...s.submitBtn, ...(loading ? s.submitBtnLoading : {}) }}
-            disabled={loading}>
-            {loading ? 'Please wait...' : mode === 'login' ? 'Log in →' : 'Create account →'}
-          </button>
-        </form>
-
-        <p style={s.toggleText}>
-          {mode === 'login' ? "Don't have an account? " : 'Already have an account? '}
-          <button type="button" style={s.toggleLink}
-            onClick={() => { setMode(mode === 'login' ? 'signup' : 'login'); setError(''); setSuccess('') }}>
-            {mode === 'login' ? 'Sign up free' : 'Log in'}
-          </button>
-        </p>
-
-        <a href="/" style={s.backLink}>← Back to home</a>
-      </div>
+      )}
     </div>
   )
-}
-
-const s = {
-  inviteBox: { background: 'rgba(201,168,76,0.1)', border: '1px solid rgba(201,168,76,0.35)', borderRadius: '8px', padding: '0.7rem 0.9rem', fontSize: '0.82rem', color: '#e8f0e8', lineHeight: 1.45, marginBottom: '1rem' },
-  page:    { minHeight: '100vh', background: '#0a1a08', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem', fontFamily: "'DM Sans', sans-serif" },
-  card:    { background: '#0d1f0d', border: '1px solid rgba(201,168,76,0.2)', borderRadius: '18px', padding: '2.5rem', width: '100%', maxWidth: '420px', boxShadow: '0 24px 80px rgba(0,0,0,0.5)', position: 'relative' },
-  logo:    { fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.4rem', color: '#c9a84c', letterSpacing: '0.1em', marginBottom: '1.75rem' },
-  tabs:    { display: 'flex', background: 'rgba(0,0,0,0.3)', borderRadius: '8px', padding: '3px', gap: '3px', marginBottom: '1.75rem', border: '1px solid rgba(201,168,76,0.15)' },
-  tab:     { flex: 1, padding: '0.55rem 1rem', borderRadius: '6px', fontSize: '0.875rem', fontWeight: '500', background: 'transparent', color: '#5a8a5a', border: 'none', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", transition: 'all 0.2s' },
-  tabActive: { background: '#c9a84c', color: '#0a1a08', fontWeight: '600' },
-  heading: { fontFamily: "'Bebas Neue', sans-serif", fontSize: '2.2rem', color: '#e8f0e8', letterSpacing: '0.03em', marginBottom: '0.4rem', lineHeight: 1.05 },
-  sub:     { fontSize: '0.875rem', color: '#5a8a5a', marginBottom: '1.75rem' },
-  successBox: { background: 'rgba(74,222,128,0.1)', border: '1px solid rgba(74,222,128,0.3)', borderRadius: '8px', padding: '0.85rem 1rem', fontSize: '0.875rem', color: '#4ade80', marginBottom: '1.25rem', lineHeight: 1.5 },
-  errorBox:   { background: 'rgba(239,68,68,0.1)',  border: '1px solid rgba(239,68,68,0.3)',  borderRadius: '8px', padding: '0.85rem 1rem', fontSize: '0.875rem', color: '#f87171', marginBottom: '1.25rem', lineHeight: 1.5 },
-  form:    { display: 'flex', flexDirection: 'column', gap: '1rem' },
-  field:   { display: 'flex', flexDirection: 'column', gap: '0.4rem' },
-  label:   { fontSize: '0.8rem', fontWeight: '600', color: '#5a8a5a', letterSpacing: '0.04em', textTransform: 'uppercase' },
-  input:   { background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(201,168,76,0.2)', borderRadius: '8px', padding: '0.85rem 1rem', fontFamily: "'DM Sans', sans-serif", fontSize: '0.9rem', color: '#e8f0e8', outline: 'none', width: '100%', boxSizing: 'border-box' },
-  submitBtn: { marginTop: '0.5rem', background: '#c9a84c', color: '#0a1a08', fontWeight: '600', fontSize: '1rem', padding: '0.9rem 2rem', borderRadius: '8px', border: 'none', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", transition: 'background 0.2s', width: '100%' },
-  submitBtnLoading: { background: 'rgba(201,168,76,0.5)', cursor: 'not-allowed' },
-  toggleText: { marginTop: '1.25rem', fontSize: '0.85rem', color: '#5a8a5a', textAlign: 'center' },
-  toggleLink: { background: 'none', border: 'none', color: '#c9a84c', fontWeight: '600', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", fontSize: '0.85rem', padding: 0, textDecoration: 'underline' },
-  backLink:   { display: 'block', marginTop: '1rem', textAlign: 'center', fontSize: '0.8rem', color: '#5a8a5a', textDecoration: 'none' },
-  unOk:       { fontSize: '0.75rem', color: '#4ade80' },
-  unTaken:    { fontSize: '0.75rem', color: '#f87171' },
-  unChecking: { fontSize: '0.75rem', color: '#5a8a5a' },
-  // Username modal
-  modalOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1.5rem' },
-  modal:  { background: '#0d1f0d', border: '1px solid rgba(201,168,76,0.3)', borderRadius: '16px', padding: '2rem', width: '100%', maxWidth: '360px', boxShadow: '0 24px 80px rgba(0,0,0,0.6)' },
-  modalTitle: { fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.6rem', color: '#c9a84c', letterSpacing: '0.05em', marginBottom: '0.5rem' },
-  modalSub:   { fontSize: '0.85rem', color: '#5a8a5a', marginBottom: '1.25rem', lineHeight: 1.5 },
 }

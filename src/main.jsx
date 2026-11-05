@@ -1,3 +1,4 @@
+import './lib/recovery.js'   // reads a password-reset link's address before Supabase clears it
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
@@ -22,8 +23,8 @@ import RaceDay             from './pages/RaceDay.jsx'
 import Festivals           from './pages/Festivals.jsx'
 import Welcome             from './pages/Welcome.jsx'
 import Join                from './pages/Join.jsx'
+import SetPassword         from './pages/SetPassword.jsx'
 import TabLayout           from './components/TabLayout.jsx'
-import InstallPrompt       from './components/InstallPrompt.jsx'
 import OneSignalInit       from './components/OneSignalInit.jsx'
 import { CompetitionProvider } from './context/CompetitionContext.jsx'
 
@@ -34,6 +35,7 @@ createRoot(document.getElementById('root')).render(
         <Routes>
           <Route path="/"          element={<App />}       />
           <Route path="/auth"      element={<Auth />}      />
+          <Route path="/reset-password" element={<SetPassword />} />
           <Route path="/welcome"   element={<Welcome />}   />
           <Route path="/join"      element={<Join />}      />
           <Route path="/join/:code" element={<Join />}     />
@@ -55,7 +57,6 @@ createRoot(document.getElementById('root')).render(
           <Route path="/festival-leaderboard"        element={<FestivalLeaderboard />}           />
           <Route path="/race-day"              element={<RaceDay />}              />
         </Routes>
-        <InstallPrompt />
         <OneSignalInit />
       </CompetitionProvider>
     </BrowserRouter>
