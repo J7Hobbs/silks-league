@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import Silk from '../Silk.jsx'
 import { pushStatus, watchPush, enablePush, needsHomeScreen } from '../../lib/notifications.js'
+import EchoRings from './EchoRings.jsx'
 import '../../styles/saturday-card.css'
 
 // The Saturday League card on Home. All the content comes ready-made from
@@ -9,8 +10,6 @@ import '../../styles/saturday-card.css'
 const RING = 96
 const STROKE = 9
 const GAP_PX = 3.5
-// Echo circles behind the ring: radius and opacity fading outwards.
-const ECHO = [[66, 0.16], [90, 0.138], [116, 0.115], [144, 0.093], [174, 0.07], [206, 0.05], [240, 0.03]]
 
 function Marker({ kind }) {
   if (kind === 'tick') {
@@ -55,11 +54,7 @@ function Ring({ ring, faint }) {
   const point = a => [c + r * Math.cos(a), c + r * Math.sin(a)]
   return (
     <div className="sc-ring">
-      <svg className="sc-echo" viewBox="-250 -250 500 500" aria-hidden="true">
-        {ECHO.map(([radius, opacity]) => (
-          <circle key={radius} cx="0" cy="0" r={radius} className="sc-echo__ring" style={{ opacity: faint ? opacity / 2 : opacity }} />
-        ))}
-      </svg>
+      <EchoRings faint={faint} />
       <svg className="sc-ring__svg" width={RING} height={RING} viewBox={`0 0 ${RING} ${RING}`} aria-hidden="true">
         <circle cx={c} cy={c} r={c} className="sc-ring__disc" />
         {ring.segments.map((kind, i) => {

@@ -82,24 +82,19 @@ export function LeagueSkeleton() {
 export function ResultsBodySkeleton() {
   return (
     <div className="sk-col" style={{ gap: 14 }} role="status" aria-busy="true" aria-label="Loading">
-      <div className="rs-tiles">
-        {[1, 2, 3].map(n => <Block key={n} h={70} r={14} />)}
+      <Block h={128} r={16} />
+      <div className="rs-boxes">
+        {[1, 2, 3].map(n => <Block key={n} h={58} r={12} />)}
       </div>
-      {[1, 2, 3].map(n => <Block key={n} h={104} r={16} />)}
+      {[1, 2, 3].map(n => <Block key={n} h={82} r={14} />)}
     </div>
   )
 }
-
 export function ResultsSkeleton() {
   return (
     <div className="app-page rs">
       <main className="rs__main">
         <h1 className="rs-title">Results</h1>
-        <div className="rs-period">
-          <Block h={44} w={44} r={12} />
-          <Block h={20} r={6} grow />
-          <Block h={44} w={44} r={12} />
-        </div>
         <ResultsBodySkeleton />
       </main>
     </div>

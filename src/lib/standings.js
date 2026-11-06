@@ -160,3 +160,25 @@ export async function festivalRank(userId, festivalId) {
   const names = await namesFor(Object.keys(totals))
   return rankOf(totals, wins, names, userId)
 }
+
+// Rank for one festival day, among players with points that day (festival_day_points, the
+// table the Festival leaderboard shows day by day). Ties break as everywhere else: points,
+// then winning picks on that day, then name. Null if the player has no points that day.
+export async function festivalDayRank(userId, festivalId, dayNumber, raceIds) {
+  const { data: rows } = await supabase
+    .from('festival_day_points').select('user_id, points')
+    .eq('festival_id', festivalId).eq('day_number', dayNumber)
+  const totals = {}
+  ;(rows || []).forEach(r => { totals[r.user_id] = (totals[r.user_id] || 0) + (r.points || 0) })
+  if (!(userId in totals)) return null
+  const scores = raceIds?.length
+    ? await fetchAll(() => supabase.from('festival_scores')
+        .select('id, user_id, total_points, position_achieved').in('festival_race_id', raceIds))
+    : []
+  const wins = {}
+  scores.forEach(s => {
+    if (s.position_achieved === 1 && s.user_id in totals) wins[s.user_id] = (wins[s.user_id] || 0) + 1
+  })
+  const names = await namesFor(Object.keys(totals))
+  return rankOf(totals, wins, names, userId)
+}

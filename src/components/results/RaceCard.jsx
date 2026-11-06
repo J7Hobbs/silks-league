@@ -1,38 +1,44 @@
 import Silk from '../Silk.jsx'
 import { ordinal } from '../../lib/format.js'
 
-// One race: where it ran and who won, the player's pick with its position and
-// points, and (on tap) the full placings.
+const BET = { win: 'Win', each_way: 'Each-way' }
+
+// One race: the player's pick with its price, and a score box with the finishing position and
+// points. Tap a race (once its result is in) to see the full placings.
 export default function RaceCard({ row, open, onToggle }) {
   const { pick, pending } = row
-  const expandable = !pending
   const note = pick?.replaced
     ? 'Original pick withdrawn – replaced with the favourite'
     : pick?.withdrawn ? 'Your pick was withdrawn' : ''
 
   const body = (
     <>
-      <span className="rs-card__top">
-        <span className="rs-card__where">{row.where}</span>
-        {pending ? (
-          <span className="rs-card__win">Result pending</span>
-        ) : row.winner && (
-          <span className="rs-card__win">
-            Won by {row.winner.name}{row.winner.sp ? ` · ${row.winner.sp}` : ''}
+      <span className="rs-card__silk">
+        {pick?.silk
+          ? <Silk runner={pick.silk} style={{ width: 30, height: 30 }} />
+          : <Silk outline style={{ width: 30, height: 30, opacity: 0.45 }} />}
+      </span>
+
+      <span className="rs-card__main">
+        <span className="rs-card__meta">{`Race ${row.raceNo}${row.time ? ` · ${row.time}` : ''}`}</span>
+        <span className={`rs-card__name${pick ? '' : ' rs-card__name--none'}`}>{pick ? pick.name : 'No pick'}</span>
+        {pick && (pick.price || BET[pick.betType]) && (
+          <span className="rs-card__bet">
+            {pick.price && <span className="pk-price rs-price">{pick.price}</span>}
+            {BET[pick.betType] && <span className="rs-card__type">{BET[pick.betType]}</span>}
           </span>
         )}
       </span>
 
-      <span className="rs-card__main">
-        {pick?.silk && <Silk runner={pick.silk} style={{ flex: 'none', width: 30, height: 30 }} />}
-        <span className="rs-card__pick">
-          <span className="rs-card__label">Your pick</span>
-          <span className={`rs-card__name${pick ? '' : ' rs-card__name--none'}`}>{pick ? pick.name : 'No pick'}</span>
-        </span>
-        {row.badge && <span className="rs-badge">{row.badge}</span>}
-        {row.eachWay && <span className="rs-badge rs-badge--ew">E/W</span>}
-        {!pending && (
-          <span className={`rs-pts rs-pts--${row.tone}`}>{row.points} pts</span>
+      <span className={`rs-score rs-score--${pending ? 'none' : row.tone}`}>
+        <span className="rs-score__top">{pending ? '—' : row.scoreTop}</span>
+        {pending ? (
+          <span className="rs-score__pending">Pending</span>
+        ) : (
+          <>
+            <span className="rs-score__pts">{row.points}</span>
+            <span className="rs-score__unit">pts</span>
+          </>
         )}
       </span>
 
@@ -41,21 +47,21 @@ export default function RaceCard({ row, open, onToggle }) {
   )
 
   return (
-    <div className="rs-card">
-      {expandable ? (
-        <button type="button" className="rs-card__hit" aria-expanded={open} onClick={onToggle}>{body}</button>
-      ) : (
+    <div className={`rs-card${open && !pending ? ' rs-card--open' : ''}`}>
+      {pending ? (
         <div className="rs-card__hit rs-card__hit--static">{body}</div>
+      ) : (
+        <button type="button" className="rs-card__hit" aria-expanded={open} onClick={onToggle}>{body}</button>
       )}
 
-      {open && expandable && (
+      {open && !pending && (
         <ol className="rs-places">
           {row.placings.map(pl => (
             <li key={pl.position} className={`rs-place${pl.mine ? ' rs-place--mine' : ''}`}>
               <span className="rs-place__pos">{ordinal(pl.position)}</span>
               <span className="rs-place__name">
-                {pl.name}
-                {pl.mine && <span className="rs-place__tag">Your pick</span>}
+                <span className="rs-place__horse">{pl.name}</span>
+                {pl.mine && <span className="rs-place__tag"> · your pick</span>}
               </span>
               <span className="rs-place__sp">{pl.sp}</span>
             </li>

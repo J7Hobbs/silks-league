@@ -1,49 +1,58 @@
 /**
  * Silks League — Results Page
- * Your results for the Saturday League (week by week) and for festivals that
- * have results (day by day). This replaces the old My Results page and the
- * Festival Results page. Points are read from scores / festival_scores as
- * stored, never recalculated; nothing on this page writes to the database.
+ * One race day at a time: the latest Saturday League week whose picks have locked, or the latest
+ * locked day of a festival that is live (or finished in the last 7 days). ?week=<race_week_id> or
+ * ?festival=<festival_id> opens a specific competition instead. Points are read from scores /
+ * festival_scores as stored, never recalculated; nothing on this page writes to the database.
  */
 
-import { useState, useEffect, useRef } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useState, useEffect, useMemo } from 'react'
+import { useNavigate, useParams, useSearchParams, Navigate } from 'react-router-dom'
 import { currentUser } from '../lib/session.js'
-import { useCompetition } from '../context/competition.js'
 import {
-  loadWeekIndex, loadFestivalIndex, loadWeekPeriod, loadFestivalPeriod,
+  loadResultsIndex, loadWeekPeriod, loadFestivalPeriod,
+  loadWeekStanding, loadFestivalDayStanding, loadFestivalOverall,
 } from '../lib/resultsData.js'
 import {
-  weekPeriods, festivalList, defaultPeriodIndex, pillItems, activePillKey, buildRaceRows, summarise,
+  buildWeeks, buildFestivals, resolveView, dayTabs, saturdayLabel, buildResultRows, outcomeCounts, shortDate,
 } from '../lib/resultsView.js'
-import CompetitionPills from '../components/picks/CompetitionPills.jsx'
-import PeriodSelector from '../components/results/PeriodSelector.jsx'
-import SummaryTiles from '../components/results/SummaryTiles.jsx'
+import { ordinal } from '../lib/format.js'
+import ResultsHero from '../components/results/ResultsHero.jsx'
+import OutcomeBoxes from '../components/results/OutcomeBoxes.jsx'
+import DayTabs from '../components/results/DayTabs.jsx'
 import RaceCard from '../components/results/RaceCard.jsx'
 import EmptyState from '../components/results/EmptyState.jsx'
 import { ResultsSkeleton, ResultsBodySkeleton } from '../components/Skeletons.jsx'
 import '../styles/picks.css'
 import '../styles/results.css'
 
+// The old /results/festival/:festivalId link now opens /results?festival=:festivalId.
 export default function Results() {
+  const { festivalId: linkedId } = useParams()
+  if (linkedId) return <Navigate to={`/results?festival=${encodeURIComponent(linkedId)}`} replace />
+  return <ResultsPage />
+}
+
+function ResultsPage() {
   const navigate = useNavigate()
-  const { festivalId: linkedId } = useParams()   // set on the old /results/festival/:festivalId link
-  const { competition, setCompetition } = useCompetition()
+  const [params] = useSearchParams()
+  const weekParam = params.get('week')
+  const festivalParam = params.get('festival')
+  const specific = !!(weekParam || festivalParam)
 
-  const [user,    setUser]    = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [failed,  setFailed]  = useState(false)   // the week / festival lists could not be read
-  const [attempt, setAttempt] = useState(0)   // bumped to re-read the lists
-  const [tryAgain, setTryAgain] = useState(0)   // bumped to re-read one period
+  const [user,     setUser]     = useState(null)
+  const [loading,  setLoading]  = useState(true)
+  const [failed,   setFailed]   = useState(false)   // the week / festival lists could not be read
+  const [attempt,  setAttempt]  = useState(0)       // bumped to re-read the lists
+  const [tryAgain, setTryAgain] = useState(0)       // bumped to re-read one race day
+  const [index,    setIndex]    = useState(null)    // { weeks, festivals }
+  const [nowMs]                 = useState(() => Date.now())
 
-  const [weeks,     setWeeks]     = useState([])  // Saturday periods, oldest first
-  const [festivals, setFestivals] = useState([])  // each with its day periods
-
-  const [chosen, setChosen] = useState({})        // { [competition key]: period index } picked with the arrows
-  const [loaded, setLoaded] = useState({})        // { [period id]: { rows, summary } }
-  const [badId,  setBadId]  = useState(null)      // period whose data could not be read
-  const [open,   setOpen]   = useState(() => new Set())
-  const linkApplied = useRef(null)
+  const [pickedDay, setPickedDay] = useState(null)  // { festivalId, dayId } chosen with the day tabs
+  const [loaded,  setLoaded]  = useState({})        // { [race day id]: { rows, counts, standing, label } }
+  const [overall, setOverall] = useState({})        // { [festival id]: { total, rank } }
+  const [badId,   setBadId]   = useState(null)      // race day whose data could not be read
+  const [open,    setOpen]    = useState(() => new Set())
 
   // ── Who is signed in, then the lists of weeks and festivals ────
   useEffect(() => {
@@ -53,12 +62,13 @@ export default function Results() {
       if (!user) { navigate('/auth'); return }
       if (cancelled) return
       setUser(user)
-      const indexes = await Promise.all([loadWeekIndex(), loadFestivalIndex()]).catch(() => null)
+      const raw = await loadResultsIndex().catch(() => null)
       if (cancelled) return
-      if (indexes) {
-        const [w, f] = indexes
-        setWeeks(weekPeriods(w.weeks, w.races, w.won))
-        setFestivals(festivalList(f.festivals, f.days, f.races, f.won))
+      if (raw) {
+        setIndex({
+          weeks: buildWeeks(raw.weeks, raw.weekRaces),
+          festivals: buildFestivals(raw.festivals, raw.days, raw.dayRaces),
+        })
         setFailed(false)
       } else {
         setFailed(true)
@@ -69,51 +79,50 @@ export default function Results() {
     return () => { cancelled = true }
   }, [navigate, attempt])
 
-  // The old festival link selects that festival, once.
-  useEffect(() => {
-    if (!linkedId || linkApplied.current === linkedId || !festivals.some(f => f.id === linkedId)) return
-    linkApplied.current = linkedId
-    setCompetition('festival', linkedId)
-  }, [linkedId, festivals, setCompetition])
-
   // ── What's on screen ───────────────────────────────────────────
-  // A group, or a festival without results, shows the Saturday League; the saved selection is left alone.
-  const items     = pillItems(festivals, linkedId)
-  const activeKey = activePillKey(competition, linkedId, items)
-  const festival  = festivals.find(f => f.id === activeKey) || null
-  const periods   = festival ? festival.periods : weeks
-  const idx       = chosen[activeKey] ?? defaultPeriodIndex(periods)
-  const period    = idx >= 0 ? periods[idx] : null
-  const unit      = festival ? 'day' : 'week'
-  const current   = period ? loaded[period.id] : null
+  const view = useMemo(() => index
+    ? resolveView({ weeks: index.weeks, festivals: index.festivals, weekParam, festivalParam, nowMs })
+    : { kind: 'none' }, [index, weekParam, festivalParam, nowMs])
 
-  // ── Load the player's picks, scores and results for the period ──
+  const festival = view.kind === 'festival' ? view.festival : null
+  const dayId = festival
+    ? (pickedDay?.festivalId === festival.id && festival.days.some(d => d.id === pickedDay.dayId) ? pickedDay.dayId : view.dayId)
+    : null
+  const day = festival ? festival.days.find(d => d.id === dayId) : null
+  const period = view.kind === 'week' ? view.week : day   // { id, raceIds, date, ... }
+  const current = period ? loaded[period.id] : null
+
+  // ── Load the player's picks, scores, results and standing for the race day ──
   useEffect(() => {
     if (!user || !period || loaded[period.id]) return
     let cancelled = false
-    const fetchPeriod = festival ? loadFestivalPeriod : loadWeekPeriod
-    fetchPeriod(user.id, period).then(bundle => {
+    const bundleLoad = festival ? loadFestivalPeriod(user.id, period) : loadWeekPeriod(user.id, period)
+    // The standing is extra: if it can't be read the rest of the page still shows.
+    const standingLoad = (festival
+      ? loadFestivalDayStanding(user.id, festival.id, period.dayNumber, period.raceIds)
+      : loadWeekStanding(user.id, period.raceIds)).catch(() => null)
+    Promise.all([bundleLoad, standingLoad]).then(([bundle, standing]) => {
       if (cancelled) return
-      const rows = buildRaceRows(bundle, festival?.venue || '')
-      setLoaded(prev => ({ ...prev, [period.id]: { rows, summary: summarise(rows) } }))
+      const rows = buildResultRows(bundle)
+      const counts = outcomeCounts(rows)
+      setLoaded(prev => ({
+        ...prev,
+        [period.id]: { rows, counts, standing: counts.played ? standing : null, label: festival ? '' : saturdayLabel(bundle.races) },
+      }))
       setBadId(null)
     }).catch(() => { if (!cancelled) setBadId(period.id) })
     return () => { cancelled = true }
   }, [user, period, festival, loaded, tryAgain])
 
-  function selectPill(item) {
-    setOpen(new Set())
-    if (item.key === 'saturday') setCompetition('saturday')
-    else setCompetition('festival', item.key)
-    if (linkedId) navigate('/results', { replace: true })
-  }
-
-  function step(delta) {
-    const next = idx + delta
-    if (next < 0 || next >= periods.length) return
-    setOpen(new Set())
-    setChosen(prev => ({ ...prev, [activeKey]: next }))
-  }
+  // A festival's running total and overall position (once per festival).
+  useEffect(() => {
+    if (!user || !festival || overall[festival.id]) return
+    let cancelled = false
+    loadFestivalOverall(user.id, festival.id)
+      .then(o => { if (!cancelled) setOverall(prev => ({ ...prev, [festival.id]: o })) })
+      .catch(() => { if (!cancelled) setOverall(prev => ({ ...prev, [festival.id]: { total: null, rank: null } })) })
+    return () => { cancelled = true }
+  }, [user, festival, overall])
 
   function toggle(raceId) {
     setOpen(prev => {
@@ -121,6 +130,16 @@ export default function Results() {
       if (next.has(raceId)) next.delete(raceId); else next.add(raceId)
       return next
     })
+  }
+
+  function selectDay(id) {
+    setOpen(new Set())
+    setPickedDay({ festivalId: festival.id, dayId: id })
+  }
+
+  function goBack() {
+    if (window.history.state?.idx > 0) navigate(-1)
+    else navigate('/results')
   }
 
   function retry() {
@@ -134,14 +153,29 @@ export default function Results() {
     return <ResultsSkeleton />
   }
 
+  // ── The hero's label and bottom line ───────────────────────────
+  let heroLabel = '', heroLine = ''
+  if (current && period) {
+    if (festival) {
+      heroLabel = `${festival.name} · Day ${period.dayNumber}`
+      const o = overall[festival.id]
+      heroLine = [
+        o?.total != null ? `Festival total ${o.total} pts` : '',
+        o?.rank ? `${ordinal(o.rank.rank)} overall` : '',
+      ].filter(Boolean).join(' · ')
+    } else {
+      heroLabel = current.label
+      heroLine = `Saturday League · ${shortDate(period.date)}`
+    }
+  }
+
   return (
     <div className="app-page rs">
       <main className="rs__main">
-        <h1 className="rs-title">Results</h1>
-
-        {items.length > 1 && (
-          <CompetitionPills items={items} activeKey={activeKey} onSelect={selectPill} />
+        {specific && (
+          <button type="button" className="rs-back" onClick={goBack}>‹ Back</button>
         )}
+        <h1 className="rs-title">Results</h1>
 
         {failed ? (
           <>
@@ -150,51 +184,46 @@ export default function Results() {
           </>
         ) : !period ? (
           <EmptyState />
+        ) : badId === period.id ? (
+          <>
+            <p className="rs-msg rs-msg--error">Couldn't load this day. Check your connection and try again.</p>
+            <button type="button" className="rs-retry" onClick={() => { setBadId(null); setTryAgain(a => a + 1) }}>Try again</button>
+          </>
+        ) : !current ? (
+          <ResultsBodySkeleton />
         ) : (
           <>
-            <PeriodSelector
-              label={period.label}
-              unit={unit}
-              canBack={idx > 0}
-              canForward={idx < periods.length - 1}
-              onBack={() => step(-1)}
-              onForward={() => step(1)}
+            <ResultsHero
+              festival={festival}
+              label={heroLabel}
+              points={current.counts.points}
+              standing={current.standing}
+              line={heroLine}
             />
 
-            {badId === period.id ? (
-              <>
-                <p className="rs-msg rs-msg--error">Couldn't load this {unit}. Check your connection and try again.</p>
-                <button type="button" className="rs-retry" onClick={() => { setBadId(null); setTryAgain(a => a + 1) }}>Try again</button>
-              </>
-            ) : !current ? (
-              <ResultsBodySkeleton />
+            <OutcomeBoxes won={current.counts.won} placed={current.counts.placed} unplaced={current.counts.unplaced} />
+
+            {festival && festival.days.length > 1 && (
+              <DayTabs tabs={dayTabs(festival, nowMs)} selectedId={dayId} onSelect={selectDay} />
+            )}
+
+            {current.rows.length === 0 ? (
+              <p className="rs-msg">No races on this day yet.</p>
             ) : (
               <>
-                {current.summary.played ? (
-                  <SummaryTiles
-                    points={current.summary.points}
-                    winners={current.summary.winners}
-                    placed={current.summary.placed}
-                  />
-                ) : (
-                  <p className="rs-msg">You didn't play this {unit}</p>
+                {current.rows.some(r => !r.pending) && (
+                  <p className="rs-hint">Tap a race to see the full result</p>
                 )}
-
-                {current.rows.length === 0 ? (
-                  <p className="rs-msg">No races in this {unit} yet.</p>
-                ) : (
-                  <div className="rs-list">
-                    {current.rows.map(row => (
-                      <RaceCard key={row.id} row={row} open={open.has(row.id)} onToggle={() => toggle(row.id)} />
-                    ))}
-                  </div>
-                )}
+                <div className="rs-list">
+                  {current.rows.map(row => (
+                    <RaceCard key={row.id} row={row} open={open.has(row.id)} onToggle={() => toggle(row.id)} />
+                  ))}
+                </div>
               </>
             )}
           </>
         )}
       </main>
-
     </div>
   )
 }
