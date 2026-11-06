@@ -15,7 +15,7 @@ import { PICKS_CHANGED } from '../lib/navTabs.js'
 import { isWinOnly, canOfferEachWay, calcTokenPoints } from '../lib/scoring.js'
 import { daysBetween, localDateStr, lockLabel } from '../lib/format.js'
 import {
-  runningFestivals, selectedFestival, isDayOpen, defaultFestDay, hasLivePick, firstUnpickedIndex, competitionLine,
+  runningFestivals, selectedFestival, isDayOpen, defaultFestDay, hasLivePick, firstUnpickedIndex, competitionLine, sortByPrice,
 } from '../lib/picksView.js'
 import CompetitionPills from '../components/picks/CompetitionPills.jsx'
 import DaySwitch from '../components/picks/DaySwitch.jsx'
@@ -496,7 +496,7 @@ export default function Picks() {
             )}
 
             <div className="pk-list">
-              {raceRunners.map(runner => {
+              {sortByPrice(raceRunners).map(runner => {
                 const shown = view.locked ? pickedId : (view.sel[race.id] ?? pickedId)
                 return (
                   <RunnerRow

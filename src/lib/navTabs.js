@@ -5,8 +5,8 @@ import { Home, Target, Trophy, BarChart2 } from 'lucide-react'
 export const NAV_TABS = [
   { to: '/dashboard', label: 'Home',        Icon: Home,      paths: ['/dashboard', '/race-day', '/festivals', '/groups'] },
   { to: '/picks',     label: 'Picks',       Icon: Target,    paths: ['/picks', '/festival-picks'] },
-  { to: '/league',    label: 'Leaderboard', Icon: Trophy,    paths: ['/league', '/festival-leaderboard'] },
   { to: '/results',   label: 'Results',     Icon: BarChart2, paths: ['/results'] },
+  { to: '/league',    label: 'Leaderboard', Icon: Trophy,    paths: ['/league', '/festival-leaderboard'] },
 ]
 
 // Index of the tab for this pathname, or -1 (e.g. /groups, /profile).

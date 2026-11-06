@@ -7,7 +7,7 @@ import BottomNav from './BottomNav.jsx'
 
 let onboardingChecked = false // module-wide: ask the database once per visit
 
-// Shared frame for the four tab pages (Home, Picks, Leaderboard, Results). The
+// Shared frame for the four tab pages (Home, Picks, Results, Leaderboard). The
 // bars are mounted once, so tapping a tab switches the highlight at once and the
 // page below swaps in as its data arrives.
 export default function TabLayout() {

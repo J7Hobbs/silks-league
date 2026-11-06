@@ -29,6 +29,18 @@ export function defaultFestDay(days, openDays, today) {
 }
 
 // A pick counts only while the horse is still running.
+// Runners in price order: the favourite first, then up through the odds. Runners with no
+// price yet come after the priced ones, withdrawn runners last. Ties keep the card (cloth) number order.
+// Display only: it returns a new array and never changes the data.
+export function sortByPrice(runners) {
+  const rank = r => (r.is_withdrawn ? 2 : r.odds_decimal > 0 ? 0 : 1)
+  const num = r => (r.horse_number == null ? Infinity : r.horse_number)
+  return [...(runners || [])].sort((a, b) =>
+    rank(a) - rank(b)
+    || (rank(a) === 0 ? a.odds_decimal - b.odds_decimal : 0)
+    || num(a) - num(b))
+}
+
 export function hasLivePick(runnerId, raceRunners) {
   if (!runnerId) return false
   return !raceRunners.find(r => r.id === runnerId)?.is_withdrawn
