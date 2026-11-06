@@ -55,18 +55,21 @@ export default function RaceCard({ row, open, onToggle }) {
       )}
 
       {open && !pending && (
-        <ol className="rs-places">
-          {row.placings.map(pl => (
-            <li key={pl.position} className={`rs-place${pl.mine ? ' rs-place--mine' : ''}`}>
-              <span className="rs-place__pos">{ordinal(pl.position)}</span>
-              <span className="rs-place__name">
-                <span className="rs-place__horse">{pl.name}</span>
-                {pl.mine && <span className="rs-place__tag"> · your pick</span>}
-              </span>
-              <span className="rs-place__sp">{pl.sp}</span>
-            </li>
-          ))}
-        </ol>
+        <div className="rs-places">
+          {row.note && <p className="rs-places__note">{row.note}</p>}
+          <ol className="rs-places__list">
+            {row.placings.map(pl => (
+              <li key={pl.position} className={`rs-place${pl.mine ? ' rs-place--mine' : ''}`}>
+                <span className="rs-place__pos">{ordinal(pl.position)}</span>
+                <span className="rs-place__name">
+                  <span className="rs-place__horse">{pl.name}</span>
+                  {pl.mine && <span className="rs-place__tag"> · your pick</span>}
+                </span>
+                <span className="rs-place__sp">{pl.sp}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
       )}
     </div>
   )

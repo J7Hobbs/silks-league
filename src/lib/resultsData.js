@@ -1,7 +1,7 @@
 // Supabase reads for the Results page. Read-only: points come from scores /
 // festival_scores exactly as stored, and nothing here writes.
 import { supabase } from './supabase'
-import { weekRank, festivalRank, festivalDayRank } from './standings.js'
+import { weekDayRank, festivalRank, festivalDayRank } from './standings.js'
 
 const PAGE = 1000
 
@@ -33,20 +33,17 @@ export async function loadResultsIndex() {
   return { weeks, weekRaces, festivals, days, dayRaces }
 }
 
-// The player's position among the others for the race day on screen. Both reuse the ranking
-// helpers in standings.js. Null when the player has no points that day.
-export const loadWeekStanding = (userId, raceIds) => weekRank(userId, raceIds)
-export const loadFestivalDayStanding = (userId, festivalId, dayNumber, raceIds) =>
-  festivalDayRank(userId, festivalId, dayNumber, raceIds)
+// The player's position among everyone who picked on the race day on screen (players who
+// scored 0 included), ranked with the usual tiebreaks. Null if the player did not pick.
+export const loadWeekStanding = (userId, raceIds) => weekDayRank(userId, raceIds)
+export const loadFestivalDayStanding = (userId, raceIds) => festivalDayRank(userId, raceIds)
 
-// The player's festival total from festival_day_points (null until a day has points) and their
-// position overall, ranked the way the Festival leaderboard ranks.
+// The player's festival total and position overall, from the same function (festivalRank) that
+// ranks the festival; the total includes any starting points. { total, rank } with nulls when
+// the player is not in the festival.
 export async function loadFestivalOverall(userId, festivalId) {
-  const rows = must(await supabase.from('festival_day_points').select('points')
-    .eq('festival_id', festivalId).eq('user_id', userId))
-  const total = rows.length ? rows.reduce((sum, r) => sum + (r.points || 0), 0) : null
   const rank = await festivalRank(userId, festivalId).catch(() => null)
-  return { total, rank }
+  return { total: rank ? rank.points : null, rank }
 }
 
 // The races of a period and the rows that hang off them (results, picks, scores) are fetched
@@ -72,7 +69,7 @@ export async function loadWeekPeriod(userId, period) {
   const { races, rest } = await fetchPeriod(
     period.raceIds,
     () => supabase
-      .from('races').select('id, race_number, race_time, venue, race_name')
+      .from('races').select('id, race_number, race_time, venue, race_name, runner_count_at_lock')
       .eq('race_week_id', period.id).order('race_number').then(must),
     ids => Promise.all([
       supabase.from('results').select('race_id, position, horse_name, starting_price_display').in('race_id', ids).then(must),
@@ -97,7 +94,7 @@ export async function loadFestivalPeriod(userId, period) {
   const { races, rest } = await fetchPeriod(
     period.raceIds,
     () => supabase
-      .from('festival_races').select('id, race_number, race_time, venue, race_name')
+      .from('festival_races').select('id, race_number, race_time, venue, race_name, runner_count_at_lock')
       .eq('festival_day_id', period.id).order('race_number').then(must),
     ids => Promise.all([
       supabase.from('festival_results').select('festival_race_id, position, horse_name, starting_price_display')

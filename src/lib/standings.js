@@ -161,24 +161,37 @@ export async function festivalRank(userId, festivalId) {
   return rankOf(totals, wins, names, userId)
 }
 
-// Rank for one festival day, among players with points that day (festival_day_points, the
-// table the Festival leaderboard shows day by day). Ties break as everywhere else: points,
-// then winning picks on that day, then name. Null if the player has no points that day.
-export async function festivalDayRank(userId, festivalId, dayNumber, raceIds) {
-  const { data: rows } = await supabase
-    .from('festival_day_points').select('user_id, points')
-    .eq('festival_id', festivalId).eq('day_number', dayNumber)
+// Rank for one race day among everyone who made at least one pick that day (including players
+// who scored 0). Points come from the day's score rows; ties break as everywhere else: points,
+// then winning picks, then name. Anyone with a score row is counted too, so the list is never
+// shorter than what the Leaderboard shows. Null if the player is not in the list.
+async function dayRank(userId, pickRows, scoreRows) {
   const totals = {}
-  ;(rows || []).forEach(r => { totals[r.user_id] = (totals[r.user_id] || 0) + (r.points || 0) })
-  if (!(userId in totals)) return null
-  const scores = raceIds?.length
-    ? await fetchAll(() => supabase.from('festival_scores')
-        .select('id, user_id, total_points, position_achieved').in('festival_race_id', raceIds))
-    : []
   const wins = {}
-  scores.forEach(s => {
-    if (s.position_achieved === 1 && s.user_id in totals) wins[s.user_id] = (wins[s.user_id] || 0) + 1
-  })
+  pickRows.forEach(r => { totals[r.user_id] = 0 })
+  tally(scoreRows, totals, wins)
+  if (!(userId in totals)) return null
   const names = await namesFor(Object.keys(totals))
   return rankOf(totals, wins, names, userId)
+}
+
+// A Saturday League race day (race_week).
+export async function weekDayRank(userId, raceIds) {
+  if (!raceIds?.length) return null
+  const [pickRows, scoreRows] = await Promise.all([
+    fetchAll(() => supabase.from('picks').select('id, user_id').in('race_id', raceIds)),
+    scoresForRaces(raceIds),
+  ])
+  return dayRank(userId, pickRows, scoreRows)
+}
+
+// One festival day.
+export async function festivalDayRank(userId, raceIds) {
+  if (!raceIds?.length) return null
+  const [pickRows, scoreRows] = await Promise.all([
+    fetchAll(() => supabase.from('festival_picks').select('id, user_id').in('festival_race_id', raceIds)),
+    fetchAll(() => supabase.from('festival_scores')
+      .select('id, user_id, total_points, position_achieved').in('festival_race_id', raceIds)),
+  ])
+  return dayRank(userId, pickRows, scoreRows)
 }

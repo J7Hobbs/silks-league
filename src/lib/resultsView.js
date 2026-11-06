@@ -1,5 +1,6 @@
 // Pure helpers for the Results page, kept apart from Supabase so they are easy to test.
 // Points are never worked out here: they are read straight from scores / festival_scores.
+import { getPlaceTerms } from './scoring.js'
 import { ordinal, picksRevealed, ukDateStr, daysBetween, weekdayShort, clockText } from './format.js'
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -180,6 +181,17 @@ export function saturdayLabel(races) {
   return venues.length === 1 ? `Your day at ${venues[0]}` : 'Your Saturday'
 }
 
+// The reason a pick that finished 2nd to 4th (the positions that can pay) scored 0, or ''.
+function zeroNote(betType, position, runnerCount) {
+  if (!(position >= 2 && position <= 4)) return ''
+  if (betType === 'win') return 'Win-only pick, so no place points.'
+  if (betType === 'each_way') {
+    const { placesPaid } = getPlaceTerms(runnerCount)
+    if (placesPaid > 0 && position > placesPaid) return `Only the top ${placesPaid} paid in this race.`
+  }
+  return ''
+}
+
 // One entry per race for the Results cards. Inputs are the rows read from Supabase (see
 // resultsData.js). Points and positions are read as stored; nothing is worked out here.
 export function buildResultRows({ races, results, picks, runners, scores }) {
@@ -208,7 +220,10 @@ export function buildResultRows({ races, results, picks, runners, scores }) {
     } : null
 
     const played = !pending && !!pick
-    const position = played ? score?.position_achieved || null : null
+    // The finishing position as stored with the score, or found in the placings; null when the
+    // horse finished outside the positions we have results for.
+    const placing = pick ? placings.find(pl => sameHorse(pl.name, pick.name)) : null
+    const position = played ? score?.position_achieved || placing?.position || null : null
     const points = played ? score?.total_points ?? 0 : 0
     return {
       id: race.id,
@@ -220,16 +235,20 @@ export function buildResultRows({ races, results, picks, runners, scores }) {
       played,
       position,
       points,
-      // Colour of the score box: green for a win, gold for any other score, grey for none.
+      // Colour of the score box follows the points: green for a win that scored, gold for any
+      // other score, grey for none.
       tone: played && points > 0 ? (position === 1 ? 'win' : 'placed') : 'none',
-      // Top line of the score box: "2ND", "UNPL" for a pick that did not place, "—" with no pick or result.
-      scoreTop: played ? (position >= 1 && position <= 4 ? ordinal(position).toUpperCase() : 'UNPL') : '—',
+      // Top line of the score box: the finishing position ("2ND"), "UNPL" when the horse finished
+      // outside the positions we have, "—" with no pick or result.
+      scoreTop: played ? (position ? ordinal(position).toUpperCase() : 'UNPL') : '—',
+      // Why a pick that finished 2nd to 4th scored nothing ('' when there is nothing to explain).
+      note: played && points === 0 ? zeroNote(pick.betType, position, race.runner_count_at_lock) : '',
     }
   })
 }
 
 // The three boxes and the points for the day. Only races with a pick and a result count:
-// won = finished 1st and scored, placed = scored without winning, unplaced = scored 0.
+// won = finished 1st and scored, placed = scored without winning, no points = scored 0.
 export function outcomeCounts(rows) {
   let points = 0, won = 0, placed = 0, unplaced = 0
   for (const r of rows) {

@@ -99,7 +99,7 @@ function ResultsPage() {
     const bundleLoad = festival ? loadFestivalPeriod(user.id, period) : loadWeekPeriod(user.id, period)
     // The standing is extra: if it can't be read the rest of the page still shows.
     const standingLoad = (festival
-      ? loadFestivalDayStanding(user.id, festival.id, period.dayNumber, period.raceIds)
+      ? loadFestivalDayStanding(user.id, period.raceIds)
       : loadWeekStanding(user.id, period.raceIds)).catch(() => null)
     Promise.all([bundleLoad, standingLoad]).then(([bundle, standing]) => {
       if (cancelled) return
