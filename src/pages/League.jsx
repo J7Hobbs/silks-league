@@ -18,12 +18,13 @@ import { useLeagueUser } from '../components/league/useLeagueUser.js'
 import PreviewCard from '../components/league/PreviewCard.jsx'
 import GroupsList from '../components/league/GroupsList.jsx'
 import PicksModalHost from '../components/league/PicksModalHost.jsx'
+import PastSheet from '../components/league/PastSheet.jsx'
 import { LeagueHubSkeleton } from '../components/Skeletons.jsx'
 import '../styles/picks.css'
 import '../styles/league.css'
 
-// The "Past" button (history of earlier weeks and festivals) is wired up in a later step.
-const SHOW_PAST = false
+// The "Past" button: finished festivals and earlier seasons (PastSheet).
+const SHOW_PAST = true
 
 const MSG_SEASON = 'No points yet – the table fills up after the first race week'
 const MSG_FEST = 'No points yet – the table fills up after the first race'
@@ -37,6 +38,7 @@ export default function League() {
   const [failed,   setFailed]   = useState(false)
   const [attempt,  setAttempt]  = useState(0)
   const [picksModal, setPicksModal] = useState(null)
+  const [pastOpen, setPastOpen] = useState(false)
 
   useEffect(() => {
     if (!user) return
@@ -115,7 +117,7 @@ export default function League() {
         <div className="lh-top">
           <h1 className="lg-title">Leaderboard</h1>
           {SHOW_PAST && (
-            <button type="button" className="lh-past">
+            <button type="button" className="lh-past" onClick={() => setPastOpen(true)} aria-haspopup="dialog">
               <Clock size={13} aria-hidden="true" />
               Past
             </button>
@@ -148,6 +150,7 @@ export default function League() {
       </main>
 
       <PicksModalHost modal={picksModal} viewerUserId={user?.id} onClose={() => setPicksModal(null)} />
+      {pastOpen && <PastSheet userId={user.id} excludeId={fest?.festival.id || null} onClose={() => setPastOpen(false)} />}
     </div>
   )
 }

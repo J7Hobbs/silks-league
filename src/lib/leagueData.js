@@ -5,6 +5,7 @@
 // Ranking uses the shared helpers in standings.js (orderIds, festivalTotals, weekDayStanding), the
 // same ones the Results page and Home use, so a player's position matches everywhere.
 import { supabase } from './supabase'
+import { monthLong } from './format.js'
 import { orderIds, festivalTotals, weekDayStanding } from './standings.js'
 
 // ── Saturday League ───────────────────────────────────────────
@@ -12,7 +13,7 @@ import { orderIds, festivalTotals, weekDayStanding } from './standings.js'
 //   satRows        every registered player, season table, best first
 //   weekRows       the latest week: everyone who picked or scored, best first (needs withWeek)
 //   completedWeeks weeks with at least one score, oldest first
-export async function loadSaturdayLeague(myUserId, { withWeek = true } = {}) {
+export async function loadSaturdayLeague(myUserId, { withWeek = true, seasonId = null } = {}) {
   // Every registered user appears even with 0 pts, so the names don't wait on the season.
   const namesLoaded = (async () => {
     const { data: allProfileData } = await supabase.from('profiles').select('id')
@@ -21,8 +22,9 @@ export async function loadSaturdayLeague(myUserId, { withWeek = true } = {}) {
     return { allProfileIds: ids, profData }
   })()
 
-  const { data: s } = await supabase
-    .from('seasons').select('id, name, start_date, status, is_active').eq('is_active', true).single()
+  // The active season, or a past one by id (the Past pages).
+  const seasonQ = supabase.from('seasons').select('id, name, start_date, status, is_active')
+  const { data: s } = await (seasonId ? seasonQ.eq('id', seasonId) : seasonQ.eq('is_active', true)).single()
   if (!s) return null
 
   const { data: weeks } = await supabase
@@ -117,6 +119,44 @@ export async function loadSaturdayLeague(myUserId, { withWeek = true } = {}) {
 
 // ── Festivals ──
 // (Which festival is live or recent: loadCurrentFestival in festivalData.js.)
+// ── Past leagues and festivals (the hub's "Past" sheet) ──
+// Festivals that have finished and have at least one race, newest first, each with the winner of
+// its final table (the same table as the festival page). `excludeId` is the one the hub shows.
+export async function loadPastFestivals(today, excludeId, myUserId) {
+  const { data } = await supabase.from('festivals').select('*').order('end_date', { ascending: false })
+  const ended = (data || []).filter(f => (f.end_date || f.start_date) < today && f.id !== excludeId)
+  const list = await Promise.all(ended.map(async f => {
+    const { data: days } = await supabase.from('festival_days').select('id').eq('festival_id', f.id)
+    if (!days?.length) return null
+    const { count } = await supabase.from('festival_races')
+      .select('id', { count: 'exact', head: true }).in('festival_day_id', days.map(d => d.id))
+    if (!count) return null
+    const { rows } = await fetchFestivalRows(f, null, myUserId)
+    const top = rows[0]
+    return { festival: f, winner: top && top.points > 0 ? top.name : null }
+  }))
+  return list.filter(Boolean)
+}
+
+// Every season except the active one, newest first, with the winner of its final table (the same
+// season ranking as the Saturday page). Seasons with no scores are left out.
+export async function loadPastSeasons(myUserId) {
+  const { data } = await supabase.from('seasons').select('id, name, start_date, is_active').order('start_date', { ascending: false })
+  const past = (data || []).filter(s => !s.is_active)
+  const list = await Promise.all(past.map(async s => {
+    const d = await loadSaturdayLeague(myUserId, { withWeek: false, seasonId: s.id })
+    if (!d || !d.completedWeeks.length) return null
+    const top = d.satRows[0]
+    return { season: d.season, winner: top && top.seasonTotal > 0 ? top.name : null }
+  }))
+  return list.filter(Boolean)
+}
+
+// "October 2026" for a season (its start date), or its name when it has none.
+export function seasonLabel(season) {
+  return season?.start_date ? `${monthLong(season.start_date)} ${season.start_date.slice(0, 4)}` : (season?.name || '')
+}
+
 // One festival by id, whatever its dates (the full table keeps working after it finishes).
 export async function loadFestival(id) {
   const { data } = await supabase.from('festivals').select('*').eq('id', id).maybeSingle()

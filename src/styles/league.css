@@ -168,3 +168,37 @@
 .lg-ghead__sub { margin: 0; font-size: 14px; color: var(--text-muted); }
 
 .lh-past:focus-visible, .lh-row:focus-visible, .lh-more:focus-visible, .lh-group:focus-visible, .lh-groups__none:focus-visible, .lg-back:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+/* ═══ Past competitions ═══ */
+.lg-btn--link { display: flex; align-items: center; justify-content: center; text-decoration: none; }
+
+.lp-banner {
+  position: relative; isolation: isolate; overflow: hidden; display: flex; flex-direction: column; gap: 6px;
+  padding: 18px 16px; border-radius: 16px; background: var(--surface);
+}
+.lp-banner__echo { position: absolute; right: 56px; top: 50%; width: 0; height: 0; pointer-events: none; }
+.lp-banner__img { position: absolute; inset: 0; z-index: -2; width: 100%; height: 100%; object-fit: cover; display: block; }
+.lp-banner__fade { position: absolute; inset: 0; z-index: -1; background: linear-gradient(90deg, rgba(10, 26, 8, 0.92) 0%, rgba(10, 26, 8, 0.35) 100%); }
+.lp-banner__eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; line-height: 1.3; color: #c9d3c4; }
+.lp-banner__title { margin: 0; font-family: var(--font-heading); font-weight: 800; font-size: 20px; line-height: 1.2; letter-spacing: 0; color: var(--text); overflow-wrap: anywhere; }
+.lp-banner__line { margin: 2px 0 0; font-size: 15px; font-weight: 600; line-height: 1.35; color: var(--gold); }
+.lp-banner__line--muted { color: #c9d3c4; font-weight: 500; }
+.lp-banner--fest .lp-banner__eyebrow, .lp-banner--fest .lp-banner__title, .lp-banner--fest .lp-banner__line { text-shadow: 0 1px 3px rgba(10, 26, 8, 0.85); }
+
+.lp-weeks { display: flex; flex-direction: column; gap: 8px; }
+.lp-weeks__head { margin: 4px 0 0; font-family: var(--font-body); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); }
+.lp-weeks__list { display: flex; flex-direction: column; gap: 6px; }
+.lp-week { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 52px; padding: 0 14px; border-radius: 14px; background: var(--surface); color: var(--text); font-size: 14.5px; font-weight: 600; }
+.lp-week__text { min-width: 0; }
+.lp-week__chev { flex: none; font-size: 22px; color: var(--gold); }
+
+/* The Past sheet (inside the Groups bottom sheet) */
+.lp-sheet__wait { display: flex; flex-direction: column; gap: 12px; }
+.lp-sheet__group { display: flex; flex-direction: column; gap: 4px; }
+.lp-sheet__head { margin: 0; font-family: var(--font-body); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); }
+.lp-row { text-decoration: none; }
+.lp-row__name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lp-row__won { flex: none; max-width: 55%; min-width: 0; display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; color: var(--gold); }
+.lp-row__wontext { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.lp-week:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }

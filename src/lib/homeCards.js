@@ -1,4 +1,4 @@
-import { ordinal, formatCountdown, deadlineMs } from './format.js'
+import { ordinal, formatCountdown, deadlineMs, ukDateStr } from './format.js'
 import { saturdayCard } from './saturdayCard.js'
 
 // Turns the loaded Home data into the competition cards to show, in order.
@@ -16,10 +16,14 @@ function festivalCard(fest, nowMs) {
   const f = fest.festival
   const dl = deadlineMs(fest.deadline)
   const live = fest.state === 'open' && dl > nowMs
+  // running: today is within its dates; finished: its last day has passed (the 7 days it stays on Home)
+  const today = ukDateStr(nowMs)
+  const phase = today > (f.end_date || f.start_date) ? 'finished' : today >= f.start_date ? 'running' : 'upcoming'
   const place = [fest.venue, `Day ${fest.dayNumber} of ${fest.totalDays}`].filter(Boolean).join(' · ')
   return {
     key: `festival-${f.id}`,
     kind: 'festival',
+    phase,
     state: live ? 'open' : 'closed',
     tag: 'FESTIVAL',
     competition: { type: 'festival', id: f.id },
@@ -57,6 +61,11 @@ export function buildCards(data, nowMs) {
     if (a.state === 'open' && a.deadlineMs !== b.deadlineMs) return a.deadlineMs - b.deadlineMs
     return (a.kind === 'festival' ? 0 : 1) - (b.kind === 'festival' ? 0 : 1)
   })
+
+  // A running festival stays on top; once it has finished, the Saturday League card goes first.
+  const fest = cards.find(c => c.kind === 'festival')
+  if (fest?.phase === 'running') cards.sort((a, b) => (b === fest) - (a === fest))
+  else if (fest?.phase === 'finished') cards.sort((a, b) => (a === fest) - (b === fest))
 
   return { cards, liveCount: cards.filter(c => c.state !== 'returns' && c.state !== 'announced').length }
 }

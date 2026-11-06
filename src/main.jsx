@@ -14,6 +14,8 @@ import League         from './pages/League.jsx'
 import LeagueSaturday from './pages/LeagueSaturday.jsx'
 import LeagueFestival from './pages/LeagueFestival.jsx'
 import LeagueGroup    from './pages/LeagueGroup.jsx'
+import LeaguePastFestival from './pages/LeaguePastFestival.jsx'
+import LeaguePastSeason   from './pages/LeaguePastSeason.jsx'
 import Races          from './pages/Races.jsx'
 import Results        from './pages/Results.jsx'
 import Profile        from './pages/Profile.jsx'
@@ -49,6 +51,8 @@ createRoot(document.getElementById('root')).render(
             <Route path="/league/saturday"            element={<LeagueSaturday />} />
             <Route path="/league/festival/:festivalId" element={<LeagueFestival />} />
             <Route path="/league/group/:groupId"       element={<LeagueGroup />}    />
+            <Route path="/league/past/festival/:festivalId" element={<LeaguePastFestival />} />
+            <Route path="/league/past/season/:seasonId"     element={<LeaguePastSeason />}   />
             <Route path="/results"   element={<Results />}   />
             <Route path="/festivals" element={<Festivals />} />
             <Route path="/results/festival/:festivalId" element={<Results />} />

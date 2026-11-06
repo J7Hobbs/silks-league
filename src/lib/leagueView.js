@@ -1,5 +1,6 @@
 // Pure helpers for the Leaderboard page, kept apart from Supabase so they are easy to test.
-import { monthLong } from './format.js'
+import { monthLong, monthShort } from './format.js'
+import { shortDate } from './resultsView.js'
 
 // "obarratt" -> "OB", "Jack Hobbs" -> "JH", "Jack" -> "JA". Empty when there is no name.
 export function initialsFor(name) {
@@ -97,4 +98,18 @@ export function festHubSub(rows, festDays, live) {
 export function previewRows(rows, size = 5) {
   const me = rows.find(r => r.isMe)
   return { top: rows.slice(0, size), pinned: me && me.rank > size ? me : null }
+}
+
+// ═══ Past competitions ═══
+
+// "Oct 2026" from a date.
+export function monthYear(dateStr) {
+  return dateStr ? `${monthShort(dateStr)} ${dateStr.slice(0, 4)}` : ''
+}
+
+// "Week 2 · Sat 11 Oct · 68 pts" for the player's weeks list; "Week 2 · Sat 11 Oct · didn't play" when
+// they scored nothing that week.
+export function weekRowLine(week, points) {
+  const head = `Week ${week.week_number} \u00b7 ${shortDate(week.saturday_date)}`
+  return points === undefined ? `${head} \u00b7 didn't play` : `${head} \u00b7 ${points} pts`
 }
