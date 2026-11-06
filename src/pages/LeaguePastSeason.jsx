@@ -6,7 +6,7 @@
 
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { loadSaturdayLeague, seasonLabel } from '../lib/leagueData.js'
+import { loadSaturdayLeague, loadPickedWeeks, seasonLabel } from '../lib/leagueData.js'
 import { weekSubLine, weekRowLine } from '../lib/leagueView.js'
 import { ordinal } from '../lib/format.js'
 import { useLeagueUser } from '../components/league/useLeagueUser.js'
@@ -28,7 +28,11 @@ export default function LeaguePastSeason() {
     if (!user) return
     let cancelled = false
     loadSaturdayLeague(user.id, { withWeek: false, seasonId })
-      .then(d => { if (!cancelled) setData(d) })
+      .then(async d => {
+        // Weeks the player picked in, so a week they scored 0 in isn't shown as "didn't play".
+        const picked = d ? await loadPickedWeeks(user.id, d.completedWeeks.map(w => w.id)).catch(() => new Set()) : new Set()
+        if (!cancelled) setData(d && { ...d, picked })
+      })
       .catch(() => { if (!cancelled) setData(null) })
     return () => { cancelled = true }
   }, [user, seasonId])
@@ -47,7 +51,7 @@ export default function LeaguePastSeason() {
     )
   }
 
-  const { season, satRows, completedWeeks } = data
+  const { season, satRows, completedWeeks, picked } = data
   const label = seasonLabel(season)
   const rows = satRows.map(r => ({
     id: r.user_id, rank: r.rank, name: r.name, isMe: r.isMe, points: r.seasonTotal,
@@ -85,7 +89,7 @@ export default function LeaguePastSeason() {
             <div className="lp-weeks__list">
               {completedWeeks.map(w => (
                 <Link key={w.id} to={`/results?week=${w.id}`} className="lp-week">
-                  <span className="lp-week__text">{weekRowLine(w, mine?.weekPts?.[w.id])}</span>
+                  <span className="lp-week__text">{weekRowLine(w, mine?.weekPts?.[w.id], picked.has(w.id))}</span>
                   <span className="lp-week__chev" aria-hidden="true">&rsaquo;</span>
                 </Link>
               ))}

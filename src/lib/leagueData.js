@@ -152,6 +152,16 @@ export async function loadPastSeasons(myUserId) {
   return list.filter(Boolean)
 }
 
+// Which of these race weeks the player made at least one pick in: a Set of week ids.
+export async function loadPickedWeeks(userId, weekIds) {
+  if (!weekIds.length) return new Set()
+  const { data: races } = await supabase.from('races').select('id, race_week_id').in('race_week_id', weekIds)
+  const weekOf = Object.fromEntries((races || []).map(r => [r.id, r.race_week_id]))
+  if (!races?.length) return new Set()
+  const { data: picks } = await supabase.from('picks').select('race_id').eq('user_id', userId).in('race_id', races.map(r => r.id))
+  return new Set((picks || []).map(p => weekOf[p.race_id]).filter(Boolean))
+}
+
 // "October 2026" for a season (its start date), or its name when it has none.
 export function seasonLabel(season) {
   return season?.start_date ? `${monthLong(season.start_date)} ${season.start_date.slice(0, 4)}` : (season?.name || '')

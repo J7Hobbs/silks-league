@@ -107,9 +107,10 @@ export function monthYear(dateStr) {
   return dateStr ? `${monthShort(dateStr)} ${dateStr.slice(0, 4)}` : ''
 }
 
-// "Week 2 · Sat 11 Oct · 68 pts" for the player's weeks list; "Week 2 · Sat 11 Oct · didn't play" when
-// they scored nothing that week.
-export function weekRowLine(week, points) {
+// "Week 2 · Sat 11 Oct · 68 pts" for the player's weeks list. A week they picked in but scored 0 shows
+// "0 pts"; "didn't play" only when they made no picks that week.
+export function weekRowLine(week, points, picked) {
   const head = `Week ${week.week_number} \u00b7 ${shortDate(week.saturday_date)}`
-  return points === undefined ? `${head} \u00b7 didn't play` : `${head} \u00b7 ${points} pts`
+  if (points !== undefined) return `${head} \u00b7 ${points} pts`
+  return picked ? `${head} \u00b7 0 pts` : `${head} \u00b7 didn't play`
 }
