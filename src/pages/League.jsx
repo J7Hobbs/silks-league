@@ -107,7 +107,7 @@ export default function League() {
   const satColumns = (sat?.satTable.columns || []).slice(-HUB_WEEKS)
   const satRows = (sat?.satTable.rows || []).map(r => ({
     ...r,
-    modal: { userId: r.id, name: r.name, pts: r.points, rank: r.rank },
+    modal: { userId: r.id, name: r.name, pts: r.points, rank: r.rank, seasonId: sat?.season?.id },
   }))
 
   // ── Festival card ──

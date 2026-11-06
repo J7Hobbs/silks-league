@@ -47,14 +47,14 @@ export default function LeagueSaturday() {
     rows = weekRowsForAll(weekRows, satRows).map(r => ({
       id: r.user_id, rank: r.rank, name: r.name, isMe: r.isMe, points: r.weekPoints,
       sub: winnersLine(r.winners || 0),
-      modal: { userId: r.user_id, name: r.name, pts: r.weekPoints, rank: r.rank },
+      modal: { userId: r.user_id, name: r.name, pts: r.weekPoints, rank: r.rank, seasonId: season?.id },
     }))
   } else {
     caption = month ? `${month} season` : ''
     message = MSG_SEASON
     rows = satRows.map(r => ({
       id: r.user_id, rank: r.rank, name: r.name, isMe: r.isMe, points: r.seasonTotal,
-      modal: { userId: r.user_id, name: r.name, pts: r.seasonTotal, rank: r.rank },
+      modal: { userId: r.user_id, name: r.name, pts: r.seasonTotal, rank: r.rank, seasonId: season?.id },
     }))
   }
 

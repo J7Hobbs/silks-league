@@ -55,7 +55,7 @@ export default function LeaguePastSeason() {
   const label = seasonLabel(season)
   const rows = satRows.map(r => ({
     id: r.user_id, rank: r.rank, name: r.name, isMe: r.isMe, points: r.seasonTotal,
-    modal: { userId: r.user_id, name: r.name, pts: r.seasonTotal, rank: r.rank },
+    modal: { userId: r.user_id, name: r.name, pts: r.seasonTotal, rank: r.rank, seasonId: season.id },
   }))
   const mine = satRows.find(r => r.isMe)
   const played = !!mine && mine.weeksPlayed > 0

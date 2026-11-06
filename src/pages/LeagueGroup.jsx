@@ -93,14 +93,14 @@ export default function LeagueGroup() {
     rows = weekRowsForGroup(sat?.weekRows || [], satRows).map(r => ({
       id: r.user_id, rank: r.rank, name: r.name, isMe: r.isMe, points: r.weekPoints,
       sub: winnersLine(r.winners || 0),
-      modal: { userId: r.user_id, name: r.name, pts: r.weekPoints, rank: r.rank },
+      modal: { userId: r.user_id, name: r.name, pts: r.weekPoints, rank: r.rank, seasonId: sat?.season?.id },
     }))
   } else {
     caption = month ? `${group.name} · ${month}` : group.name
     message = MSG_SEASON
     rows = satRows.map(r => ({
       id: r.userId, rank: r.rank, name: r.name, isMe: r.isMe, points: r.points,
-      modal: { userId: r.userId, name: r.name, pts: r.points, rank: r.rank },
+      modal: { userId: r.userId, name: r.name, pts: r.points, rank: r.rank, seasonId: sat?.season?.id },
     }))
   }
   const table = showFest ? fest.table : view === 'season' && sat ? groupSatTable(sat.tableData, satRows) : null

@@ -13,6 +13,8 @@
 .pp-name { margin: 0; font-family: var(--font-heading); font-weight: 800; font-size: 20px; line-height: 1.2; letter-spacing: 0; color: var(--text); overflow-wrap: anywhere; }
 .pp-sub { margin: 0; font-size: 13px; line-height: 1.4; color: var(--rs-body); }
 .pp-cap { margin: 0; font-size: 12px; line-height: 1.4; color: var(--nav-inactive); }
+.pp-period { margin: 0; font-size: 13px; line-height: 1.4; color: var(--rs-body); }
+.pp-period__pts { color: var(--gold); font-weight: 600; }
 .pp-msg { margin: 0; padding: 18px 0; text-align: center; font-size: 14px; line-height: 1.45; color: var(--text-muted); }
 .pp-retry { align-self: center; height: 40px; padding: 0 18px; border-radius: 10px; border: 1px solid rgba(242, 239, 228, 0.18); background: transparent; color: var(--text); font-family: var(--font-body); font-size: 14px; font-weight: 600; cursor: pointer; }
 .pp-locked { display: flex; flex-direction: column; gap: 6px; padding: 26px 16px; border-radius: 14px; background: var(--surface); text-align: center; }
