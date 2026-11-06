@@ -1,8 +1,29 @@
 // Read-only festival reads for Home's "next festival" card and the Festivals page.
 import { supabase } from './supabase'
-import { ukDateStr } from './format.js'
+import { ukDateStr, daysBetween } from './format.js'
 
 const COLS = 'id, name, display_name, start_date, end_date, venue, banner_url, banner_position, is_active'
+
+// The one rule for "the festival happening now" (Home's festival card, the Leaderboard hub and a
+// group's festival switch): it has at least one race, today is on or after its start date, and
+// today is no more than 7 days after its end date. Decided by dates only, not by is_active. If two
+// qualify, the one that started most recently. -> { festival, live } or null (live = not yet over).
+export function festivalInWindow(f, today) {
+  return !!f.start_date && f.start_date <= today && daysBetween(f.end_date || f.start_date, today) <= 7
+}
+
+export async function loadCurrentFestival(today = ukDateStr(Date.now())) {
+  const { data } = await supabase.from('festivals').select('*').order('start_date', { ascending: false })
+  // Only a handful pass the dates, so checking them for races one by one is cheap.
+  for (const f of (data || []).filter(f => festivalInWindow(f, today))) {
+    const { data: days } = await supabase.from('festival_days').select('id').eq('festival_id', f.id)
+    if (!days?.length) continue
+    const { count } = await supabase.from('festival_races')
+      .select('id', { count: 'exact', head: true }).in('festival_day_id', days.map(d => d.id))
+    if (count > 0) return { festival: f, live: (f.end_date || f.start_date) >= today }
+  }
+  return null
+}
 
 // Festivals starting after today (UK), earliest first, plus the day rows of the first two
 // (the live festival card may already be showing the first one). Pass the result to

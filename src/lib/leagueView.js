@@ -1,5 +1,5 @@
 // Pure helpers for the Leaderboard page, kept apart from Supabase so they are easy to test.
-import { monthLong, daysBetween } from './format.js'
+import { monthLong } from './format.js'
 
 // "obarratt" -> "OB", "Jack Hobbs" -> "JH", "Jack" -> "JA". Empty when there is no name.
 export function initialsFor(name) {
@@ -76,21 +76,6 @@ export function weekRowsForGroup(weekRows, groupRows) {
 
 
 // ═══ The Leaderboard hub ═══
-
-// The festival the hub shows a card for: switched on, started, and either still running or
-// finished within the last 7 days (the latest such one; a running one wins). Null when none.
-//   -> { festival, live } where live is true until its last day is over.
-export function hubFestival(festivals, today) {
-  let best = null
-  for (const f of festivals || []) {
-    if (!f.is_active || !f.start_date || f.start_date > today) continue
-    const end = f.end_date || f.start_date
-    if (daysBetween(end, today) > 7) continue
-    const live = end >= today
-    if (!best || (live && !best.live) || (live === best.live && f.start_date > best.festival.start_date)) best = { festival: f, live }
-  }
-  return best
-}
 
 // "November · after week 2", or "November · no results yet".
 export function satHubSub(season, completedWeeks) {

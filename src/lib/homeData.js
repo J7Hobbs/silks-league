@@ -1,7 +1,7 @@
 import { supabase } from './supabase'
 import { seasonTable, festivalRank } from './standings'
-import { localDateStr, daysBetween, deadlineMs } from './format'
-import { loadUpcomingFestivals, pickNextFestival } from './festivalData.js'
+import { localDateStr, ukDateStr, daysBetween, deadlineMs } from './format'
+import { loadUpcomingFestivals, pickNextFestival, loadCurrentFestival } from './festivalData.js'
 
 // Everything the Home page needs, in one read-only load. A failing part is
 // logged and left empty so the rest of the page still renders.
@@ -121,12 +121,19 @@ export async function refreshSaturday(user) {
 }
 
 // ── Festival ────────────────────────────────────────────────────────────────
-// Shown when a festival is active and hasn't ended. Focus is the next day with
-// open picks, else today's day (picks closed).
+// Shown for the festival happening now or finished in the last 7 days (festivalData.js), or one
+// switched on and about to start. Focus is the next day with open picks, else today's day
+// (picks closed), else its last day.
 async function loadFestival(userId, today, nowMs) {
-  const { data: fests } = await supabase.from('festivals').select('*')
-    .eq('is_active', true).gte('end_date', today).order('start_date', { ascending: true })
-  const festival = fests?.[0]
+  // The festival happening now (or finished within the last 7 days): the same date rule as the
+  // Leaderboard (loadCurrentFestival). Failing that, a festival that is switched on and not yet
+  // started, so its first day's picks can open ahead of time.
+  let festival = (await loadCurrentFestival(ukDateStr(nowMs)))?.festival
+  if (!festival) {
+    const { data: fests } = await supabase.from('festivals').select('*')
+      .eq('is_active', true).gt('start_date', today).order('start_date', { ascending: true })
+    festival = fests?.[0]
+  }
   if (!festival) return null
 
   const { data: days } = await supabase.from('festival_days')

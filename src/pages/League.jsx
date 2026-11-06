@@ -10,9 +10,10 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Clock } from 'lucide-react'
 import { ukDateStr } from '../lib/format.js'
-import { loadSaturdayLeague, loadFestivals, loadMyGroups, fetchFestivalRows } from '../lib/leagueData.js'
+import { loadSaturdayLeague, loadMyGroups, fetchFestivalRows } from '../lib/leagueData.js'
+import { loadCurrentFestival } from '../lib/festivalData.js'
 import { loadMembers, loadStandings } from '../lib/groupStandings.js'
-import { hubFestival, satHubSub, festHubSub, previewRows, allZero } from '../lib/leagueView.js'
+import { satHubSub, festHubSub, previewRows, allZero } from '../lib/leagueView.js'
 import { useLeagueUser } from '../components/league/useLeagueUser.js'
 import PreviewCard from '../components/league/PreviewCard.jsx'
 import GroupsList from '../components/league/GroupsList.jsx'
@@ -42,19 +43,18 @@ export default function League() {
     let cancelled = false
     async function load() {
       try {
-        const [sat, festivals, groups] = await Promise.all([
-          loadSaturdayLeague(user.id, { withWeek: false }),
-          loadFestivals().catch(() => []),
-          loadMyGroups(user.id).catch(() => []),
-        ])
-        const hub = hubFestival(festivals, ukDateStr(Date.now()))
-
         // Older links navigate here with { festivalTab } (e.g. "Full leaderboard" on Home).
         const wanted = location.state?.festivalTab
-        if (wanted && festivals.some(f => f.id === wanted)) {
+        if (wanted) {
           navigate(`/league/festival/${wanted}`, { replace: true })
           return
         }
+
+        const [sat, hub, groups] = await Promise.all([
+          loadSaturdayLeague(user.id, { withWeek: false }),
+          loadCurrentFestival(ukDateStr(Date.now())).catch(() => null),
+          loadMyGroups(user.id).catch(() => []),
+        ])
 
         // The festival card and each group's position are extras: if one can't be read the rest still shows.
         const [fest, standings] = await Promise.all([

@@ -115,14 +115,8 @@ export async function loadSaturdayLeague(myUserId, { withWeek = true } = {}) {
   return { season: s, currentWeek: latestWeek, satRows, weekRows, completedWeeks }
 }
 
-// ── Festivals ─────────────────────────────────────────────────
-// Festivals that are switched on, soonest first. The hub picks the live / recent one from these.
-export async function loadFestivals() {
-  const { data } = await supabase
-    .from('festivals').select('*').eq('is_active', true).order('start_date')
-  return data || []
-}
-
+// ── Festivals ──
+// (Which festival is live or recent: loadCurrentFestival in festivalData.js.)
 // One festival by id, whatever its dates (the full table keeps working after it finishes).
 export async function loadFestival(id) {
   const { data } = await supabase.from('festivals').select('*').eq('id', id).maybeSingle()

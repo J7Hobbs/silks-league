@@ -9,9 +9,10 @@ import { useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { ordinal, ukDateStr } from '../lib/format.js'
 import {
-  loadSaturdayLeague, loadFestivals, fetchFestivalRows, fetchGroupSatRows, loadGroupMemberIds,
+  loadSaturdayLeague, fetchFestivalRows, fetchGroupSatRows, loadGroupMemberIds,
 } from '../lib/leagueData.js'
-import { hubFestival, seasonMonth, weekSubLine, festSubLine } from '../lib/leagueView.js'
+import { loadCurrentFestival } from '../lib/festivalData.js'
+import { seasonMonth, weekSubLine, festSubLine, winnersLine, weekRowsForGroup } from '../lib/leagueView.js'
 import { useLeagueUser } from '../components/league/useLeagueUser.js'
 import BackLink from '../components/league/BackLink.jsx'
 import ViewToggle from '../components/league/ViewToggle.jsx'
@@ -22,13 +23,16 @@ import '../styles/picks.css'
 import '../styles/league.css'
 
 const MSG_SEASON = 'No points yet – the table fills up after the first race week'
+const MSG_WEEK = 'No points yet this week – the table fills up after the first race'
 const MSG_FEST = 'No points yet – the table fills up after the first race'
+const VIEWS = [{ key: 'week', label: 'This week' }, { key: 'season', label: 'Season' }]
 
 export default function LeagueGroup() {
   const { groupId } = useParams()
   const user = useLeagueUser()
   const [data, setData] = useState(undefined)   // undefined = loading, null = not found / not a member
   const [tab, setTab] = useState('saturday')    // 'saturday' | 'festival'
+  const [view, setView] = useState('season')    // 'week' | 'season' (Saturday League)
   const [picksModal, setPicksModal] = useState(null)
 
   useEffect(() => {
@@ -36,14 +40,13 @@ export default function LeagueGroup() {
     let cancelled = false
     ;(async () => {
       try {
-        const [{ data: group }, memberIds, sat, festivals] = await Promise.all([
+        const [{ data: group }, memberIds, sat, hub] = await Promise.all([
           supabase.from('groups').select('id, name').eq('id', groupId).maybeSingle(),
           loadGroupMemberIds(groupId),
-          loadSaturdayLeague(user.id, { withWeek: false }),
-          loadFestivals().catch(() => []),
+          loadSaturdayLeague(user.id),
+          loadCurrentFestival(ukDateStr(Date.now())).catch(() => null),
         ])
         if (!group || !memberIds.includes(user.id)) { if (!cancelled) setData(null); return }
-        const hub = hubFestival(festivals, ukDateStr(Date.now()))
         const [satRows, fest] = await Promise.all([
           fetchGroupSatRows(memberIds, user.id),
           hub ? fetchFestivalRows(hub.festival, memberIds, user.id).catch(() => null) : null,
@@ -85,6 +88,15 @@ export default function LeagueGroup() {
       sub: festSubLine(r.dayPts, fest.festDays),
       modal: { userId: r.userId, name: r.name, pts: r.points, rank: r.rank, festivalId: festival.id, festivalName: festName },
     }))
+  } else if (view === 'week') {
+    const weekLabel = sat?.currentWeek?.week_number ? `Week ${sat.currentWeek.week_number}` : 'This week'
+    caption = `${group.name} · ${weekLabel}`
+    message = MSG_WEEK
+    rows = weekRowsForGroup(sat?.weekRows || [], satRows).map(r => ({
+      id: r.user_id, rank: r.rank, name: r.name, isMe: r.isMe, points: r.weekPoints,
+      sub: winnersLine(r.winners || 0),
+      modal: { userId: r.user_id, name: r.name, pts: r.weekPoints, rank: r.rank },
+    }))
   } else {
     caption = month ? `${group.name} · ${month}` : group.name
     message = MSG_SEASON
@@ -113,6 +125,8 @@ export default function LeagueGroup() {
             onChange={setTab}
           />
         )}
+
+        {!showFest && <ViewToggle items={VIEWS} value={view} onChange={setView} />}
 
         <TableBody rows={rows} caption={caption} message={message} festival={showFest} onPlayer={r => setPicksModal(r.modal)} />
 
