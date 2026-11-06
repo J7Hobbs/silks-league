@@ -66,6 +66,22 @@ export function StandingsRowsSkeleton({ count = 6 }) {
   )
 }
 
+// The Leaderboard hub: two cards and a groups list.
+export function LeagueHubSkeleton() {
+  return (
+    <div className="app-page lg">
+      <main className="lg__main">
+        <h1 className="lg-title">Leaderboard</h1>
+        <div className="sk-col" style={{ gap: 14 }} role="status" aria-busy="true" aria-label="Loading">
+          <Block h={300} r={16} />
+          <Block h={300} r={16} />
+          <Block h={60} r={14} />
+        </div>
+      </main>
+    </div>
+  )
+}
+
 export function LeagueSkeleton() {
   return (
     <div className="app-page lg">

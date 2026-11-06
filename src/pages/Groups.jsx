@@ -6,7 +6,6 @@ import { cleanCode } from '../lib/invite.js'
 import { loadMembers, loadStandings } from '../lib/groupStandings.js'
 import { standingLine, playersLine, circlesFor } from '../lib/groupsView.js'
 import { shareInvite } from '../lib/groupShare.js'
-import { useCompetition } from '../context/competition.js'
 import TopNav from '../components/TopNav.jsx'
 import BottomNav from '../components/BottomNav.jsx'
 import Sheet from '../components/groups/Sheet.jsx'
@@ -26,7 +25,6 @@ export default function Groups() {
   const navigate = useNavigate()
   const location = useLocation()
   const [searchParams] = useSearchParams()
-  const { setCompetition } = useCompetition()
 
   const [user, setUser] = useState(null)
   const [groups, setGroups] = useState(null)       // null while loading
@@ -95,8 +93,7 @@ export default function Groups() {
 
   // ── Open a group's table on the Leaderboard ───────────────────
   function openTable(group) {
-    setCompetition('group', group.id)
-    navigate('/league')
+    navigate(`/league/group/${group.id}`)
   }
 
   // ── Create group ──────────────────────────────────────────────

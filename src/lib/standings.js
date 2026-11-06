@@ -135,6 +135,17 @@ export async function weekRank(userId, raceIds) {
   return rankOf(totals, wins, names, userId)
 }
 
+// Festival totals and winning picks per entrant: starting points plus festival scores. Shared by
+// festivalRank (Results, Home) and the Leaderboard's festival tables, so both rank identically
+// (order them with orderIds).
+export function festivalTotals(entries, scoreRows) {
+  const totals = {}
+  entries.forEach(e => { totals[e.user_id] = e.starting_points || 0 })
+  const wins = {}
+  tally(scoreRows.filter(s => s.user_id in totals), totals, wins)
+  return { totals, wins }
+}
+
 // Rank in a festival, among entrants (starting points included). Null if not entered.
 export async function festivalRank(userId, festivalId) {
   const { data: entries } = await supabase
@@ -153,45 +164,46 @@ export async function festivalRank(userId, festivalId) {
         .select('id, user_id, total_points, position_achieved').in('festival_race_id', raceIds))
     : []
 
-  const totals = {}
-  entries.forEach(e => { totals[e.user_id] = e.starting_points || 0 })
-  const wins = {}
-  tally(scores.filter(s => s.user_id in totals), totals, wins)
+  const { totals, wins } = festivalTotals(entries, scores)
   const names = await namesFor(Object.keys(totals))
   return rankOf(totals, wins, names, userId)
 }
 
-// Rank for one race day among everyone who made at least one pick that day (including players
+// One race day's standings among everyone who made at least one pick that day (including players
 // who scored 0). Points come from the day's score rows; ties break as everywhere else: points,
 // then winning picks, then name. Anyone with a score row is counted too, so the list is never
-// shorter than what the Leaderboard shows. Null if the player is not in the list.
-async function dayRank(userId, pickRows, scoreRows) {
+// shorter than what the Leaderboard shows. { order, totals, wins, names } (order = ids, best first).
+async function dayStanding(pickRows, scoreRows) {
   const totals = {}
   const wins = {}
   pickRows.forEach(r => { totals[r.user_id] = 0 })
   tally(scoreRows, totals, wins)
-  if (!(userId in totals)) return null
   const names = await namesFor(Object.keys(totals))
-  return rankOf(totals, wins, names, userId)
+  return { order: orderIds(totals, wins, names), totals, wins, names }
 }
 
-// A Saturday League race day (race_week).
-export async function weekDayRank(userId, raceIds) {
-  if (!raceIds?.length) return null
+// A Saturday League race week, or one festival day. The Results hero and the Leaderboard's
+// "This week" table both read these.
+export async function weekDayStanding(raceIds) {
+  if (!raceIds?.length) return { order: [], totals: {}, wins: {}, names: {} }
   const [pickRows, scoreRows] = await Promise.all([
     fetchAll(() => supabase.from('picks').select('id, user_id').in('race_id', raceIds)),
     scoresForRaces(raceIds),
   ])
-  return dayRank(userId, pickRows, scoreRows)
+  return dayStanding(pickRows, scoreRows)
 }
 
-// One festival day.
-export async function festivalDayRank(userId, raceIds) {
-  if (!raceIds?.length) return null
+export async function festivalDayStanding(raceIds) {
+  if (!raceIds?.length) return { order: [], totals: {}, wins: {}, names: {} }
   const [pickRows, scoreRows] = await Promise.all([
     fetchAll(() => supabase.from('festival_picks').select('id, user_id').in('festival_race_id', raceIds)),
     fetchAll(() => supabase.from('festival_scores')
       .select('id, user_id, total_points, position_achieved').in('festival_race_id', raceIds)),
   ])
-  return dayRank(userId, pickRows, scoreRows)
+  return dayStanding(pickRows, scoreRows)
 }
+
+// { rank, total, points } for userId on that day, or null if they did not pick.
+const dayRankOf = (st, userId) => rankOf(st.totals, st.wins, st.names, userId)
+export async function weekDayRank(userId, raceIds) { return dayRankOf(await weekDayStanding(raceIds), userId) }
+export async function festivalDayRank(userId, raceIds) { return dayRankOf(await festivalDayStanding(raceIds), userId) }

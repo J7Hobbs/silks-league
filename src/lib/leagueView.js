@@ -1,5 +1,5 @@
 // Pure helpers for the Leaderboard page, kept apart from Supabase so they are easy to test.
-import { monthLong } from './format.js'
+import { monthLong, daysBetween } from './format.js'
 
 // "obarratt" -> "OB", "Jack Hobbs" -> "JH", "Jack" -> "JA". Empty when there is no name.
 export function initialsFor(name) {
@@ -72,4 +72,44 @@ export function weekRowsForGroup(weekRows, groupRows) {
     .map(r => ({ user_id: r.userId, name: r.name, isMe: r.isMe, weekPoints: 0, racesScored: 0, winners: 0 }))
     .sort(byName)
   return ranked([...scored, ...rest])
+}
+
+
+// ═══ The Leaderboard hub ═══
+
+// The festival the hub shows a card for: switched on, started, and either still running or
+// finished within the last 7 days (the latest such one; a running one wins). Null when none.
+//   -> { festival, live } where live is true until its last day is over.
+export function hubFestival(festivals, today) {
+  let best = null
+  for (const f of festivals || []) {
+    if (!f.is_active || !f.start_date || f.start_date > today) continue
+    const end = f.end_date || f.start_date
+    if (daysBetween(end, today) > 7) continue
+    const live = end >= today
+    if (!best || (live && !best.live) || (live === best.live && f.start_date > best.festival.start_date)) best = { festival: f, live }
+  }
+  return best
+}
+
+// "November · after week 2", or "November · no results yet".
+export function satHubSub(season, completedWeeks) {
+  const month = seasonMonth(season)
+  const last = completedWeeks[completedWeeks.length - 1]
+  return [month, last ? `after week ${last.week_number}` : 'no results yet'].filter(Boolean).join(' · ')
+}
+
+// "After day 2 of 4", "Final table" once it is over, or "4 days · no results yet" before day 1 is scored.
+export function festHubSub(rows, festDays, live) {
+  if (!live) return 'Final table'
+  const scored = rows.flatMap(r => Object.keys(r.dayPts || {}).map(Number))
+  const done = scored.length ? Math.max(...scored) : 0
+  return done ? `After day ${done} of ${festDays.length}` : `${festDays.length} ${festDays.length === 1 ? 'day' : 'days'} · no results yet`
+}
+
+// The top of a table for a hub card: the first `size` rows, plus the player's own row when
+// they are outside them (it is pinned under the list).
+export function previewRows(rows, size = 5) {
+  const me = rows.find(r => r.isMe)
+  return { top: rows.slice(0, size), pinned: me && me.rank > size ? me : null }
 }

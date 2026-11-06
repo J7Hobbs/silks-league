@@ -11,6 +11,9 @@ import Dashboard      from './pages/Dashboard.jsx'
 import Admin          from './pages/Admin.jsx'
 import Picks          from './pages/Picks.jsx'
 import League         from './pages/League.jsx'
+import LeagueSaturday from './pages/LeagueSaturday.jsx'
+import LeagueFestival from './pages/LeagueFestival.jsx'
+import LeagueGroup    from './pages/LeagueGroup.jsx'
 import Races          from './pages/Races.jsx'
 import Results        from './pages/Results.jsx'
 import Profile        from './pages/Profile.jsx'
@@ -43,6 +46,9 @@ createRoot(document.getElementById('root')).render(
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/picks"     element={<Picks />}     />
             <Route path="/league"    element={<League />}    />
+            <Route path="/league/saturday"            element={<LeagueSaturday />} />
+            <Route path="/league/festival/:festivalId" element={<LeagueFestival />} />
+            <Route path="/league/group/:groupId"       element={<LeagueGroup />}    />
             <Route path="/results"   element={<Results />}   />
             <Route path="/festivals" element={<Festivals />} />
             <Route path="/results/festival/:festivalId" element={<Results />} />
