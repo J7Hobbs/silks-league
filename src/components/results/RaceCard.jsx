@@ -5,11 +5,12 @@ const BET = { win: 'Win', each_way: 'Each-way' }
 
 // One race: the player's pick with its price, and a score box with the finishing position and
 // points. Tap a race (once its result is in) to see the full placings.
-export default function RaceCard({ row, open, onToggle }) {
+// `owner` is whose pick it is: "your" on the Results page, "their" when looking at another player.
+export default function RaceCard({ row, open, onToggle, owner = 'your' }) {
   const { pick, pending } = row
   const note = pick?.replaced
     ? 'Original pick withdrawn – replaced with the favourite'
-    : pick?.withdrawn ? 'Your pick was withdrawn' : ''
+    : pick?.withdrawn ? `${owner === 'your' ? 'Your' : 'Their'} pick was withdrawn` : ''
 
   const body = (
     <>
@@ -63,7 +64,7 @@ export default function RaceCard({ row, open, onToggle }) {
                 <span className="rs-place__pos">{ordinal(pl.position)}</span>
                 <span className="rs-place__name">
                   <span className="rs-place__horse">{pl.name}</span>
-                  {pl.mine && <span className="rs-place__tag"> · your pick</span>}
+                  {pl.mine && <span className="rs-place__tag"> · {owner} pick</span>}
                 </span>
                 <span className="rs-place__sp">{pl.sp}</span>
               </li>

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 
-// A bottom sheet. Mount it to open it, unmount it to close it.
+// A bottom sheet. Mount it to open it, unmount it to close it. `className` adds a modifier to the panel.
 //  - closes on a backdrop tap and on Escape (calls onClose); with `dragToClose`, also when the grab
 //    handle is dragged down
 //  - keeps Tab inside the sheet and stops the page behind it scrolling
@@ -10,7 +10,7 @@ import { createPortal } from 'react-dom'
 //    data-return attribute to find that button again if the page re-rendered it meanwhile.
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
-export default function Sheet({ onClose, labelledBy, returnKey, dragToClose = false, children }) {
+export default function Sheet({ onClose, labelledBy, returnKey, dragToClose = false, className = '', children }) {
   const panel = useRef(null)
   const [opener] = useState(() => document.activeElement)
   const [vv, setVv] = useState(null)
@@ -83,7 +83,7 @@ export default function Sheet({ onClose, labelledBy, returnKey, dragToClose = fa
     <div className="gr-overlay" style={vv ? { top: vv.top, height: vv.height } : undefined}>
       <div className="gr-backdrop" onClick={() => closeRef.current?.()} aria-hidden="true" />
       <div
-        className="gr-sheet"
+        className={`gr-sheet${className ? ` ${className}` : ''}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={labelledBy}

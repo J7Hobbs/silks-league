@@ -1,7 +1,17 @@
-// Festival days (Tue, Wed...). Days that haven't locked yet are greyed out and can't be tapped.
-export default function DayTabs({ tabs, selectedId, onSelect }) {
+import { useRef, useEffect } from 'react'
+
+// Festival days (Tue, Wed...) or, with `scroll`, a longer row (the weeks of a season) that scrolls
+// sideways and keeps the selected tab in view. Tabs with locked: false are greyed out and can't be tapped.
+export default function DayTabs({ tabs, selectedId, onSelect, scroll = false }) {
+  const row = useRef(null)
+  useEffect(() => {
+    const el = row.current
+    const on = el?.querySelector('.rs-day--on')
+    if (scroll && el && on) el.scrollLeft = on.offsetLeft - (el.clientWidth - on.offsetWidth) / 2
+  }, [scroll, selectedId])
+
   return (
-    <div className="rs-days" role="group" aria-label="Festival day">
+    <div ref={row} className={`rs-days${scroll ? ' rs-days--scroll' : ''}`} role="group" aria-label={scroll ? 'Race week' : 'Festival day'}>
       {tabs.map(t => (
         <button
           key={t.id}

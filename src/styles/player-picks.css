@@ -1,0 +1,21 @@
+/* The player picks sheet (PlayerPicksModal): a bottom sheet over a Leaderboard table. The tabs, outcome
+   boxes and race cards are the Results page's (results.css); the sheet itself is the shared one
+   (groups.css). The sheet sits on the page colour so the race cards stand out, as on Results. */
+.gr-sheet.pp-sheet {
+  --rs-body: #c9d3c4;
+  max-height: 85vh;
+  max-height: 85dvh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+}
+.pp-head { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.pp-name { margin: 0; font-family: var(--font-heading); font-weight: 800; font-size: 20px; line-height: 1.2; letter-spacing: 0; color: var(--text); overflow-wrap: anywhere; }
+.pp-sub { margin: 0; font-size: 13px; line-height: 1.4; color: var(--rs-body); }
+.pp-cap { margin: 0; font-size: 12px; line-height: 1.4; color: var(--nav-inactive); }
+.pp-msg { margin: 0; padding: 18px 0; text-align: center; font-size: 14px; line-height: 1.45; color: var(--text-muted); }
+.pp-retry { align-self: center; height: 40px; padding: 0 18px; border-radius: 10px; border: 1px solid rgba(242, 239, 228, 0.18); background: transparent; color: var(--text); font-family: var(--font-body); font-size: 14px; font-weight: 600; cursor: pointer; }
+.pp-locked { display: flex; flex-direction: column; gap: 6px; padding: 26px 16px; border-radius: 14px; background: var(--surface); text-align: center; }
+.pp-locked__title { margin: 0; font-size: 15px; font-weight: 600; color: var(--text); }
+.pp-locked__text { margin: 0; font-size: 13px; line-height: 1.45; color: var(--text-muted); }
+.pp-wait { display: flex; flex-direction: column; gap: 10px; padding: 6px 0; }

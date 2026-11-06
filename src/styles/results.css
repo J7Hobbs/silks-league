@@ -69,6 +69,9 @@
   background: var(--surface); border: 1px solid var(--border); color: var(--text);
   font-family: var(--font-body); font-size: 13px; font-weight: 600;
 }
+.rs-days--scroll { position: relative; overflow-x: auto; scrollbar-width: none; }
+.rs-days--scroll::-webkit-scrollbar { display: none; }
+.rs-days--scroll .rs-day { flex: 0 0 auto; min-width: 52px; padding: 0 12px; }
 .rs-day--on { background: var(--gold); border-color: var(--gold); color: var(--bg); }
 .rs-day:disabled { opacity: 0.4; cursor: default; color: var(--nav-inactive); }
 
