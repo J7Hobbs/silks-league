@@ -131,9 +131,9 @@
 
 /* ── Waiting state: between one race week and the next ── */
 .rs-wait { position: relative; }
-.rs-wait__ghost { display: flex; flex-direction: column; gap: 14px; filter: blur(2px); opacity: 0.35; pointer-events: none; user-select: none; }
+.rs-wait__ghost { display: flex; flex-direction: column; gap: 14px; filter: blur(2px); opacity: 0.5; pointer-events: none; user-select: none; }
 .rs-ghost { background: var(--surface); border-radius: 14px; }
-.rs-ghost--hero { position: relative; overflow: hidden; height: 118px; border-radius: 16px; }
+.rs-ghost--hero { position: relative; isolation: isolate; overflow: hidden; height: 118px; border-radius: 16px; }
 .rs-ghost--box { height: 58px; border-radius: 12px; }
 .rs-ghost--card { height: 60px; }
 .rs-wait__over { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }

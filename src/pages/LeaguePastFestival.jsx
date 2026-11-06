@@ -12,7 +12,7 @@ import { ordinal } from '../lib/format.js'
 import { useLeagueUser } from '../components/league/useLeagueUser.js'
 import BackLink from '../components/league/BackLink.jsx'
 import PastBanner from '../components/league/PastBanner.jsx'
-import LeagueTable from '../components/league/LeagueTable.jsx'
+import LeagueTable, { TableKey } from '../components/league/LeagueTable.jsx'
 import PicksModalHost from '../components/league/PicksModalHost.jsx'
 import { LeagueSkeleton } from '../components/Skeletons.jsx'
 import '../styles/picks.css'
@@ -85,6 +85,7 @@ export default function LeaguePastFestival() {
         ) : (
           <>
             <LeagueTable columns={table.columns} rows={table.rows} dense={table.columns.length >= 5} onPlayer={r => setPicksModal(rows.find(x => x.id === r.id)?.modal)} />
+            <TableKey festival />
             <p className="lg-foot">Tap any player to see their picks</p>
           </>
         )}

@@ -11,7 +11,7 @@ export default function WaitingState({ next, last }) {
   return (
     <div className="rs-wait">
       <div className="rs-wait__ghost" aria-hidden="true">
-        <div className="rs-ghost rs-ghost--hero"><div className="rs-hero__echo"><EchoRings /></div></div>
+        <div className="rs-ghost rs-ghost--hero"><div className="rs-hero__echo"><EchoRings boost={2} /></div></div>
         <div className="rs-boxes">
           <div className="rs-ghost rs-ghost--box" /><div className="rs-ghost rs-ghost--box" /><div className="rs-ghost rs-ghost--box" />
         </div>

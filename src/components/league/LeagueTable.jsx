@@ -51,11 +51,11 @@ export default function LeagueTable({ columns, rows, variant = 'full', dense = f
   )
 }
 
-// The one key under the hub cards.
-export function TableKey() {
+// The key under a table: a Saturday table's best score is "that week", a festival's "that day".
+export function TableKey({ festival = false }) {
   return (
     <p className="lt-key">
-      <span className="lt-best lt-key__pill">best that week</span>
+      <span className="lt-best lt-key__pill">best that {festival ? 'day' : 'week'}</span>
       <span className="lt-mv--up">▲ up</span>
       <span className="lt-mv--down">▼ down</span>
     </p>

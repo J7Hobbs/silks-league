@@ -139,6 +139,7 @@ export default function League() {
           to="/league/saturday"
           onPlayer={r => setPicksModal(r.modal)}
         />
+        {satRows.length > 0 && <TableKey />}
 
         {fest && (
           <PreviewCard
@@ -153,8 +154,7 @@ export default function League() {
             onPlayer={r => setPicksModal(r.modal)}
           />
         )}
-
-        {(satRows.length > 0 || festRows.length > 0) && <TableKey />}
+        {festRows.length > 0 && <TableKey festival />}
 
         <GroupsList groups={groups} />
       </main>
