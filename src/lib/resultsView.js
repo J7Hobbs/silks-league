@@ -1,7 +1,7 @@
 // Pure helpers for the Results page, kept apart from Supabase so they are easy to test.
 // Points are never worked out here: they are read straight from scores / festival_scores.
 import { getPlaceTerms } from './scoring.js'
-import { ordinal, picksRevealed, ukDateStr, daysBetween, weekdayShort, clockText } from './format.js'
+import { ordinal, picksRevealed, ukDateStr, daysBetween, weekdayShort, clockText, wednesdayAfter } from './format.js'
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -167,7 +167,32 @@ export function resolveView({ weeks, festivals, weekParam, festivalParam, nowMs 
     const day = festival ? latestLockedDay(festival, nowMs) : null
     return day ? { kind: 'festival', festival, dayId: day.id } : { kind: 'none' }
   }
-  return defaultView({ weeks, festivals, nowMs }) || { kind: 'none' }
+  const view = defaultView({ weeks, festivals, nowMs })
+  if (!view) return { kind: 'none' }
+  return isWaiting(view, nowMs) ? { ...view, waiting: true, next: nextRaceDay({ weeks, festivals, nowMs }) } : view
+}
+
+// The default Results view shows the latest locked race day until 23:59 (UK time) on the first
+// Wednesday after it; from the next day until the next race day's picks lock, the page shows a
+// "new race week coming" state instead. A festival also has to be over (its last day has gone).
+export function isWaiting(view, nowMs) {
+  const today = ukDateStr(nowMs)
+  const lastDate = view.kind === 'week'
+    ? view.week.date
+    : view.festival.days.find(d => d.id === view.dayId)?.date
+  if (!lastDate || today <= wednesdayAfter(lastDate)) return false
+  return view.kind === 'week' || !view.festival.endDate || today > view.festival.endDate
+}
+
+// The next race day to come (the earliest one whose picks haven't locked) that already has
+// races loaded, which means its picks are open. { kind, id, date } or null.
+export function nextRaceDay({ weeks, festivals, nowMs }) {
+  const days = [
+    ...weeks.map(w => ({ kind: 'week', id: w.id, day: w })),
+    ...festivals.flatMap(f => f.days.map(d => ({ kind: 'festival', id: f.id, day: d }))),
+  ].filter(x => x.day.raceIds.length && !isLocked(x.day, nowMs))
+  days.sort((a, b) => a.day.date.localeCompare(b.day.date))
+  return days[0] ? { kind: days[0].kind, id: days[0].id, date: days[0].day.date } : null
 }
 
 // "Tue", "Wed"... one per festival day. Days that haven't locked can't be opened.

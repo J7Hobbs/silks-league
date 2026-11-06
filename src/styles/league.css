@@ -202,3 +202,47 @@
 .lp-row__wontext { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .lp-week:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+/* ═══ Table with columns (LeagueTable.jsx) ═══ */
+.lt { font-family: var(--font-body); font-size: 12.5px; color: var(--text); }
+.lt-scroll { overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.lt-scroll::-webkit-scrollbar { display: none; }
+.lt-table { display: flex; flex-direction: column; min-width: 100%; width: max-content; }
+.lt-row {
+  display: flex; align-items: center; box-sizing: border-box; width: 100%; min-height: 40px; margin: 0; padding: 0;
+  background: none; border: 0; border-bottom: 1px solid rgba(242, 239, 228, 0.06);
+  color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.lt-head { min-height: 28px; cursor: default; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--nav-inactive); }
+.lt-pos { flex: none; align-self: stretch; display: flex; align-items: center; width: 20px; font-family: var(--font-heading); font-weight: 700; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.lt-pos--first { color: var(--gold); }
+.lt-name { flex: 1 0 112px; align-self: stretch; min-width: 0; display: flex; align-items: center; gap: 4px; padding: 0 6px 0 8px; }
+.lt-name__txt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.lt-num { flex: none; width: 36px; text-align: center; font-variant-numeric: tabular-nums; }
+.lt-num--none { color: var(--nav-inactive); }
+.lt-num--dim { color: rgba(138, 154, 133, 0.45); }
+.lt-tot { flex: none; width: 42px; text-align: center; font-family: var(--font-heading); font-weight: 800; font-variant-numeric: tabular-nums; }
+.lt--dense .lt-num { width: 30px; }
+.lt-mv { flex: none; font-size: 9px; font-weight: 700; line-height: 1; }
+.lt-mv--up { color: var(--win); }
+.lt-mv--down { color: #e88a7a; }
+.lt-best { display: inline-block; padding: 2px 5px; border-radius: 6px; background: var(--gold); color: var(--bg); font-weight: 700; line-height: 1.2; }
+.lt-row--me { background: rgba(201, 168, 76, 0.10); }
+.lt-row--me .lt-name__txt, .lt-row--me .lt-tot { color: var(--gold); }
+.lt-row--pinned { margin-top: 4px; }
+.lt-row:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; }
+
+/* Inside a hub card: fits the card, no sideways scroll, last row has no divider */
+.lt--hub .lt-table { width: 100%; }
+.lt--hub .lt-name { flex: 1 1 0; }
+.lt--hub .lt-row:last-child { border-bottom: 0; }
+
+/* Full table: wider than the screen scrolls, with position and player staying put */
+.lt--full .lt-pos, .lt--full .lt-name { position: sticky; z-index: 1; background: var(--bg); }
+.lt--full .lt-pos { left: 0; }
+.lt--full .lt-name { left: 20px; }
+/* Your row: the same gold tint as everywhere, as one opaque colour so scrolled numbers don't show through the pinned cells */
+.lt--full .lt-row--me, .lt--full .lt-row--me .lt-pos, .lt--full .lt-row--me .lt-name { background: #1d280f; background: color-mix(in srgb, var(--gold) 10%, var(--bg)); }
+
+.lt-key { margin: 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px 14px; font-size: 11px; line-height: 1.4; color: var(--text-muted); }
+.lt-key__pill { font-size: 10px; padding: 1px 6px; }

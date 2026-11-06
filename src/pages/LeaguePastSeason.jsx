@@ -7,12 +7,12 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { loadSaturdayLeague, loadPickedWeeks, seasonLabel } from '../lib/leagueData.js'
-import { weekSubLine, weekRowLine } from '../lib/leagueView.js'
+import { weekRowLine } from '../lib/leagueView.js'
 import { ordinal } from '../lib/format.js'
 import { useLeagueUser } from '../components/league/useLeagueUser.js'
 import BackLink from '../components/league/BackLink.jsx'
 import PastBanner from '../components/league/PastBanner.jsx'
-import StandingsRow from '../components/league/StandingsRow.jsx'
+import LeagueTable from '../components/league/LeagueTable.jsx'
 import PicksModalHost from '../components/league/PicksModalHost.jsx'
 import { LeagueSkeleton } from '../components/Skeletons.jsx'
 import '../styles/picks.css'
@@ -51,11 +51,10 @@ export default function LeaguePastSeason() {
     )
   }
 
-  const { season, satRows, completedWeeks, picked } = data
+  const { season, satRows, completedWeeks, picked, satTable } = data
   const label = seasonLabel(season)
   const rows = satRows.map(r => ({
     id: r.user_id, rank: r.rank, name: r.name, isMe: r.isMe, points: r.seasonTotal,
-    sub: weekSubLine(r.weekPts, completedWeeks),
     modal: { userId: r.user_id, name: r.name, pts: r.seasonTotal, rank: r.rank },
   }))
   const mine = satRows.find(r => r.isMe)
@@ -74,11 +73,7 @@ export default function LeaguePastSeason() {
 
         {rows.length > 0 && (
           <>
-            <div className="lg-list">
-              {rows.map(row => (
-                <StandingsRow key={row.id} row={row} top={row.points > 0 && row.rank <= 3} onClick={() => setPicksModal(row.modal)} />
-              ))}
-            </div>
+            <LeagueTable columns={satTable.columns} rows={satTable.rows} onPlayer={r => setPicksModal(rows.find(x => x.id === r.id)?.modal)} />
             <p className="lg-foot">Tap any player to see their picks</p>
           </>
         )}

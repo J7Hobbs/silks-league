@@ -9,10 +9,10 @@ import { useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { ordinal, ukDateStr } from '../lib/format.js'
 import {
-  loadSaturdayLeague, fetchFestivalRows, fetchGroupSatRows, loadGroupMemberIds,
+  loadSaturdayLeague, fetchFestivalRows, fetchGroupSatRows, loadGroupMemberIds, groupSatTable,
 } from '../lib/leagueData.js'
 import { loadCurrentFestival } from '../lib/festivalData.js'
-import { seasonMonth, weekSubLine, festSubLine, winnersLine, weekRowsForGroup } from '../lib/leagueView.js'
+import { seasonMonth, winnersLine, weekRowsForGroup } from '../lib/leagueView.js'
 import { useLeagueUser } from '../components/league/useLeagueUser.js'
 import BackLink from '../components/league/BackLink.jsx'
 import ViewToggle from '../components/league/ViewToggle.jsx'
@@ -76,7 +76,6 @@ export default function LeagueGroup() {
   const { group, memberCount, sat, satRows, festival, fest } = data
   const festName = festival ? (festival.display_name || festival.name) : ''
   const showFest = !!festival && !!fest && tab === 'festival'
-  const completedWeeks = sat?.completedWeeks || []
   const month = seasonMonth(sat?.season)
 
   let rows, caption, message
@@ -85,7 +84,6 @@ export default function LeagueGroup() {
     message = MSG_FEST
     rows = fest.rows.map(r => ({
       id: r.userId, rank: r.rank, name: r.name, isMe: r.isMe, points: r.points,
-      sub: festSubLine(r.dayPts, fest.festDays),
       modal: { userId: r.userId, name: r.name, pts: r.points, rank: r.rank, festivalId: festival.id, festivalName: festName },
     }))
   } else if (view === 'week') {
@@ -102,10 +100,10 @@ export default function LeagueGroup() {
     message = MSG_SEASON
     rows = satRows.map(r => ({
       id: r.userId, rank: r.rank, name: r.name, isMe: r.isMe, points: r.points,
-      sub: weekSubLine(r.weekPts, completedWeeks),
       modal: { userId: r.userId, name: r.name, pts: r.points, rank: r.rank },
     }))
   }
+  const table = showFest ? fest.table : view === 'season' && sat ? groupSatTable(sat.tableData, satRows) : null
   const me = rows.find(r => r.isMe)
   const players = `${memberCount} ${memberCount === 1 ? 'player' : 'players'}`
 
@@ -128,7 +126,7 @@ export default function LeagueGroup() {
 
         {!showFest && <ViewToggle items={VIEWS} value={view} onChange={setView} />}
 
-        <TableBody rows={rows} caption={caption} message={message} festival={showFest} onPlayer={r => setPicksModal(r.modal)} />
+        <TableBody rows={rows} table={table} caption={caption} message={message} festival={showFest} onPlayer={r => setPicksModal(r.modal)} />
 
         {memberCount === 1 && (
           <p className="lg-msg">Invite your mates from Groups in the account menu</p>

@@ -2,7 +2,9 @@
  * Silks League — Results Page
  * One race day at a time: the latest Saturday League week whose picks have locked, or the latest
  * locked day of a festival that is live (or finished in the last 7 days). ?week=<race_week_id> or
- * ?festival=<festival_id> opens a specific competition instead. Points are read from scores /
+ * ?festival=<festival_id> opens a specific competition instead. From the day after the first
+ * Wednesday following that race day until the next one locks, the default view is a "new race
+ * week coming" state (the ?week= / ?festival= links are never affected). Points are read from scores /
  * festival_scores as stored, never recalculated; nothing on this page writes to the database.
  */
 
@@ -22,6 +24,7 @@ import OutcomeBoxes from '../components/results/OutcomeBoxes.jsx'
 import DayTabs from '../components/results/DayTabs.jsx'
 import RaceCard from '../components/results/RaceCard.jsx'
 import EmptyState from '../components/results/EmptyState.jsx'
+import WaitingState from '../components/results/WaitingState.jsx'
 import { ResultsSkeleton, ResultsBodySkeleton } from '../components/Skeletons.jsx'
 import '../styles/picks.css'
 import '../styles/results.css'
@@ -191,6 +194,13 @@ function ResultsPage() {
           </>
         ) : !current ? (
           <ResultsBodySkeleton />
+        ) : view.waiting ? (
+          <WaitingState
+            next={view.next}
+            last={current.standing && current.counts.played
+              ? { points: current.counts.points, rank: current.standing.rank, total: current.standing.total }
+              : null}
+          />
         ) : (
           <>
             <ResultsHero

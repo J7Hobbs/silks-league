@@ -7,7 +7,7 @@
 
 import { useState, useEffect } from 'react'
 import { loadSaturdayLeague } from '../lib/leagueData.js'
-import { seasonMonth, weekSubLine, winnersLine, weekRowsForAll } from '../lib/leagueView.js'
+import { seasonMonth, winnersLine, weekRowsForAll } from '../lib/leagueView.js'
 import { useLeagueUser } from '../components/league/useLeagueUser.js'
 import BackLink from '../components/league/BackLink.jsx'
 import ViewToggle from '../components/league/ViewToggle.jsx'
@@ -36,7 +36,7 @@ export default function LeagueSaturday() {
 
   if (data === undefined) return <LeagueSkeleton />
 
-  const { season, currentWeek, satRows = [], weekRows = [], completedWeeks = [] } = data || {}
+  const { season, currentWeek, satRows = [], weekRows = [], satTable = null } = data || {}
   const month = seasonMonth(season)
   const weekLabel = currentWeek?.week_number ? `Week ${currentWeek.week_number}` : 'This week'
 
@@ -54,7 +54,6 @@ export default function LeagueSaturday() {
     message = MSG_SEASON
     rows = satRows.map(r => ({
       id: r.user_id, rank: r.rank, name: r.name, isMe: r.isMe, points: r.seasonTotal,
-      sub: weekSubLine(r.weekPts, completedWeeks),
       modal: { userId: r.user_id, name: r.name, pts: r.seasonTotal, rank: r.rank },
     }))
   }
@@ -68,7 +67,7 @@ export default function LeagueSaturday() {
         {!data ? (
           <p className="lg-msg">No season is running yet.</p>
         ) : (
-          <TableBody rows={rows} caption={caption} message={message} onPlayer={r => setPicksModal(r.modal)} />
+          <TableBody rows={rows} table={view === 'season' ? satTable : null} caption={caption} message={message} onPlayer={r => setPicksModal(r.modal)} />
         )}
       </main>
       <PicksModalHost modal={picksModal} viewerUserId={user?.id} onClose={() => setPicksModal(null)} />

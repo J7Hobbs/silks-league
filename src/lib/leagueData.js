@@ -5,14 +5,29 @@
 // Ranking uses the shared helpers in standings.js (orderIds, festivalTotals, weekDayStanding), the
 // same ones the Results page and Home use, so a player's position matches everywhere.
 import { supabase } from './supabase'
-import { monthLong } from './format.js'
+import { monthLong, picksRevealed } from './format.js'
 import { orderIds, festivalTotals, weekDayStanding } from './standings.js'
+import { buildSatTable, buildFestTable } from './leagueTable.js'
+
+// PostgREST returns at most 1000 rows a call, so page through a big read.
+async function fetchPages(build) {
+  const rows = []
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await build().range(from, from + 999)
+    if (error) throw error
+    rows.push(...(data || []))
+    if (!data || data.length < 1000) return rows
+  }
+}
 
 // ── Saturday League ───────────────────────────────────────────
-// { season, currentWeek, satRows, weekRows, completedWeeks }, or null when there is no active season.
+// { season, currentWeek, satRows, weekRows, completedWeeks, satTable, tableData }, or null when
+// there is no active season.
 //   satRows        every registered player, season table, best first
 //   weekRows       the latest week: everyone who picked or scored, best first (needs withWeek)
 //   completedWeeks weeks with at least one score, oldest first
+//   satTable       the same players as columns: { columns: one per locked week, rows } (leagueTable.js)
+//   tableData      the raw rows satTable was built from, so a group can build its own from them
 export async function loadSaturdayLeague(myUserId, { withWeek = true, seasonId = null } = {}) {
   // Every registered user appears even with 0 pts, so the names don't wait on the season.
   const namesLoaded = (async () => {
@@ -28,7 +43,7 @@ export async function loadSaturdayLeague(myUserId, { withWeek = true, seasonId =
   if (!s) return null
 
   const { data: weeks } = await supabase
-    .from('race_weeks').select('id, week_number, saturday_date')
+    .from('race_weeks').select('id, week_number, saturday_date, picks_deadline')
     .eq('season_id', s.id).order('saturday_date', { ascending: false })
   const latestWeek = weeks?.[0] || null
 
@@ -47,10 +62,14 @@ export async function loadSaturdayLeague(myUserId, { withWeek = true, seasonId =
   }
 
   let allScores = []
+  let pickRows = []   // who picked in which race, for "no picks that week" against "scored 0" in the columns
   if (allRaceIds.length) {
+    const picksLoaded = fetchPages(() => supabase.from('picks').select('user_id, race_id').in('race_id', allRaceIds).order('id'))
+      .catch(() => [])
     const { data: everyone, error: evErr } = await supabase
       .from('scores').select('user_id, race_id, total_points, position_achieved').in('race_id', allRaceIds)
     if (!evErr && everyone?.length) allScores = everyone
+    pickRows = await picksLoaded
   }
   // else: no races in this season yet — all scores stay []
 
@@ -114,7 +133,28 @@ export async function loadSaturdayLeague(myUserId, { withWeek = true, seasonId =
     }))
   }
 
-  return { season: s, currentWeek: latestWeek, satRows, weekRows, completedWeeks }
+  // The columns: every week that has races and has locked (or already has scores), oldest first.
+  const nowMs = Date.now()
+  const racedWeeks = new Set(Object.values(raceWeekMap))
+  const tableWeeks = (weeks || [])
+    .filter(w => racedWeeks.has(w.id) && (weekHasScores.has(w.id) || picksRevealed(w.picks_deadline, w.saturday_date, nowMs)))
+    .sort((a, b) => a.saturday_date.localeCompare(b.saturday_date))
+  const tableData = { weeks: tableWeeks, raceWeek: raceWeekMap, scoreRows: allScores, pickRows, names }
+  const satTable = buildSatTable({
+    ...tableData,
+    players: satRows.map(r => ({ id: r.user_id, name: r.name, isMe: r.isMe, rank: r.rank, total: r.seasonTotal })),
+  })
+
+  return { season: s, currentWeek: latestWeek, satRows, weekRows, completedWeeks, satTable, tableData }
+}
+
+// A group's season table with week columns, from the rows loadSaturdayLeague already read: the
+// members in the order fetchGroupSatRows ranked them.
+export function groupSatTable(tableData, groupRows) {
+  return buildSatTable({
+    ...tableData,
+    players: groupRows.map(r => ({ id: r.userId, name: r.name, isMe: r.isMe, rank: r.rank, total: r.points })),
+  })
 }
 
 // ── Festivals ──
@@ -183,14 +223,17 @@ export async function fetchFestivalRows(fest, memberIds, myUserId) {
   const daysAndRaces = (async () => {
     const { data: daysData } = await supabase
       .from('festival_days').select('id, day_number, race_date').eq('festival_id', fest.id).order('day_number')
-    if (!daysData?.length) return { daysData, raceIds: [] }
+    if (!daysData?.length) return { daysData, raceIds: [], raceDay: {} }
     const { data: races } = await supabase
-      .from('festival_races').select('id').in('festival_day_id', daysData.map(d => d.id))
-    return { daysData, raceIds: (races || []).map(r => r.id) }
+      .from('festival_races').select('id, festival_day_id').in('festival_day_id', daysData.map(d => d.id))
+    const dayNumber = Object.fromEntries(daysData.map(d => [d.id, d.day_number]))
+    const raceDay = Object.fromEntries((races || []).map(r => [r.id, dayNumber[r.festival_day_id]]))
+    return { daysData, raceIds: (races || []).map(r => r.id), raceDay }
   })()
-  const [{ daysData, raceIds }, { data: entries }] = await Promise.all([daysAndRaces, entriesQ])
-  if (!daysData?.length) return { rows: [], festDays: [] }
-  if (!entries?.length) return { rows: [], festDays: daysData }
+  const [{ daysData, raceIds, raceDay }, { data: entries }] = await Promise.all([daysAndRaces, entriesQ])
+  const noTable = { columns: [], rows: [] }
+  if (!daysData?.length) return { rows: [], festDays: [], table: noTable }
+  if (!entries?.length) return { rows: [], festDays: daysData, table: noTable }
 
   const entryUserIds = entries.map(e => e.user_id)
   const festProfileIds = [...new Set([...entryUserIds, myUserId])]
@@ -199,7 +242,7 @@ export async function fetchFestivalRows(fest, memberIds, myUserId) {
   // player names don't depend on each other, so they load together.
   const [scoresData, dayPointsData, profiles] = await Promise.all([
     raceIds.length
-      ? supabase.from('festival_scores').select('user_id, total_points, position_achieved')
+      ? supabase.from('festival_scores').select('user_id, festival_race_id, total_points, position_achieved')
           .in('festival_race_id', raceIds).in('user_id', entryUserIds).then(({ data }) => data || [])
       : Promise.resolve([]),
     supabase.from('festival_day_points').select('user_id, day_number, points')
@@ -231,7 +274,13 @@ export async function fetchFestivalRows(fest, memberIds, myUserId) {
     dayPts: dayPtsMap[uid] || {},
   }))
 
-  return { rows, festDays: daysData }
+  // The same players as columns, one per festival day (leagueTable.js).
+  const table = buildFestTable({
+    players: rows.map(r => ({ id: r.userId, name: r.name, isMe: r.isMe, rank: r.rank, total: r.points })),
+    days: daysData, raceDay, dayPts: dayPtsMap, scoreRows: scoresData, entries, names,
+  })
+
+  return { rows, festDays: daysData, table }
 }
 
 // ── My groups ─────────────────────────────────────────────────

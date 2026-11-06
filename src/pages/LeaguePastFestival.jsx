@@ -7,12 +7,12 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { loadFestival, fetchFestivalRows } from '../lib/leagueData.js'
-import { festSubLine, monthYear } from '../lib/leagueView.js'
+import { monthYear } from '../lib/leagueView.js'
 import { ordinal } from '../lib/format.js'
 import { useLeagueUser } from '../components/league/useLeagueUser.js'
 import BackLink from '../components/league/BackLink.jsx'
 import PastBanner from '../components/league/PastBanner.jsx'
-import StandingsRow from '../components/league/StandingsRow.jsx'
+import LeagueTable from '../components/league/LeagueTable.jsx'
 import PicksModalHost from '../components/league/PicksModalHost.jsx'
 import { LeagueSkeleton } from '../components/Skeletons.jsx'
 import '../styles/picks.css'
@@ -31,8 +31,8 @@ export default function LeaguePastFestival() {
       try {
         const fest = await loadFestival(festivalId)
         if (!fest) { if (!cancelled) setData(null); return }
-        const { rows, festDays } = await fetchFestivalRows(fest, null, user.id)
-        if (!cancelled) setData({ fest, rows, festDays })
+        const { rows, table } = await fetchFestivalRows(fest, null, user.id)
+        if (!cancelled) setData({ fest, rows, table })
       } catch {
         if (!cancelled) setData(null)
       }
@@ -54,11 +54,10 @@ export default function LeaguePastFestival() {
     )
   }
 
-  const { fest, rows: festRows, festDays } = data
+  const { fest, rows: festRows, table } = data
   const name = fest.display_name || fest.name
   const rows = festRows.map(r => ({
     id: r.userId, rank: r.rank, name: r.name, isMe: r.isMe, points: r.points,
-    sub: festSubLine(r.dayPts, festDays),
     modal: { userId: r.userId, name: r.name, pts: r.points, rank: r.rank, festivalId: fest.id, festivalName: name },
   }))
   const me = rows.find(r => r.isMe)
@@ -85,11 +84,7 @@ export default function LeaguePastFestival() {
           <p className="lg-msg">No one entered this one.</p>
         ) : (
           <>
-            <div className="lg-list">
-              {rows.map(row => (
-                <StandingsRow key={row.id} row={row} top={row.points > 0 && row.rank <= 3} onClick={() => setPicksModal(row.modal)} />
-              ))}
-            </div>
+            <LeagueTable columns={table.columns} rows={table.rows} dense={table.columns.length >= 5} onPlayer={r => setPicksModal(rows.find(x => x.id === r.id)?.modal)} />
             <p className="lg-foot">Tap any player to see their picks</p>
           </>
         )}

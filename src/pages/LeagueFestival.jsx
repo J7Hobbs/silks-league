@@ -8,7 +8,6 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useCompetition } from '../context/competition.js'
 import { loadFestival, fetchFestivalRows } from '../lib/leagueData.js'
-import { festSubLine } from '../lib/leagueView.js'
 import { useLeagueUser } from '../components/league/useLeagueUser.js'
 import BackLink from '../components/league/BackLink.jsx'
 import TableBody from '../components/league/TableBody.jsx'
@@ -34,8 +33,8 @@ export default function LeagueFestival() {
       try {
         const fest = await loadFestival(festivalId)
         if (!fest) { if (!cancelled) setData(null); return }
-        const { rows, festDays } = await fetchFestivalRows(fest, null, user.id)
-        if (!cancelled) setData({ fest, rows, festDays })
+        const { rows, table } = await fetchFestivalRows(fest, null, user.id)
+        if (!cancelled) setData({ fest, rows, table })
       } catch {
         if (!cancelled) setData(null)
       }
@@ -57,11 +56,10 @@ export default function LeagueFestival() {
     )
   }
 
-  const { fest, rows: festRows, festDays } = data
+  const { fest, rows: festRows, table } = data
   const name = fest.display_name || fest.name
   const rows = festRows.map(r => ({
     id: r.userId, rank: r.rank, name: r.name, isMe: r.isMe, points: r.points,
-    sub: festSubLine(r.dayPts, festDays),
     modal: { userId: r.userId, name: r.name, pts: r.points, rank: r.rank, festivalId: fest.id, festivalName: name },
   }))
 
@@ -77,6 +75,7 @@ export default function LeagueFestival() {
         <h1 className="lg-title">{name}</h1>
         <TableBody
           rows={rows}
+          table={table}
           caption={name}
           message={MSG_FEST}
           festival

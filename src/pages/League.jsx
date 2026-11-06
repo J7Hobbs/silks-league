@@ -16,6 +16,7 @@ import { loadMembers, loadStandings } from '../lib/groupStandings.js'
 import { satHubSub, festHubSub, previewRows, allZero } from '../lib/leagueView.js'
 import { useLeagueUser } from '../components/league/useLeagueUser.js'
 import PreviewCard from '../components/league/PreviewCard.jsx'
+import { TableKey } from '../components/league/LeagueTable.jsx'
 import GroupsList from '../components/league/GroupsList.jsx'
 import PicksModalHost from '../components/league/PicksModalHost.jsx'
 import PastSheet from '../components/league/PastSheet.jsx'
@@ -25,6 +26,9 @@ import '../styles/league.css'
 
 // The "Past" button: finished festivals and earlier seasons (PastSheet).
 const SHOW_PAST = true
+
+// How many race weeks the Saturday League card shows.
+const HUB_WEEKS = 4
 
 const MSG_SEASON = 'No points yet – the table fills up after the first race week'
 const MSG_FEST = 'No points yet – the table fills up after the first race'
@@ -99,16 +103,18 @@ export default function League() {
   const { sat, fest, groups } = data
 
   // ── Saturday League card ──
-  const satRows = (sat?.satRows || []).map(r => ({
-    id: r.user_id, rank: r.rank, name: r.name, isMe: r.isMe, points: r.seasonTotal,
-    modal: { userId: r.user_id, name: r.name, pts: r.seasonTotal, rank: r.rank },
+  // The last four race weeks, then TOT (the full table has every week).
+  const satColumns = (sat?.satTable.columns || []).slice(-HUB_WEEKS)
+  const satRows = (sat?.satTable.rows || []).map(r => ({
+    ...r,
+    modal: { userId: r.id, name: r.name, pts: r.points, rank: r.rank },
   }))
 
   // ── Festival card ──
   const festName = fest ? (fest.festival.display_name || fest.festival.name) : ''
-  const festRows = fest ? fest.rows.map(r => ({
-    id: r.userId, rank: r.rank, name: r.name, isMe: r.isMe, points: r.points,
-    modal: { userId: r.userId, name: r.name, pts: r.points, rank: r.rank, festivalId: fest.festival.id, festivalName: festName },
+  const festRows = fest ? fest.table.rows.map(r => ({
+    ...r,
+    modal: { userId: r.id, name: r.name, pts: r.points, rank: r.rank, festivalId: fest.festival.id, festivalName: festName },
   })) : []
 
   return (
@@ -127,6 +133,7 @@ export default function League() {
         <PreviewCard
           title="Saturday League"
           sub={sat ? satHubSub(sat.season, sat.completedWeeks) : ''}
+          columns={satColumns}
           rows={previewRows(satRows)}
           message={!sat ? 'No season is running yet.' : allZero(satRows) ? MSG_SEASON : ''}
           to="/league/saturday"
@@ -139,12 +146,15 @@ export default function League() {
             sub={festHubSub(fest.rows, fest.festDays, fest.live)}
             live={fest.live}
             festival={{ banner: { url: fest.festival.banner_url, position: fest.festival.banner_position } }}
+            columns={fest.table.columns}
             rows={previewRows(festRows)}
             message={!festRows.length ? 'No one has entered yet.' : allZero(festRows) ? MSG_FEST : ''}
             to={`/league/festival/${fest.festival.id}`}
             onPlayer={r => setPicksModal(r.modal)}
           />
         )}
+
+        {(satRows.length > 0 || festRows.length > 0) && <TableKey />}
 
         <GroupsList groups={groups} />
       </main>

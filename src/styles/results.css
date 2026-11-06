@@ -128,3 +128,29 @@
 .rs-place__sp { flex: none; font-size: 13px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
 
 .rs-back:focus-visible, .rs-card__hit:focus-visible, .rs-retry:focus-visible, .rs-day:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+/* ── Waiting state: between one race week and the next ── */
+.rs-wait { position: relative; }
+.rs-wait__ghost { display: flex; flex-direction: column; gap: 14px; filter: blur(2px); opacity: 0.35; pointer-events: none; user-select: none; }
+.rs-ghost { background: var(--surface); border-radius: 14px; }
+.rs-ghost--hero { position: relative; overflow: hidden; height: 118px; border-radius: 16px; }
+.rs-ghost--box { height: 58px; border-radius: 12px; }
+.rs-ghost--card { height: 60px; }
+.rs-wait__over { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+.rs-wait__card {
+  width: 100%; box-sizing: border-box; padding: 22px 18px; text-align: center;
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  background: var(--surface); border: 1px solid rgba(201, 168, 76, 0.45); border-radius: 18px;
+}
+.rs-wait__icon { width: 44px; height: 44px; border-radius: 50%; border: 1.5px solid var(--gold); color: var(--gold); display: flex; align-items: center; justify-content: center; }
+.rs-wait__title { margin: 2px 0 0; font-family: var(--font-heading); font-weight: 800; font-size: 19px; line-height: 1.2; letter-spacing: 0; color: var(--text); }
+.rs-wait__text { margin: 0; font-size: 13.5px; line-height: 1.45; color: var(--rs-body); }
+.rs-wait__last { margin: 0; font-size: 13px; line-height: 1.4; color: var(--text-muted); }
+.rs-wait__pts { color: var(--gold); font-weight: 600; }
+.rs-wait__btns { width: 100%; display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.rs-wait__btn {
+  display: flex; align-items: center; justify-content: center; height: 46px; border-radius: 12px; box-sizing: border-box;
+  font-family: var(--font-body); font-size: 15px; font-weight: 700; text-decoration: none;
+}
+.rs-wait__btn--solid { background: var(--gold); color: var(--bg); border: 1px solid var(--gold); }
+.rs-wait__btn--line { background: transparent; color: var(--gold); border: 1px solid var(--gold); }
