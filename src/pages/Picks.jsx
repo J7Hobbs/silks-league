@@ -14,8 +14,10 @@ import { useCompetition } from '../context/competition.js'
 import { PICKS_CHANGED } from '../lib/navTabs.js'
 import { isWinOnly, canOfferEachWay, calcTokenPoints } from '../lib/scoring.js'
 import { daysBetween, localDateStr, lockLabel } from '../lib/format.js'
+import { useNotifStatus } from '../lib/useNotifStatus.js'
 import {
   runningFestivals, selectedFestival, isDayOpen, defaultFestDay, hasLivePick, firstUnpickedIndex, competitionLine, sortByPrice,
+  shortDay, festivalDates, festDayRow,
 } from '../lib/picksView.js'
 import CompetitionPills from '../components/picks/CompetitionPills.jsx'
 import DaySwitch from '../components/picks/DaySwitch.jsx'
@@ -63,6 +65,7 @@ export default function Picks() {
   const [festEntry,        setFestEntry]        = useState(null)
   const [festDays,         setFestDays]         = useState([])
   const [openDayIds,       setOpenDayIds]       = useState([])
+  const [raceDayIds,       setRaceDayIds]       = useState([])   // days that have races loaded
   const [festDay,          setFestDay]          = useState(null)
   const [festRaces,        setFestRaces]        = useState([])
   const [festRunners,      setFestRunners]      = useState({})
@@ -86,6 +89,7 @@ export default function Picks() {
   // Bet type last saved per festival race, to restore if a save fails.
   const festSavedBet = useRef({})
   // After a save: the row that shows "Saved ✓" for a moment, and the timer that then moves on.
+  const notif = useNotifStatus(user?.id)
   const [flash, setFlash] = useState(null)   // { raceId, runnerId }
   const advance = useRef(null)
   useEffect(() => () => clearTimeout(advance.current), [])
@@ -127,7 +131,7 @@ export default function Picks() {
   useEffect(() => {
     if (!user) return
     if (!selFestId && !linkedDayId) return
-    setFestEntry(null); setFestDays([]); setOpenDayIds([]); setFestDay(null)
+    setFestEntry(null); setFestDays([]); setOpenDayIds([]); setRaceDayIds([]); setFestDay(null)
     setFestRaces([]); setFestRunners({}); setFestPicks({}); setFestReplaced({})
     setFestSelected({}); setFestBetType({}); setFestIdx(0)
     if (selFestId) loadFestivalData(activeFestivals.find(f => f.id === selFestId))
@@ -222,6 +226,7 @@ export default function Picks() {
         const nowMs = Date.now()
         const open = daysData.filter(d => withRaces.has(d.id) && isDayOpen(d, nowMs, today))
         setOpenDayIds(open.map(d => d.id))
+        setRaceDayIds([...withRaces])
         const currentDay = defaultFestDay(daysData, open, today)
         setFestDay(currentDay)
         // Races are readable by every signed-in player, so non-members see them too.
@@ -467,6 +472,35 @@ export default function Picks() {
     ? `These picks also count for the ${linkedFest ? (linkedFest.display_name || linkedFest.name) : 'festival'}`
     : (isFest && festDay && satLinkedDays.includes(festDay.id) ? 'These picks also count for your Saturday League' : '')
 
+  // What the "nothing to pick yet" card says (see EmptyState).
+  const festName = isFest ? (selFest.display_name || selFest.name) : linkedFest ? (linkedFest.display_name || linkedFest.name) : ''
+  // The date is left off when that Saturday has already gone (the latest week has no races at all).
+  const weekEyebrow = currentWeek?.saturday_date >= localDateStr() ? `This week · ${shortDay(currentWeek.saturday_date)}` : 'This week'
+  const nothingYet = isFest
+    ? {
+        kind: 'festival',
+        eyebrow: [selFest.venue, festivalDates(selFest.start_date, selFest.end_date)].filter(Boolean).join(' · '),
+        title: festName,
+        text: 'Picks for each day open the evening before, and we\'ll notify you.',
+        days: festDays.map(d => ({
+          id: d.id,
+          ...festDayRow(d, { hasRaces: raceDayIds.includes(d.id), open: openDayIds.includes(d.id), today: localDateStr() }),
+        })),
+      }
+    : satLinked
+      ? {
+          kind: 'linked',
+          eyebrow: weekEyebrow,
+          title: `Part of ${festName || 'a festival'}`,
+          text: `This Saturday's races are ${festName ? `${festName}'s` : 'the festival\'s'} Saturday card. One set of picks counts for both the Saturday League and the festival.`,
+        }
+      : {
+          kind: 'week',
+          eyebrow: weekEyebrow,
+          title: 'Races announced Friday',
+          text: "Saturday's races go up on Friday evening. We'll notify you when picks open.",
+        }
+
   function pickCompetition(item) {
     cancelAdvance()
     if (item.key === 'saturday') setCompetition('saturday')
@@ -553,7 +587,7 @@ export default function Picks() {
         )}
 
         {!festBusy && noRaces && (
-          <EmptyState text={isFest ? "Picks open when this festival's races are published." : undefined} />
+          <EmptyState {...nothingYet} notif={notif} onOpenDay={d => { cancelAdvance(); handleFestDaySwitch(festDays.find(x => x.id === d.id)) }} />
         )}
 
         {!noRaces && race && (

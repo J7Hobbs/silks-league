@@ -9,6 +9,8 @@ import CompetitionCard from '../components/home/CompetitionCard.jsx'
 import SaturdayCard from '../components/home/SaturdayCard.jsx'
 import ComingUp from '../components/home/ComingUp.jsx'
 import RaceDayCard from '../components/home/RaceDayCard.jsx'
+import NotifStrip from '../components/NotifStrip.jsx'
+import { useNotifStatus } from '../lib/useNotifStatus.js'
 import { HomeSkeleton } from '../components/Skeletons.jsx'
 import '../styles/home.css'
 
@@ -18,6 +20,7 @@ export default function Dashboard() {
   const [user, setUser] = useState(null)
   const [data, setData] = useState(null)
   const [now, setNow] = useState(() => Date.now())
+  const notif = useNotifStatus(user?.id)
 
   // Ticks the "Closes in" countdowns.
   useEffect(() => {
@@ -99,6 +102,8 @@ export default function Dashboard() {
             <span className="home-label">Live now · {liveCount} {liveCount === 1 ? 'competition' : 'competitions'}</span>
           </div>
         )}
+
+        <NotifStrip notif={notif} />
 
         {cards.map((card, i) => (card.kind === 'saturday'
           ? <SaturdayCard key={card.key} card={card} onAction={openCard} />

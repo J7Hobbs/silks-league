@@ -2,6 +2,7 @@
 // page uses (login, ask permission, opt in); Account has its own copy for now.
 // Nothing here runs until a player taps the button, except reading the status.
 import { OneSignal, oneSignalReady } from './oneSignal'
+import { currentDevice, iosNotInstalled } from './device.js'
 
 // iOS only allows push from a site added to the home screen.
 export function needsHomeScreen() {
@@ -43,4 +44,16 @@ export async function enablePush(userId) {
   const granted = await OneSignal.Notifications.requestPermission()
   if (granted) await OneSignal.User.PushSubscription.optIn()
   return granted
+}
+
+// What the Home strip (and the "turn on notifications" line on Picks) should offer this device:
+//   null      nothing: notifications are already on, or this browser can't do them / isn't ready yet
+//   'home'    iPhone or iPad not opened from the home screen icon: add it to the home screen first
+//   'denied'  the browser blocked them earlier and can't ask again: switch them on in Settings
+//   'enable'  not on yet: "Turn on" runs the opt-in
+// `status` is pushStatus() (null until it is known); `device` is currentDevice().
+export function notifOffer(status, device = currentDevice()) {
+  if (iosNotInstalled(device)) return 'home'
+  if (!status || !status.supported || status.optedIn) return null
+  return status.permission === 'denied' ? 'denied' : 'enable'
 }

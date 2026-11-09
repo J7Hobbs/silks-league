@@ -66,7 +66,7 @@ export function courseLabel(races) {
 }
 
 // "Sat 7 Nov"
-function shortDay(dateStr) {
+export function shortDay(dateStr) {
   if (!dateStr) return ''
   return `${weekdayShort(dateStr)} ${Number(dateStr.slice(8, 10))} ${monthAbbr(dateStr)}`
 }
@@ -88,4 +88,30 @@ export function competitionLine({ festival, week, day, dayCount, races, festival
         courseLabel(races),
       ]
   return parts.filter(Boolean).join(' · ')
+}
+
+// "13–15 Nov" (one month) or "30 Oct – 2 Nov" (across two). '' without a start date.
+export function festivalDates(start, end) {
+  if (!start) return ''
+  if (!end || end === start) return `${Number(start.slice(8, 10))} ${monthAbbr(start)}`
+  if (monthAbbr(start) === monthAbbr(end)) return `${Number(start.slice(8, 10))}–${Number(end.slice(8, 10))} ${monthAbbr(end)}`
+  return `${Number(start.slice(8, 10))} ${monthAbbr(start)} – ${Number(end.slice(8, 10))} ${monthAbbr(end)}`
+}
+
+// Picks for a day open the evening before: "2026-11-13" -> "Thu evening".
+export function eveningBefore(dateStr) {
+  const d = new Date(dateStr + 'T12:00:00Z')
+  d.setUTCDate(d.getUTCDate() - 1)
+  return `${weekdayShort(d.toISOString().slice(0, 10))} evening`
+}
+
+// One festival day in the "nothing to pick yet" card: "Fri 13 Nov · Day 1" and where it stands.
+//   open    picks are open now (tappable)
+//   locked  picks closed
+//   soon    no races yet: picks open the evening before
+export function festDayRow(day, { hasRaces, open, today }) {
+  const label = `${shortDay(day.race_date)} · Day ${day.day_number}`
+  if (open) return { label, state: 'open', text: 'Open now' }
+  if (hasRaces || (day.race_date && day.race_date < today)) return { label, state: 'locked', text: 'Locked' }
+  return { label, state: 'soon', text: `Opens ${eveningBefore(day.race_date)}` }
 }
