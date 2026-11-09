@@ -11,6 +11,7 @@ import { lockRaceIfEmpty } from './raceLock.js'
 import { buildDayList } from './raceDayList.js'
 import { buildRaceDays, isLocked } from './adminToday.js'
 import { parseOdds } from './raceImport.js'
+import { syncWeekStatus } from './weekStatus.js'
 
 const APP_ORIGIN = 'https://silks-league.vercel.app'
 
@@ -190,7 +191,9 @@ export async function addRace(day, f, races) {
   if (!n) return fail('All 7 race slots are already filled for this week')
   const c = raceCols(day.kind)
   const { data, error } = await supabase.from(c.table).insert({ [c.parent]: day.id, race_number: n, ...racePayload(day.kind, f) }).select('id').single()
-  return error ? fail(error) : { ok: true, id: data.id, number: n }
+  if (error) return fail(error)
+  await syncWeekStatus(day.kind, day.id)
+  return { ok: true, id: data.id, number: n }
 }
 
 export async function updateRace(day, race, f, races) {
@@ -213,7 +216,9 @@ export async function deleteRace(day, race) {
     const picks = await countRacePicks(day.kind, race.id)
     if (picks > 0) return fail(`${picks} pick${picks === 1 ? ' has' : 's have'} been made on this race, so it cannot be deleted. Use Abandon race instead.`)
     const { error } = await supabase.from(raceCols(day.kind).table).delete().eq('id', race.id)
-    return error ? fail(error) : { ok: true }
+    if (error) return fail(error)
+    await syncWeekStatus(day.kind, day.id)
+    return { ok: true }
   } catch (err) { return fail(err) }
 }
 
@@ -318,6 +323,7 @@ export async function importRaces(day, parsed, existing) {
     have.push({ race_number: n })
     made.push({ number: n, runners: rows.length })
   }
+  if (made.length) await syncWeekStatus(day.kind, day.id)
   return { ok: true, made }
 }
 
@@ -459,6 +465,7 @@ export async function abandonRace(day, race) {
     const flag = await supabase.from(rc.table).update({ is_abandoned: true, abandoned_at: new Date().toISOString() }).eq('id', race.id).select('id')
     if (flag.error) throw new Error(`Could not mark the race abandoned: ${flag.error.message}`)
     if ((flag.data || []).length !== 1) throw new Error('The race was not marked abandoned (0 rows changed). Check you are signed in as an admin.')
+    await syncWeekStatus(kind, day.id)
 
     const ds = await supabase.from(c.scores).delete().eq(c.raceCol, race.id)
     if (ds.error) throw new Error(`Could not clear the old scores: ${ds.error.message}`)
@@ -502,6 +509,7 @@ export async function restoreRace(day, race) {
     const { data, error } = await supabase.from(rc.table).update({ is_abandoned: false, abandoned_at: null }).eq('id', race.id).select('id')
     if (error) throw new Error(error.message)
     if ((data || []).length !== 1) throw new Error('The race was not restored (0 rows changed). Check you are signed in as an admin.')
+    await syncWeekStatus(day.kind, day.id)
     const r = await recalculateRace(day.kind, { ...race, festival_day_id: day.kind === 'festival' ? day.id : race.festival_day_id })
     if (!r.ok) return { ok: false, text: `Race restored, but its scores were not cleared: ${r.msg}` }
     return { ok: true, text: `Race ${race.race_number} restored. Enter its result when it is in.` }

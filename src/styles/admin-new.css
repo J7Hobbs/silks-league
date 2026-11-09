@@ -312,3 +312,18 @@ select.an-input { appearance: auto; }
 .an-switch:disabled { opacity: 0.6; cursor: default; }
 .an-switch:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { .an-switch, .an-switch__knob { transition: none; } }
+
+/* ═══ Setup finishing: player search, photo position, remove day ═══ */
+.an-search { position: relative; }
+.an-search .an-input { padding-right: 44px; }
+.an-search__clear { position: absolute; top: 0; right: 0; width: 46px; height: 46px; border: 0; background: none; color: var(--text-muted); font-size: 24px; line-height: 1; cursor: pointer; }
+.an-search__clear:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; border-radius: 12px; }
+.an-slider { display: flex; align-items: center; gap: 10px; }
+.an-slider input[type="range"] { flex: 1; min-width: 0; height: 44px; accent-color: var(--gold); cursor: pointer; }
+.an-slider .an-muted { flex: none; font-size: 13px; }
+.an-homeframe { width: 100%; max-width: 528px; pointer-events: none; user-select: none; }
+.an-dayitem { display: flex; flex-direction: column; gap: 2px; }
+.an-linkbtn { align-self: flex-end; min-height: 44px; padding: 0 6px; border: 0; background: none; color: var(--gold); font-family: var(--font-body); font-size: 14px; font-weight: 600; cursor: pointer; }
+.an-linkbtn--danger { color: var(--an-bad); }
+.an-linkbtn:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; border-radius: 8px; }
+.an-linkbtn:disabled { opacity: 0.6; cursor: default; }

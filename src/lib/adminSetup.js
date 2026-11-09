@@ -4,7 +4,7 @@ import { supabase } from './supabase'
 import { pagedRows } from './adminRaceDays.js'
 import { seasonTable } from './standings.js'
 import { ukDateStr } from './format.js'
-import { festivalDayRow, festivalDayRows, dayName, fitWidth, PHOTO_TYPES } from './setupView.js'
+import { festivalDayRow, festivalDayRows, dayName, fitWidth, PHOTO_TYPES, planFestivalEdit, renumberAfterRemove, festivalSpan, bannerPositionValue } from './setupView.js'
 
 const must = ({ data, error }) => { if (error) throw error; return data || [] }
 const BUCKET = 'festival-photos'
@@ -139,23 +139,22 @@ export async function createFestival(f) {
   } catch (err) { return { ...fail(err), id } }
 }
 
-// Saves the details and moves each existing day to the new dates (Day 1 = the start date), adding days if the festival got
-// longer. Days past the new end date are kept, with their races, so nothing is deleted by an edit.
+// Saves the details. Existing days move by however far the start date moved (a festival with a day taken out keeps its
+// gap), and days are added if the festival got longer. Days past a shortened end date are kept, with their races, so an
+// edit never deletes anything.
 export async function updateFestival(festival, days, f) {
   try {
     oneRow(await supabase.from('festivals').update(festivalFields(f)).eq('id', festival.id).select('id'), 'Could not save the festival')
-    const wanted = festivalDayRows(festival.id, f.startDate, f.endDate)
-    const byNumber = Object.fromEntries(days.map(d => [d.day_number, d]))
-    for (const w of wanted) {
-      const have = byNumber[w.day_number]
-      if (have) {
-        if (have.race_date !== w.race_date) {
-          oneRow(await supabase.from('festival_days').update({ race_date: w.race_date, label: w.label, picks_deadline: w.picks_deadline }).eq('id', have.id).select('id'), `Could not move Day ${w.day_number}`)
-        }
-      } else {
-        const ins = await supabase.from('festival_days').insert(w)
-        if (ins.error) throw new Error(`Could not add Day ${w.day_number}: ${ins.error.message}`)
-      }
+    const { moves, adds } = planFestivalEdit(festival, days, f)
+    // Later days first when moving forward, earlier first when moving back, so two days never share a date part-way.
+    const forward = moves.length && moves[0].race_date > days.find(d => d.id === moves[0].id).race_date
+    for (const m of forward ? [...moves].reverse() : moves) {
+      const { id, ...patch } = m
+      oneRow(await supabase.from('festival_days').update(patch).eq('id', id).select('id'), `Could not move Day ${m.day_number}`)
+    }
+    for (const a of adds) {
+      const ins = await supabase.from('festival_days').insert(a)
+      if (ins.error) throw new Error(`Could not add Day ${a.day_number}: ${ins.error.message}`)
     }
     return { ok: true }
   } catch (err) { return fail(err) }
@@ -174,6 +173,45 @@ export async function addFestivalDay(festival, days, date) {
     if (date < (festival.start_date || '9999')) patch.start_date = date
     if (Object.keys(patch).length) oneRow(await supabase.from('festivals').update(patch).eq('id', festival.id).select('id'), 'The day was added but the festival dates were not updated')
     return { ok: true, number, dayName: dayName(date), id: ins.data?.[0]?.id }
+  } catch (err) { return fail(err) }
+}
+
+// Why a day cannot be removed, or '' when it can: it must have no races, no picks, and no Saturday League week linked to it.
+export async function dayRemovalBlock(day) {
+  const races = must(await supabase.from('festival_races').select('id').eq('festival_day_id', day.id))
+  if (races.length) return `Day ${day.day_number} has ${races.length === 1 ? '1 race' : `${races.length} races`}. A day can only be removed while it has no races.`
+  const { count, error } = await supabase.from('festival_picks').select('id', { count: 'exact', head: true }).eq('race_day_id', day.id)
+  if (error) throw error
+  if (count) return `${count} pick${count === 1 ? ' has' : 's have'} been made on Day ${day.day_number}, so it cannot be removed.`
+  const weeks = must(await supabase.from('race_weeks').select('id, week_number').eq('festival_day_id', day.id))
+  if (weeks.length) return `Saturday League week ${weeks[0].week_number} is linked to Day ${day.day_number}. Unlink it in Race days first.`
+  return ''
+}
+
+// Removes a day with no races, picks or linked week. The days after it close the gap (Day 4 becomes Day 3), and the
+// festival's own dates follow the days that are left.
+export async function removeFestivalDay(festival, days, day) {
+  try {
+    const block = await dayRemovalBlock(day)
+    if (block) throw new Error(block)
+    oneRow(await supabase.from('festival_days').delete().eq('id', day.id).select('id'), 'Could not remove the day')
+    for (const r of renumberAfterRemove(days, day)) {
+      const { id, ...patch } = r
+      oneRow(await supabase.from('festival_days').update(patch).eq('id', id).select('id'), 'The day was removed but a later day was not renumbered')
+    }
+    const span = festivalSpan(days.filter(d => d.id !== day.id))
+    if (span && (span.start !== festival.start_date || span.end !== festival.end_date)) {
+      oneRow(await supabase.from('festivals').update({ start_date: span.start, end_date: span.end }).eq('id', festival.id).select('id'), 'The day was removed but the festival dates were not updated')
+    }
+    return { ok: true }
+  } catch (err) { return fail(err) }
+}
+
+// Saves where the photo sits in the banner (festivals.banner_position, which the app already reads). y is 0 (top) to 100 (bottom).
+export async function saveBannerPosition(festivalId, y) {
+  try {
+    oneRow(await supabase.from('festivals').update({ banner_position: bannerPositionValue(y) }).eq('id', festivalId).select('id'), 'Could not save the photo position')
+    return { ok: true }
   } catch (err) { return fail(err) }
 }
 

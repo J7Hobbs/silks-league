@@ -47,7 +47,7 @@ export function buildPlayers({ profiles, days, pickedByDay }, nowMs = Date.now()
     const joined = p.created_at ? ukDateStr(Date.parse(p.created_at)) : null
     const inRecent = recent.some(d => pickedByDay[d.key]?.has(p.id))
     return {
-      id: p.id, name: displayName(p), email: p.email || '', isAdmin: !!p.is_admin,
+      id: p.id, name: displayName(p), username: p.username || '', fullName: p.full_name || '', email: p.email || '', isAdmin: !!p.is_admin,
       joined, joinedMs: p.created_at ? Date.parse(p.created_at) : null,
       lastPlayed: lastDay ? { date: lastDay.date, title: lastDay.title, key: lastDay.key } : null,
       picked: current ? !!pickedByDay[current.key]?.has(p.id) : null,
@@ -77,6 +77,17 @@ const TESTS = {
 }
 
 export const filterPlayers = (rows, filter) => rows.filter(TESTS[filter] || TESTS.all)
+
+// The search box: every word typed has to appear in the player's name, username or email (any case). An empty
+// search keeps everyone.
+export function searchPlayers(rows, query) {
+  const words = String(query || '').toLowerCase().split(/\s+/).filter(Boolean)
+  if (!words.length) return rows
+  return rows.filter(r => {
+    const hay = `${r.name} ${r.username} ${r.fullName} ${r.email}`.toLowerCase()
+    return words.every(w => hay.includes(w))
+  })
+}
 export const filterCounts = rows => Object.fromEntries(FILTERS.map(f => [f.id, rows.filter(TESTS[f.id]).length]))
 
 // The three tiles.

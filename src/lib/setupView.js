@@ -66,11 +66,51 @@ export function festivalProblems(f) {
 }
 
 const addDays = (date, n) => new Date(Date.parse(date + 'T12:00:00Z') + n * 86400000).toISOString().slice(0, 10)
+const daysBetweenDates = (a, b) => Math.round((Date.parse(b + 'T12:00:00Z') - Date.parse(a + 'T12:00:00Z')) / 86400000)
 export const dayName = date => DAY_NAMES[new Date(date + 'T12:00:00Z').getUTCDay()]
 
 // One festival day row, the way the classic Admin makes them (same label and 11:30 picks deadline).
 export function festivalDayRow(festivalId, dayNumber, date) {
   return { festival_id: festivalId, day_number: dayNumber, race_date: date, label: `Day ${dayNumber} — ${dayName(date)}`, picks_deadline: `${date}T11:30:00+00:00` }
+}
+
+// The day label the classic Admin writes. A label somebody typed in by hand does not match, and is left alone.
+const AUTO_LABEL = /^Day \d+ — /
+const labelFor = (day, number, date) => (AUTO_LABEL.test(day.label || '') || !day.label ? `Day ${number} — ${dayName(date)}` : day.label)
+
+// What "Edit details" changes. Every existing day moves by however far the start date moved (so a festival with a
+// day taken out keeps its gap), then days are added for any dates after the last one, up to the new end date. Days
+// past a shortened end date are kept.
+//   festival { start_date }   days [{ id, day_number, race_date, label }]   f { startDate, endDate }
+// Returns { moves: [{ id, day_number, race_date, label, picks_deadline }], adds: [day rows] }.
+export function planFestivalEdit(festival, days, f) {
+  const shift = festival.start_date && f.startDate ? daysBetweenDates(festival.start_date, f.startDate) : 0
+  const moves = shift === 0 ? [] : days.map(d => {
+    const date = addDays(d.race_date, shift)
+    return { id: d.id, day_number: d.day_number, race_date: date, label: labelFor(d, d.day_number, date), picks_deadline: `${date}T11:30:00+00:00` }
+  })
+  const dates = days.map(d => addDays(d.race_date, shift)).sort()
+  let number = Math.max(0, ...days.map(d => d.day_number))
+  const adds = []
+  for (let date = dates.length ? addDays(dates[dates.length - 1], 1) : f.startDate; date <= f.endDate && adds.length < 31; date = addDays(date, 1)) {
+    number += 1
+    adds.push(festivalDayRow(festival.id, number, date))
+  }
+  return { moves, adds }
+}
+
+// After a day is taken out, the days after it close the gap: Day 4 becomes Day 3. Returns the days that change.
+export function renumberAfterRemove(days, removed) {
+  return days
+    .filter(d => d.id !== removed.id && d.day_number > removed.day_number)
+    .sort((a, b) => a.day_number - b.day_number)
+    .map(d => ({ id: d.id, day_number: d.day_number - 1, label: labelFor(d, d.day_number - 1, d.race_date) }))
+}
+
+// The festival's own first and last date, from the days that are left.
+export function festivalSpan(days) {
+  const dates = days.map(d => d.race_date).filter(Boolean).sort()
+  return dates.length ? { start: dates[0], end: dates[dates.length - 1] } : null
 }
 
 // A day for every date from start to end: Day 1 is the start date.
@@ -99,6 +139,26 @@ export function fitWidth(width, height, maxWidth = 1600) {
   if (!width || !height) return { width: 0, height: 0 }
   if (width <= maxWidth) return { width, height }
   return { width: maxWidth, height: Math.round(height * maxWidth / width) }
+}
+
+// ── Banner position ──────────────────────────────────────────────────────
+// festivals.banner_position is the CSS object-position the app puts on the photo. Admin writes "center <n>%", where n is
+// how far down the photo the visible strip sits: 0 shows the top, 100 the bottom. The app uses 35 when nothing is saved.
+export const DEFAULT_BANNER_Y = 35
+export const BANNER_PRESETS = [{ label: 'Top', y: 0 }, { label: 'Middle', y: 50 }, { label: 'Bottom', y: 100 }]
+const clamp100 = n => Math.max(0, Math.min(100, Math.round(Number(n))))
+export const bannerPositionValue = y => `center ${clamp100(y)}%`
+
+// { y, saved } from the stored text. `saved` is false when nothing is stored (the app's own default applies), and
+// `odd` is true for text Admin did not write and cannot show on the slider.
+export function parseBannerPosition(value) {
+  const text = String(value || '').trim().toLowerCase()
+  if (!text) return { y: DEFAULT_BANNER_Y, saved: false, odd: false }
+  const m = /^center\s+(\d+(?:\.\d+)?)%$/.exec(text)
+  if (m) return { y: clamp100(m[1]), saved: true, odd: false }
+  const words = { top: 0, 'center top': 0, 'center 0%': 0, center: 50, 'center center': 50, bottom: 100, 'center bottom': 100 }
+  if (text in words) return { y: words[text], saved: true, odd: false }
+  return { y: DEFAULT_BANNER_Y, saved: true, odd: true }
 }
 
 export const PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp']

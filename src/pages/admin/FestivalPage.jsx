@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { FormSheet, TypeToConfirmSheet } from './sheets.jsx'
+import { ConfirmSheet, FormSheet, TypeToConfirmSheet } from './sheets.jsx'
+import BannerPosition from './BannerPosition.jsx'
 import { FestivalSheet, DaySheet } from './SetupSheets.jsx'
 import {
-  loadFestivalDetail, updateFestival, addFestivalDay, setFestivalActive, deleteFestival, countFestivalPicks, uploadFestivalPhoto,
+  loadFestivalDetail, updateFestival, addFestivalDay, removeFestivalDay, dayRemovalBlock, setFestivalActive, deleteFestival, countFestivalPicks, uploadFestivalPhoto,
 } from '../../lib/adminSetup.js'
 import { festivalStatus, setupDayStatus, nextDayDate } from '../../lib/setupView.js'
 import { dateText, plural } from '../../lib/adminFmt.js'
@@ -15,7 +16,7 @@ export default function FestivalPage({ festivalId, go, say }) {
   const [state, setState] = useState({ status: 'loading' })
   const [tick, setTick] = useState(0)
   const reload = useCallback(() => setTick(t => t + 1), [])
-  const [sheet, setSheet] = useState(null)       // 'edit' | 'day' | 'delete' | { blocked: n }
+  const [sheet, setSheet] = useState(null)       // 'edit' | 'day' | 'delete' | { blocked: n } | { remove: day } | { dayBlock: text }
   const [busy, setBusy] = useState(false)
   const [photoBusy, setPhotoBusy] = useState(false)
   const [error, setError] = useState('')
@@ -61,6 +62,7 @@ export default function FestivalPage({ festivalId, go, say }) {
   }
   const onEdit = f => run(() => updateFestival(festival, days, f), () => { close(); say('ok', 'Festival updated'); reload() })
   const onAddDay = date => run(() => addFestivalDay(festival, days, date), r => { close(); say('ok', `Day ${r.number} added (${r.dayName})`); reload() })
+  const onRemoveDay = day => run(() => removeFestivalDay(festival, days, day), () => { close(); say('ok', `Day ${day.day_number} removed`); reload() })
   const onDelete = () => run(() => deleteFestival(festival), () => { say('ok', `${title} deleted`); go({ f: null }) })
 
   async function onToggle() {
@@ -83,6 +85,16 @@ export default function FestivalPage({ festivalId, go, say }) {
     if (!r.ok) { say('error', r.error); return }
     say('ok', 'Photo updated')
     reload()
+  }
+
+  // The row only offers this for a day with no races or link; picks are checked here, as the day is read fresh.
+  async function openRemove(day) {
+    setBusy(true)
+    try {
+      const block = await dayRemovalBlock(day)
+      setSheet(block ? { dayBlock: block } : { remove: day })
+    } catch (err) { say('error', err.message || String(err)) }
+    setBusy(false)
   }
 
   async function openDelete() {
@@ -115,6 +127,8 @@ export default function FestivalPage({ festivalId, go, say }) {
         <button type="button" className="an-btn an-btn--ghost" onClick={() => fileRef.current?.click()} disabled={photoBusy}>{photoBusy ? 'Uploading…' : photo ? 'Change photo' : 'Add photo'}</button>
       </section>
 
+      <BannerPosition key={`${festival.banner_url}|${festival.banner_position}`} festival={festival} dayCount={days.length} say={say} onSaved={reload} />
+
       <section className="an-card an-card--plain" aria-label="Show in the app">
         <div className="an-switchrow">
           <div className="an-switchrow__text">
@@ -134,7 +148,7 @@ export default function FestivalPage({ festivalId, go, say }) {
             {days.map(d => {
               const ds = setupDayStatus({ raceCount: d.raceCount, linkedWeek: d.linkedWeek })
               return (
-                <li key={d.id}>
+                <li key={d.id} className="an-dayitem">
                   <Link className="an-dayrow" to={`/admin?tab=racedays&d=${encodeURIComponent(`festival:${d.id}`)}`}>
                     <span className="an-dayrow__date" aria-hidden="true">
                       <span className="an-dayrow__dow">{weekdayShort(d.race_date)}</span>
@@ -148,12 +162,15 @@ export default function FestivalPage({ festivalId, go, say }) {
                     </span>
                     <span className="an-dayrow__go" aria-hidden="true">›</span>
                   </Link>
+                  {!d.raceCount && !d.linkedWeek && (
+                    <button type="button" className="an-linkbtn an-linkbtn--danger" onClick={() => openRemove(d)} disabled={busy} aria-label={`Remove Day ${d.day_number}`}>Remove day</button>
+                  )}
                 </li>
               )
             })}
           </ul>
         )}
-        <p className="an-muted">Tap a day to load or manage its races in Race days.</p>
+        <p className="an-muted">Tap a day to load or manage its races in Race days. A day can be removed while it has no races and nobody has picked on it.</p>
       </section>
 
       <section className="an-actions" aria-label="Actions">
@@ -164,6 +181,18 @@ export default function FestivalPage({ festivalId, go, say }) {
 
       {sheet === 'edit' && <FestivalSheet festival={festival} dayCount={days.length} busy={busy} error={error} onSave={onEdit} onClose={close} />}
       {sheet === 'day' && <DaySheet start={nextDayDate(days, festival)} busy={busy} error={error} onSave={onAddDay} onClose={close} />}
+      {sheet?.remove && (
+        <ConfirmSheet title={`Remove Day ${sheet.remove.day_number}?`} busy={busy} confirm="Remove day" tone="danger" onConfirm={() => onRemoveDay(sheet.remove)} onClose={close}>
+          {dateText(sheet.remove.race_date)} has no races and nobody has picked on it. The day is deleted{days.some(d => d.day_number > sheet.remove.day_number) ? ', and the days after it move up one number' : ''}.
+          {error && <span className="an-warnbox an-warnbox--block" role="alert">{error}</span>}
+        </ConfirmSheet>
+      )}
+      {sheet?.dayBlock && (
+        <FormSheet title="This day cannot be removed" onClose={close}>
+          <p className="an-sheet__text">{sheet.dayBlock}</p>
+          <div className="rd-actions rd-actions--stack"><button type="button" className="gr-btn gr-btn--outline" onClick={close} data-autofocus>Close</button></div>
+        </FormSheet>
+      )}
       {sheet === 'delete' && (
         <TypeToConfirmSheet title={`Delete ${title}?`} expected={title} label={`Type ${title} to confirm`} confirm="Delete festival for good" busy={busy} error={error} onConfirm={onDelete} onClose={close}>
           <ul className="an-bullets">

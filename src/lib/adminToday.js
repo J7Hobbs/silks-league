@@ -10,6 +10,7 @@ import { BONUS_TYPES } from './bonuses.js'
 import { parseOdds } from './raceImport.js'
 import { calculateScoresForRace, calculateFestivalScoresForRace, updateFestivalDayPoints } from './raceScoring.js'
 import { lockRaces } from './raceLock.js'
+import { syncWeekStatusForRace } from './weekStatus.js'
 
 const APP_ORIGIN = 'https://silks-league.vercel.app'
 const DAY_MS = 86400000
@@ -294,6 +295,7 @@ export async function saveRaceResult(kind, race, runners, rows, { festivalId = n
     if (scored.ok) await updateFestivalDayPoints(race)
   }
   if (!scored.ok) return { ok: false, msg: `Results saved but scores failed: ${scored.msg}` }
+  await syncWeekStatusForRace(kind, race)
 
   const label = race.venue ? `Race ${race.race_number} at ${race.venue}` : `Race ${race.race_number}`
   const url = kind === 'festival' && festivalId ? `${APP_ORIGIN}/results/festival/${festivalId}` : `${APP_ORIGIN}/results`

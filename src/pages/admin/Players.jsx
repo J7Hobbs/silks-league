@@ -4,7 +4,7 @@ import PlayerPage from './PlayerPage.jsx'
 import GroupPage from './GroupPage.jsx'
 import BellIcon from './Bell.jsx'
 import { loadAdminPlayers } from '../../lib/adminPlayers.js'
-import { FILTERS, filterPlayers, filterCounts, summarise, initials } from '../../lib/playersView.js'
+import { FILTERS, filterPlayers, filterCounts, searchPlayers, summarise, initials } from '../../lib/playersView.js'
 import { dateText, plural } from '../../lib/adminFmt.js'
 import '../../styles/admin-new.css'
 
@@ -84,10 +84,14 @@ export default function Players() {
 
 function PlayerList({ data, go }) {
   const [filter, setFilter] = useState('all')
+  const [query, setQuery] = useState('')
   const { rows, current } = data
   const sum = useMemo(() => summarise(rows, current), [rows, current])
-  const counts = useMemo(() => filterCounts(rows), [rows])
-  const shown = useMemo(() => filterPlayers(rows, filter), [rows, filter])
+  // The filter numbers count the players the search finds, so they match the list below.
+  const found = useMemo(() => searchPlayers(rows, query), [rows, query])
+  const counts = useMemo(() => filterCounts(found), [found])
+  const shown = useMemo(() => filterPlayers(found, filter), [found, filter])
+  const searching = query.trim() !== ''
   return (
     <>
       <section className="an-tiles" aria-label="Summary">
@@ -108,6 +112,12 @@ function PlayerList({ data, go }) {
         </div>
       </section>
 
+      <div className="an-search">
+        <input id="an-player-search" type="search" className="an-input" placeholder="Search name, username or email" value={query} onChange={e => setQuery(e.target.value)}
+          aria-label="Search players" autoComplete="off" autoCapitalize="off" spellCheck={false} />
+        {searching && <button type="button" className="an-search__clear" aria-label="Clear search" onClick={() => setQuery('')}>×</button>}
+      </div>
+
       <div className="an-chips" role="group" aria-label="Filter players">
         {FILTERS.map(f => (
           <button key={f.id} type="button" className={`an-chip${filter === f.id ? ' an-chip--on' : ''}`} aria-pressed={filter === f.id} onClick={() => setFilter(f.id)}>
@@ -117,7 +127,7 @@ function PlayerList({ data, go }) {
       </div>
       {current && <p className="an-muted an-filterhelp">{helpText(filter, current)}</p>}
 
-      {shown.length === 0 ? <p className="an-muted an-group__empty">No players match this filter.</p> : (
+      {shown.length === 0 ? <p className="an-muted an-group__empty">{searching ? `No players match “${query.trim()}”${filter === 'all' ? '' : ' with this filter'}.` : 'No players match this filter.'}</p> : (
         <ul className="an-days">
           {shown.map(r => (
             <li key={r.id}>
