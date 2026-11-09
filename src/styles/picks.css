@@ -223,8 +223,18 @@
 .pk-panel__note { font-size: 13px; color: var(--text-muted); }
 .pk-worth { display: flex; flex-direction: column; gap: 3px; }
 .pk-worth__label { font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-muted); }
-.pk-worth__figs { font-size: 15px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
-.pk-worth__figs--gold { color: var(--gold); }
+.pk-opts { display: flex; gap: 8px; }
+.pk-opt {
+  flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 10px 12px;
+  border-radius: 12px; border: 1px solid rgba(242, 239, 228, 0.18); background: transparent; color: var(--text);
+  font-family: var(--font-body); text-align: left; cursor: pointer;
+}
+.pk-opt--on { border-color: var(--gold); background: var(--gold-tint); }
+.pk-opt__name { font-size: 13px; font-weight: 600; color: var(--text-muted); }
+.pk-opt--on .pk-opt__name { color: var(--gold); }
+.pk-opt__figs { font-size: 14px; font-weight: 600; line-height: 1.3; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.pk-opt__figs--gold { color: var(--gold); }
+.pk-opt:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 
 /* Banker switch */
 .pk-banker { display: flex; flex-direction: column; gap: 6px; }

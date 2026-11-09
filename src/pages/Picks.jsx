@@ -580,9 +580,15 @@ export default function Picks() {
       note: isWinOnly(runner.odds_decimal)
         ? 'Win only — under 4/1'
         : "Win only — each-way isn't offered in fields under 5 runners",
+      // Both options at once: the selected one shows the doubled figures (gold) when the banker is on.
       worth: (() => {
-        const f = worthFigures({ betType: current, oddsDecimal: runner.odds_decimal, runnerCount: nonWithdrawn, banker: bonusOn && bankerFor(race.id) })
-        return f ? { text: worthText(f), doubled: f.doubled, runners: nonWithdrawn } : null
+        const dbl = bonusOn && bankerFor(race.id)
+        const opt = type => {
+          const f = worthFigures({ betType: type, oddsDecimal: runner.odds_decimal, runnerCount: nonWithdrawn, banker: dbl && current === type })
+          return f && { type, text: worthText(f), doubled: f.doubled }
+        }
+        const options = [opt('win'), eachWayOffered ? opt('each_way') : null].filter(Boolean)
+        return options.length ? { runners: nonWithdrawn, options } : null
       })(),
       banker: bonusOn ? {
         on: bankerFor(race.id),
