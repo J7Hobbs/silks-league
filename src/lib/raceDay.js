@@ -5,6 +5,7 @@
 import { supabase } from './supabase'
 import { getPlaceTerms, SCORING_RULES } from './scoring.js'
 import { recalculateRace } from './raceScoring.js'
+import { lockRaceIfEmpty } from './raceLock.js'
 
 const APP_ORIGIN = 'https://silks-league.vercel.app'
 
@@ -164,6 +165,14 @@ export async function withdrawRunnerNow(kind, plan, { lockIso, now = Date.now() 
   const c = KINDS[kind]
   const { runner, race } = plan
 
+  // After the lock, a race that was never locked still has no field size. Lock it first, so the count
+  // is the one at the lock and includes this horse (the each-way places are judged on it).
+  let lockedNow = null
+  if (!(!lockIso || now < new Date(lockIso).getTime())) {
+    try { lockedNow = await lockRaceIfEmpty(kind, race.id) }
+    catch (err) { throw new Error(`Could not lock the race before withdrawing: ${err.message}`) }
+  }
+
   // Re-read the runners and the picks now, rather than trusting the numbers the sheet showed.
   const [rs, pk] = await Promise.all([
     supabase.from(c.runners).select(RUNNER_COLS).eq(c.raceCol, race.id),
@@ -221,7 +230,7 @@ export async function withdrawRunnerNow(kind, plan, { lockIso, now = Date.now() 
     })
   }
 
-  return { moved, switched, rescored, notified, favourite }
+  return { moved, switched, rescored, notified, favourite, lockedNow }
 }
 
 async function sendNotice(userIds, race, notice) {

@@ -61,7 +61,8 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import RunnerCard from '../components/RunnerCard.jsx'
 import { ChevronDown, ChevronUp } from 'lucide-react'
-import { calculateScoresForRace, calculateFestivalScoresForRace, updateFestivalDayPoints, countNonWithdrawnRunners } from '../lib/raceScoring.js'
+import { calculateScoresForRace, calculateFestivalScoresForRace, updateFestivalDayPoints, recalculateRace } from '../lib/raceScoring.js'
+import { lockRaces } from '../lib/raceLock.js'
 import { planWithdrawal, withdrawRunnerNow, planReinstate, reinstateRunnerNow, validateResults, noPriceMessage } from '../lib/raceDay.js'
 import ResultsForm from '../components/admin/ResultsForm.jsx'
 import RaceDayChecklist from '../components/admin/RaceDayChecklist.jsx'
@@ -371,6 +372,9 @@ export default function Admin() {
       await loadRunners(race.id)
       await loadResults(race.id)
     }
+    const list = data || []
+    const caught = await catchUpLock('week', weekId, list)
+    if (caught !== list) setRaces(caught)
   }
 
   async function loadRunners(raceId) {
@@ -1211,16 +1215,59 @@ export default function Admin() {
     setUnlockedResults(prev => { const s = new Set(prev); s.delete(raceId); return s })
   }
 
-  // ── Lock Picks: snapshot non-withdrawn runner count per race for each-way scoring ──
-  async function lockWeekPicks(weekRaces) {
-    if (!weekRaces?.length) return
+  // ── Lock Picks ──
+  // Stamps each race's runner count (non-withdrawn runners) and changes each-way picks that each-way
+  // is no longer allowed for (field too small, or the horse shorter than 4/1) into win picks. If a
+  // race already has results, it is re-scored. Same steps for Saturday and festival races (lib/raceLock.js).
+  async function lockPicksFor(kind, raceList, resultsOf, reloadRunners, reloadRaces) {
+    if (!raceList?.length) return
     setLoading(true)
-    for (const race of weekRaces) {
-      const runnerCount = await countNonWithdrawnRunners('runners', 'race_id', race.id)
-      await supabase.from('races').update({ runner_count_at_lock: runnerCount }).eq('id', race.id)
+    const { locked, failed } = await lockRaces(kind, raceList.map(r => r.id))
+    const converted = locked.reduce((n, l) => n + l.converted, 0)
+    // A race that already has results is scored again, since its picks may have changed.
+    let rescoreFailed = 0
+    for (const l of locked.filter(x => x.converted > 0)) {
+      const race = raceList.find(r => r.id === l.raceId)
+      if (race && (resultsOf[race.id] || []).length) {
+        const r = await recalculateRace(kind, race)
+        if (!r.ok) rescoreFailed++
+      }
     }
+    for (const race of raceList) await reloadRunners(race.id)
+    await reloadRaces()
     setLoading(false)
-    showToast('success', `Locked runner counts for ${weekRaces.length} race${weekRaces.length !== 1 ? 's' : ''}`)
+    const bits = [`Locked runner counts for ${locked.length} race${locked.length !== 1 ? 's' : ''}`]
+    bits.push(`${converted} each-way pick${converted !== 1 ? 's' : ''} changed to win`)
+    if (rescoreFailed) bits.push(`${rescoreFailed} race${rescoreFailed !== 1 ? 's' : ''} NOT re-scored`)
+    if (failed.length) bits.push(`FAILED: ${failed.map(f => `${raceList.find(r => r.id === f.raceId)?.race_number ? `Race ${raceList.find(r => r.id === f.raceId).race_number}` : 'a race'}: ${f.error}`).join('; ')}`)
+    showToast(failed.length || rescoreFailed ? 'error' : 'success', bits.join(' · '))
+  }
+  const lockWeekPicks   = raceList => lockPicksFor('week', raceList, raceResults, loadRunners, async () => { if (currentWeek) await loadRaces(currentWeek.id); setResultWeeksLoaded(false) })
+  const lockFestivalDayPicks = raceList => lockPicksFor('festival', raceList, festivalResults, loadFestivalRunners, async () => { if (selectedDay) await loadFestivalRaces(selectedDay.id) })
+
+  // When picks have locked (the deadline has passed) and a race has no runner count and no results yet,
+  // lock it now. Runs when Admin loads a race day, so the count is not left empty for the scoring step.
+  // Returns the races with the stamped counts filled in.
+  async function catchUpLock(kind, parentId, raceList) {
+    const need = (raceList || []).filter(r => r.runner_count_at_lock == null)
+    if (!need.length) return raceList
+    const parentTable = kind === 'week' ? 'race_weeks' : 'festival_days'
+    const resultsTable = kind === 'week' ? 'results' : 'festival_results'
+    const raceCol = kind === 'week' ? 'race_id' : 'festival_race_id'
+    const { data: parent } = await supabase.from(parentTable).select('picks_deadline').eq('id', parentId).maybeSingle()
+    if (!parent?.picks_deadline || Date.now() < new Date(parent.picks_deadline).getTime()) return raceList
+    const { data: withResults } = await supabase.from(resultsTable).select(raceCol).in(raceCol, need.map(r => r.id))
+    const hasResults = new Set((withResults || []).map(r => r[raceCol]))
+    const todo = need.filter(r => !hasResults.has(r.id))
+    if (!todo.length) return raceList
+    const { locked, failed } = await lockRaces(kind, todo.map(r => r.id))
+    if (locked.length) {
+      const converted = locked.reduce((n, l) => n + l.converted, 0)
+      showToast('success', `Picks have locked: runner counts stamped for ${locked.length} race${locked.length !== 1 ? 's' : ''} · ${converted} each-way pick${converted !== 1 ? 's' : ''} changed to win`)
+    }
+    if (failed.length) showToast('error', `Could not lock ${failed.length} race${failed.length !== 1 ? 's' : ''}: ${failed[0].error}`)
+    const counts = Object.fromEntries(locked.map(l => [l.raceId, l.count]))
+    return raceList.map(r => (r.id in counts ? { ...r, runner_count_at_lock: counts[r.id] } : r))
   }
 
   async function submitResults(race, isEdit = false) {
@@ -1356,6 +1403,7 @@ export default function Admin() {
       if (mode === 'withdraw') {
         const r = await withdrawRunnerNow(kind, plan, { lockIso: lockIsoFor(kind) })
         const bits = [`${runner.horse_name} withdrawn`]
+        if (r.lockedNow) bits.push(`race locked first (field of ${r.lockedNow.count}${r.lockedNow.converted ? `, ${r.lockedNow.converted} each-way changed to win` : ''})`)
         bits.push(r.moved ? `${r.moved} pick${r.moved !== 1 ? 's' : ''} moved to ${r.favourite.horse_name}` : 'no picks to move')
         if (r.switched) bits.push(`${r.switched} each-way changed to win`)
         if (r.rescored) bits.push(r.rescored.ok ? 'scores recalculated' : `SCORES NOT RECALCULATED: ${r.rescored.msg}`)
@@ -1464,6 +1512,9 @@ export default function Admin() {
       await loadFestivalRunners(race.id)
       await loadFestivalResults(race.id)
     }
+    const list = data || []
+    const caught = await catchUpLock('festival', dayId, list)
+    if (caught !== list) setFestivalRaces(caught)
   }
 
   async function loadFestivalRunners(raceId) {
@@ -1695,18 +1746,6 @@ export default function Admin() {
       }))
     }
     setFestivalUnlocked(prev => new Set([...prev, race.id]))
-  }
-
-  // ── Lock Picks: snapshot non-withdrawn runner count per race for each-way scoring ──
-  async function lockFestivalDayPicks(dayRaces) {
-    if (!dayRaces?.length) return
-    setLoading(true)
-    for (const race of dayRaces) {
-      const runnerCount = await countNonWithdrawnRunners('festival_runners', 'festival_race_id', race.id)
-      await supabase.from('festival_races').update({ runner_count_at_lock: runnerCount }).eq('id', race.id)
-    }
-    setLoading(false)
-    showToast('success', `Locked runner counts for ${dayRaces.length} race${dayRaces.length !== 1 ? 's' : ''}`)
   }
 
   async function submitFestivalResults(race) {

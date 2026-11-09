@@ -4,17 +4,24 @@
 // scoring.js and are not touched here.
 import { supabase } from './supabase'
 import { calcPoints, calcTokenPoints } from './scoring.js'
+import { countNonWithdrawnRunners, lockRaceIfEmpty } from './raceLock.js'
 
-// Count of non-withdrawn runners for a race — used to stamp runner_count_at_lock
-// either explicitly ("Lock Picks") or as a results-entry-time safety net.
-export async function countNonWithdrawnRunners(table, raceIdColumn, raceId) {
-  const { data } = await supabase.from(table).select('is_withdrawn').eq(raceIdColumn, raceId)
-  return (data || []).filter(r => !r.is_withdrawn).length
+export { countNonWithdrawnRunners }
+
+// A race that was never locked has no runner_count_at_lock. Before scoring, lock it the same way
+// "Lock Picks" does (stamp the field size, convert each-way picks that are not allowed), so each-way
+// places are always judged on a real count. null when the race was already locked.
+async function lockIfNeverLocked(kind, raceId) {
+  try { return { auto: await lockRaceIfEmpty(kind, raceId) } }
+  catch (err) { return { error: err.message || String(err) } }
 }
 
 // ── Shared helper: score one race from its results + picks ───
 export async function calculateScoresForRace(raceId, raceNumber) {
   console.log(`[Scores] Starting race ${raceNumber} (${raceId})`)
+
+  const lockStep = await lockIfNeverLocked('week', raceId)
+  if (lockStep.error) return { ok: false, msg: `Locking the race failed: ${lockStep.error}` }
 
   // 1. Wipe existing scores for this race
   const { error: delErr } = await supabase.from('scores').delete().eq('race_id', raceId)
@@ -61,7 +68,7 @@ export async function calculateScoresForRace(raceId, raceNumber) {
   // 5. Resolve runner_count_at_lock — stamped by "Lock Picks", or auto-captured
   // here as a safety net if that step was missed (each-way eligibility may then
   // not be perfectly deadline-accurate, so we surface a warning).
-  let lockAutoCaptured = false
+  let lockAutoCaptured = !!lockStep.auto
   const { data: raceRow } = await supabase.from('races').select('runner_count_at_lock').eq('id', raceId).single()
   let runnerCountAtLock = raceRow?.runner_count_at_lock
   if (runnerCountAtLock == null) {
@@ -106,7 +113,7 @@ export async function calculateScoresForRace(raceId, raceNumber) {
   console.log(`[Scores] Rows to insert for race ${raceNumber}:`, scoresToInsert)
 
   const lockWarn = lockAutoCaptured
-    ? `Runner count for each-way eligibility was auto-captured at results-entry time (Lock Picks wasn't clicked before the deadline) — may not be perfectly deadline-accurate.`
+    ? `Runner count for each-way eligibility was auto-captured at results-entry time (Lock Picks wasn't clicked before the deadline) — may not be perfectly deadline-accurate.${lockStep.auto?.converted ? ` ${lockStep.auto.converted} each-way pick${lockStep.auto.converted === 1 ? '' : 's'} changed to win.` : ''}`
     : null
 
   // 7. Try full insert first
@@ -142,6 +149,9 @@ export async function calculateScoresForRace(raceId, raceNumber) {
 // Same steps as the Saturday function above, reading festival_results / festival_picks and writing
 // festival_scores. (This is the scoring block that used to sit inside submitFestivalResults.)
 export async function calculateFestivalScoresForRace(race) {
+  const lockStep = await lockIfNeverLocked('festival', race.id)
+  if (lockStep.error) return { ok: false, msg: `Locking the race failed: ${lockStep.error}` }
+
   const { data: results, error: resErr } = await supabase
     .from('festival_results').select('position, horse_name').eq('festival_race_id', race.id)
   if (resErr) return { ok: false, msg: `Read results failed: ${resErr.message}` }
@@ -166,7 +176,7 @@ export async function calculateFestivalScoresForRace(race) {
 
   // Resolve runner_count_at_lock — stamped by "Lock Picks", or auto-captured
   // here as a safety net if that step was missed.
-  let lockAutoCaptured = false
+  let lockAutoCaptured = !!lockStep.auto
   const { data: raceRow } = await supabase.from('festival_races').select('runner_count_at_lock').eq('id', race.id).single()
   let runnerCountAtLock = raceRow?.runner_count_at_lock
   if (runnerCountAtLock == null) {
@@ -204,7 +214,7 @@ export async function calculateFestivalScoresForRace(race) {
 
   const { error: scoreErr } = await supabase.from('festival_scores').insert(scoreRows)
   if (scoreErr) return { ok: false, msg: `Scores failed: ${scoreErr.message}` }
-  return { ok: true, count: scoreRows.length, lockAutoCaptured }
+  return { ok: true, count: scoreRows.length, lockAutoCaptured, converted: lockStep.auto?.converted || 0 }
 }
 
 // festival_day_points (the leaderboard's numbers) for the day this race is on: each player's total of
