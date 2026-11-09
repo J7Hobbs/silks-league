@@ -63,6 +63,7 @@ import RunnerCard from '../components/RunnerCard.jsx'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { calcPoints, calcTokenPoints } from '../lib/scoring.js'
 import { ukClock, ukWallToMs } from '../lib/format.js'
+import { weekRaces, weekScores, weekPicks } from '../lib/weekSource.js'
 
 const APP_ORIGIN = 'https://silks-league.vercel.app'
 
@@ -159,6 +160,8 @@ function SilkColourPicker({ value, onChange }) {
 function weekLockText(week, raceCount) {
   if (!week?.picks_deadline) return 'Picks lock: not set'
   const at = ukClock(new Date(week.picks_deadline).getTime())
+  // A week linked to a festival day takes its lock time from that day.
+  if (week.festival_day_id) return `Picks lock ${at} UK (the same as the festival day)`
   return raceCount > 0
     ? `Picks lock ${at} UK (30 min before the first race)`
     : `Picks lock ${at} UK until races are added (then 30 min before the first race)`
@@ -187,6 +190,8 @@ export default function Admin() {
   // ── Race week ──
   const [allWeeks, setAllWeeks]           = useState([])
   const [currentWeek, setCurrentWeek]     = useState(null)   // the week currently being viewed/edited
+  const [linkInfo, setLinkInfo]         = useState({ weekId: null, linked: null, candidates: [] })   // the festival day this week is linked to, or the days it could be
+  const [linkPick, setLinkPick]           = useState('')
   const [showWeekForm, setShowWeekForm]   = useState(false)
   const [weekDate, setWeekDate]           = useState('')
   const [editingWeek, setEditingWeek]     = useState(false)
@@ -275,6 +280,41 @@ export default function Admin() {
       loadAllResultWeeks()
     }
   }, [activeTab, activeSeason, resultWeeksLoaded])
+
+  // The festival day the selected week is linked to, or the festival days that fall on its Saturday
+  // (and are not linked to another week), so the Setup tab can offer the link.
+  useEffect(() => {
+    const week = currentWeek
+    if (!week) return
+    let cancelled = false
+    ;(async () => {
+      const dayCols = 'id, festival_id, day_number, race_date'
+      const [{ data: days }, { data: takenRows }] = await Promise.all([
+        week.festival_day_id
+          ? supabase.from('festival_days').select(dayCols).eq('id', week.festival_day_id)
+          : supabase.from('festival_days').select(dayCols).eq('race_date', week.saturday_date).order('day_number'),
+        week.festival_day_id
+          ? Promise.resolve({ data: [] })
+          : supabase.from('race_weeks').select('festival_day_id').not('festival_day_id', 'is', null),
+      ])
+      const taken = new Set((takenRows || []).map(r => r.festival_day_id))
+      const list = (days || []).filter(d => week.festival_day_id || !taken.has(d.id))
+      const festIds = [...new Set(list.map(d => d.festival_id))]
+      const [{ data: fests }, counts] = await Promise.all([
+        festIds.length ? supabase.from('festivals').select('id, name, display_name').in('id', festIds) : Promise.resolve({ data: [] }),
+        Promise.all(list.map(d => supabase.from('festival_races').select('id', { count: 'exact', head: true }).eq('festival_day_id', d.id))),
+      ])
+      if (cancelled) return
+      const festName = Object.fromEntries((fests || []).map(f => [f.id, f.display_name || f.name]))
+      const rows = list.map((d, i) => ({
+        id: d.id, raceCount: counts[i]?.count || 0,
+        label: `${festName[d.festival_id] || 'Festival'} — Day ${d.day_number}`,
+      }))
+      setLinkInfo({ weekId: week.id, linked: week.festival_day_id ? rows[0] || { id: week.festival_day_id, label: 'a festival day', raceCount: 0 } : null, candidates: week.festival_day_id ? [] : rows })
+      setLinkPick('')
+    })()
+    return () => { cancelled = true }
+  }, [currentWeek])
 
   async function init() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -376,20 +416,18 @@ export default function Admin() {
 
   async function loadLeaderboard() {
     if (!activeSeason) return
-    const { data: weeks } = await supabase.from('race_weeks').select('id').eq('season_id', activeSeason.id)
+    const { data: weeks } = await supabase.from('race_weeks').select('id, festival_day_id').eq('season_id', activeSeason.id)
     if (!weeks?.length) { setLeaderboard([]); return }
-    const { data: raceList } = await supabase.from('races').select('id').in('race_week_id', weeks.map(w => w.id))
-    if (!raceList?.length) { setLeaderboard([]); return }
-    const thisWeekIds = new Set()
-    if (currentWeek) {
-      const { data: twRaces } = await supabase.from('races').select('id').eq('race_week_id', currentWeek.id)
-      twRaces?.forEach(r => thisWeekIds.add(r.id))
-    }
-    const { data: scores } = await supabase.from('scores')
-      .select('user_id, total_points, race_id, profiles(username, full_name)').in('race_id', raceList.map(r => r.id))
+    // A week linked to a festival day takes its races and points from that day.
+    const raceList = await weekRaces(weeks).catch(() => [])
+    if (!raceList.length) { setLeaderboard([]); return }
+    const thisWeekIds = new Set(currentWeek ? raceList.filter(r => r.race_week_id === currentWeek.id).map(r => r.id) : [])
+    const scores = await weekScores(raceList).catch(() => [])
+    const { data: names } = await supabase.rpc('get_user_names', { user_ids: [...new Set(scores.map(s => s.user_id))] })
+    const nameOf = Object.fromEntries((names || []).map(p => [p.id, p.username || p.full_name]))
     const totals = {}
-    for (const s of (scores || [])) {
-      if (!totals[s.user_id]) totals[s.user_id] = { name: s.profiles?.username || s.profiles?.full_name || 'Unknown', total: 0, week: 0 }
+    for (const s of scores) {
+      if (!totals[s.user_id]) totals[s.user_id] = { name: nameOf[s.user_id] || 'Unknown', total: 0, week: 0 }
       totals[s.user_id].total += s.total_points
       if (thisWeekIds.has(s.race_id)) totals[s.user_id].week += s.total_points
     }
@@ -417,7 +455,7 @@ export default function Admin() {
       const label = kind === 'week'
         ? `Saturday's races (Week ${currentWeek.week_number})`
         : `${selectedFestival?.display_name || selectedFestival?.name || 'Festival'} — Day ${selectedDay.day_number}`
-      const url = kind === 'week' ? `${APP_ORIGIN}/picks` : `${APP_ORIGIN}/festival-picks`
+      const url = `${APP_ORIGIN}/picks`
 
       setLoading(true)
       try {
@@ -588,6 +626,45 @@ export default function Admin() {
     showToast('success', 'Race week updated')
     setEditingWeek(false)
     await loadAllWeeks(activeSeason.id, currentWeek.id)
+  }
+
+  // ── Link this Saturday to a festival day ─────────────────────
+  // A linked week has no races of its own: players pick on the festival day's races, and the points
+  // count for the festival and for this week of the Saturday League. The database checks the rules
+  // (same Saturday, no races of its own, no unlinking once players have picked) and sets the lock time.
+  function linkWeekToDay() {
+    const day = linkInfo.candidates.find(d => d.id === linkPick)
+    if (!day || !currentWeek) return
+    confirm(
+      `Link Week ${currentWeek.week_number} to ${day.label}?`,
+      `Players will make one set of picks on that day's races. The points count for the festival and for this week of the Saturday League. This week will not have races of its own, and its lock time follows the festival day.`,
+      async () => {
+        setLoading(true)
+        const { error } = await supabase.from('race_weeks').update({ festival_day_id: day.id }).eq('id', currentWeek.id)
+        setLoading(false)
+        if (error) { showToast('error', error.message); return }
+        showToast('success', `Week ${currentWeek.week_number} linked to ${day.label}`)
+        await loadAllWeeks(activeSeason.id, currentWeek.id)
+      },
+      { confirmLabel: 'Link', confirmStyle: st.btnGold },
+    )
+  }
+
+  function unlinkWeek() {
+    if (!currentWeek) return
+    confirm(
+      `Unlink Week ${currentWeek.week_number}?`,
+      `The week goes back to having its own races. This only works while nobody has picked on the festival day.`,
+      async () => {
+        setLoading(true)
+        const { error } = await supabase.from('race_weeks').update({ festival_day_id: null }).eq('id', currentWeek.id)
+        setLoading(false)
+        if (error) { showToast('error', error.message); return }
+        showToast('success', `Week ${currentWeek.week_number} unlinked`)
+        await loadAllWeeks(activeSeason.id, currentWeek.id)
+      },
+      { confirmLabel: 'Unlink' },
+    )
   }
 
   function deleteRaceWeek() {
@@ -1333,11 +1410,17 @@ export default function Admin() {
     if (!season) { showToast('error', 'No active season'); setLoading(false); return }
 
     const { data: weekArr } = await supabase
-      .from('race_weeks').select('id')
+      .from('race_weeks').select('id, week_number, festival_day_id')
       .eq('season_id', season.id)
       .order('saturday_date', { ascending: false })
       .limit(1)
     if (!weekArr?.[0]) { showToast('error', 'No race week found'); setLoading(false); return }
+    // A week linked to a festival day is scored with the festival, not here.
+    if (weekArr[0].festival_day_id) {
+      setLoading(false)
+      showToast('error', `Week ${weekArr[0].week_number} is scored through its festival day — enter and recalculate results under Festivals`)
+      return
+    }
 
     const { data: weekRaces } = await supabase
       .from('races').select('id, race_number').eq('race_week_id', weekArr[0].id)
@@ -1590,14 +1673,12 @@ export default function Admin() {
     const pickCountByUser = {}
     const { data: season } = await supabase.from('seasons').select('id').eq('is_active', true).single()
     if (season) {
-      const { data: weeks } = await supabase.from('race_weeks').select('id').eq('season_id', season.id)
-      const weekIds = (weeks || []).map(w => w.id)
-      if (weekIds.length) {
-        const { data: races } = await supabase.from('races').select('id').in('race_week_id', weekIds)
-        const raceIds = (races || []).map(r => r.id)
-        if (raceIds.length) {
-          const { data: picks } = await supabase.from('picks').select('user_id').in('race_id', raceIds)
-          picks?.forEach(p => { pickCountByUser[p.user_id] = (pickCountByUser[p.user_id] || 0) + 1 })
+      const { data: weeks } = await supabase.from('race_weeks').select('id, festival_day_id').eq('season_id', season.id)
+      if (weeks?.length) {
+        const races = await weekRaces(weeks).catch(() => [])
+        if (races.length) {
+          const picks = await weekPicks(races, { cols: ['user_id', 'race_id'] }).catch(() => [])
+          picks.forEach(p => { pickCountByUser[p.user_id] = (pickCountByUser[p.user_id] || 0) + 1 })
         }
       }
     }
@@ -2354,6 +2435,8 @@ export default function Admin() {
                 .sort((a, b) => a.saturday_date.localeCompare(b.saturday_date))
               const activeWeekId2 = upcomingIds2[0]?.id || allWeeks[0]?.id
               const isActiveWeek = currentWeek.id === activeWeekId2
+              const isLinked = !!currentWeek.festival_day_id
+              const linkReady = linkInfo.weekId === currentWeek.id
               return (
               <>
                 {/* Week summary card */}
@@ -2387,18 +2470,18 @@ export default function Admin() {
                           }
                         </div>
                         <div style={st.infoCardTitle}>Week {currentWeek.week_number} · {currentWeek.saturday_date}</div>
-                        <div style={st.infoCardSub}>{weekLockText(currentWeek, races.length)} · {races.length}/7 races</div>
+                        <div style={st.infoCardSub}>{isLinked ? weekLockText(currentWeek, races.length) : `${weekLockText(currentWeek, races.length)} · ${races.length}/7 races`}</div>
                       </div>
                       {!isCurrentPastWeek && (
                         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                          {races.length > 0 && (
+                          {races.length > 0 && !isLinked && (
                             currentWeek.picks_open_notified_at
                               ? <button style={{ ...st.btnSmallGhost, color: '#4ade80', borderColor: 'rgba(74,222,128,0.35)' }}
                                   title={`Sent ${new Date(currentWeek.picks_open_notified_at).toLocaleString('en-GB')} — click to resend`}
                                   onClick={() => notifyPicksOpen('week')} disabled={loading}>✓ Notified</button>
                               : <button style={st.btnSmallGhost} onClick={() => notifyPicksOpen('week')} disabled={loading}>🔔 Notify: Picks Open</button>
                           )}
-                          <button style={st.btnSmallGhost} onClick={startEditWeek}>Edit</button>
+                          {!isLinked && <button style={st.btnSmallGhost} onClick={startEditWeek}>Edit</button>}
                           <button style={st.btnSmallDanger} onClick={deleteRaceWeek}>Delete Week</button>
                         </div>
                       )}
@@ -2406,10 +2489,10 @@ export default function Admin() {
                         <span style={{ fontSize: '0.72rem', color: '#5a8a5a', fontStyle: 'italic' }}>Past week — read only</span>
                       )}
                     </div>
-                    <div style={st.progressBar}>
+                    {!isLinked && <div style={st.progressBar}>
                       <div style={{ ...st.progressFill, width: `${(races.length / 7) * 100}%` }} />
-                    </div>
-                    <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.75rem', flexWrap: 'wrap' }}>
+                    </div>}
+                    {!isLinked && <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.75rem', flexWrap: 'wrap' }}>
                       {[1,2,3,4,5,6,7].map(n => {
                         const done = !!races.find(r => r.race_number === n)
                         return (
@@ -2423,7 +2506,51 @@ export default function Admin() {
                           }}>{n}</div>
                         )
                       })}
+                    </div>}
+                  </div>
+                )}
+
+                {/* ── Festival link: this Saturday as part of a festival day ── */}
+                {linkReady && isLinked && (
+                  <div style={{ ...st.infoCard, borderColor: 'rgba(201,168,76,0.45)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem', flexWrap: 'wrap' }}>
+                      <div>
+                        <div style={{ fontSize: '0.65rem', fontWeight: '700', letterSpacing: '0.1em', color: '#c9a84c', marginBottom: '0.3rem' }}>LINKED TO A FESTIVAL</div>
+                        <div style={st.infoCardTitle}>{linkInfo.linked?.label}</div>
+                        <div style={st.infoCardSub}>
+                          {linkInfo.linked?.raceCount
+                            ? `${linkInfo.linked.raceCount} race${linkInfo.linked.raceCount !== 1 ? 's' : ''} on the festival day`
+                            : 'No races on the festival day yet — the lock time follows it once they are added'}
+                        </div>
+                      </div>
+                      {!isCurrentPastWeek && <button style={st.btnSmallGhost} onClick={unlinkWeek} disabled={loading}>Unlink</button>}
                     </div>
+                    <p style={{ fontSize: '0.78rem', color: '#5a8a5a', margin: '0.75rem 0 0' }}>
+                      One set of picks, on the festival day's races. Races, runners, withdrawals, Lock Picks and results are all managed under Festivals; the points count for the festival and for this week of the Saturday League.
+                    </p>
+                  </div>
+                )}
+                {linkReady && !isLinked && linkInfo.candidates.length > 0 && !isCurrentPastWeek && (
+                  <div style={st.infoCard}>
+                    <div style={{ fontSize: '0.65rem', fontWeight: '700', letterSpacing: '0.1em', color: '#c9a84c', marginBottom: '0.4rem' }}>PART OF A FESTIVAL?</div>
+                    {races.length > 0 ? (
+                      <p style={{ fontSize: '0.78rem', color: '#5a8a5a', margin: 0 }}>
+                        {linkInfo.candidates.map(d => d.label).join(', ')} falls on this Saturday. To link it, this week must have no races of its own — delete them first.
+                      </p>
+                    ) : (
+                      <>
+                        <p style={{ fontSize: '0.78rem', color: '#5a8a5a', margin: '0 0 0.6rem' }}>
+                          Link this Saturday to its festival day so players make one set of picks that count for both.
+                        </p>
+                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                          <select style={{ ...st.input, flex: '1 1 14rem', width: 'auto' }} value={linkPick} onChange={e => setLinkPick(e.target.value)}>
+                            <option value="">Choose a festival day…</option>
+                            {linkInfo.candidates.map(d => <option key={d.id} value={d.id}>{d.label}</option>)}
+                          </select>
+                          <button style={st.btnGold} onClick={linkWeekToDay} disabled={!linkPick || loading}>Link</button>
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
 
@@ -2433,6 +2560,7 @@ export default function Admin() {
                   </div>
                 )}
 
+                {!isLinked && (<>
                 {/* ── Combined import (race + runners) ── */}
                 {!isCurrentPastWeek && (
                   <div style={{ marginBottom: '0.25rem' }}>
@@ -2870,6 +2998,7 @@ runners: 6`}</code>
                     </div>
                   )
                 })}
+                </>)}
               </>
               )
             })()}
