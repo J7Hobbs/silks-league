@@ -61,7 +61,11 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import RunnerCard from '../components/RunnerCard.jsx'
 import { ChevronDown, ChevronUp } from 'lucide-react'
-import { calcPoints, calcTokenPoints } from '../lib/scoring.js'
+import { calculateScoresForRace, calculateFestivalScoresForRace, updateFestivalDayPoints, countNonWithdrawnRunners } from '../lib/raceScoring.js'
+import { planWithdrawal, withdrawRunnerNow, planReinstate, reinstateRunnerNow, validateResults, noPriceMessage } from '../lib/raceDay.js'
+import ResultsForm from '../components/admin/ResultsForm.jsx'
+import RaceDayChecklist from '../components/admin/RaceDayChecklist.jsx'
+import WithdrawSheet from '../components/admin/WithdrawSheet.jsx'
 import { ukClock, ukWallToMs } from '../lib/format.js'
 import { weekRaces, weekScores, weekPicks } from '../lib/weekSource.js'
 
@@ -93,13 +97,6 @@ function parseFractionalOdds(str) {
   const dec = parseFloat(s)
   if (!isNaN(dec) && dec > 1) return dec
   return null
-}
-
-// Count of non-withdrawn runners for a race — used to stamp runner_count_at_lock
-// either explicitly ("Lock Picks") or as a results-entry-time safety net.
-async function countNonWithdrawnRunners(table, raceIdColumn, raceId) {
-  const { data } = await supabase.from(table).select('is_withdrawn').eq(raceIdColumn, raceId)
-  return (data || []).filter(r => !r.is_withdrawn).length
 }
 
 // ── Month helpers ─────────────────────────────────────────────
@@ -260,6 +257,8 @@ export default function Admin() {
   // ── Results ──
   const [raceResults, setRaceResults]         = useState({})
   const [resultForms, setResultForms]         = useState({})
+  const [runnerSheet, setRunnerSheet]         = useState(null)   // { mode, kind, plan } while the withdraw / reinstate sheet is open
+  const [sheetBusy, setSheetBusy]             = useState(false)
   const [unlockedResults, setUnlockedResults] = useState(new Set())
 
   // ── Results accordion (all weeks) ──
@@ -437,7 +436,8 @@ export default function Admin() {
   // ── Toast helper ─────────────────────────────────────────────
   function showToast(type, text) {
     setToast({ type, text })
-    setTimeout(() => setToast(null), 3500)
+    // long messages (a withdrawal summary, an error) stay up long enough to read
+    setTimeout(() => setToast(null), Math.max(3500, String(text).length * 70))
   }
 
   // ── Confirm helper ───────────────────────────────────────────
@@ -864,6 +864,7 @@ export default function Admin() {
         warnings.push(`Line ${lineNum}: colour "${colour}" is not a valid hex — defaulted to #1a3a10`)
       }
 
+      if (!oddsDecimal) warnings.push(`Line ${lineNum}: ${noPriceMessage(name)}`)
       const horseNum = parseInt(numStr)
       toInsert.push({
         race_id:         raceId,
@@ -1003,6 +1004,7 @@ export default function Admin() {
       const sec2Ok              = secondaryHex && /^#[0-9a-fA-F]{6}$/.test(secondaryHex)
       const silkColourSecondary = sec2Ok ? secondaryHex : null
 
+      if (!oddsDecimal) warnings.push(`Line ${lineNum}: ${noPriceMessage(name)}`)
       const horseNum = parseInt(numStr)
       toInsert.push({
         horse_number:          !isNaN(horseNum) ? horseNum : null,
@@ -1133,6 +1135,7 @@ export default function Admin() {
       const sec2Ok              = secondaryHex && /^#[0-9a-fA-F]{6}$/.test(secondaryHex)
       const silkColourSecondary = sec2Ok ? secondaryHex : null
 
+      if (!oddsDecimal) warnings.push(`Line ${lineNum}: ${noPriceMessage(name)}`)
       const horseNum = parseInt(numStr)
       toInsert.push({
         horse_number:          !isNaN(horseNum) ? horseNum : null,
@@ -1208,132 +1211,6 @@ export default function Admin() {
     setUnlockedResults(prev => { const s = new Set(prev); s.delete(raceId); return s })
   }
 
-  // ── Shared helper: score one race from its results + picks ───
-  async function calculateScoresForRace(raceId, raceNumber) {
-    console.log(`[Scores] Starting race ${raceNumber} (${raceId})`)
-
-    // 1. Wipe existing scores for this race
-    const { error: delErr } = await supabase.from('scores').delete().eq('race_id', raceId)
-    if (delErr) {
-      console.error(`[Scores] Delete failed:`, delErr)
-      return { ok: false, msg: `Delete failed: ${delErr.message}` }
-    }
-
-    // 2. Load the results (top 3, or top 4 for large fields)
-    const { data: raceResults, error: resReadErr } = await supabase
-      .from('results')
-      .select('position, horse_name, starting_price_decimal')
-      .eq('race_id', raceId)
-    console.log(`[Scores] Results for race ${raceNumber}:`, raceResults, resReadErr)
-
-    if (resReadErr) return { ok: false, msg: `Read results failed: ${resReadErr.message}` }
-    if (!raceResults?.length) return { ok: true, msg: 'No results yet', count: 0 }
-
-    const placed = {}
-    raceResults.forEach(r => {
-      placed[r.horse_name] = { position: r.position, sp: r.starting_price_decimal }
-    })
-
-    // 3. Load picks for this race (bet_type is null for legacy picks made before the token system)
-    const { data: picks, error: picksErr } = await supabase
-      .from('picks').select('id, user_id, runner_id, bet_type').eq('race_id', raceId)
-    console.log(`[Scores] Picks for race ${raceNumber}:`, picks, picksErr)
-
-    if (picksErr) return { ok: false, msg: `Picks fetch failed: ${picksErr.message}` }
-    if (!picks?.length) return { ok: true, msg: 'No picks for this race', count: 0 }
-
-    // 4. Resolve runner_id → { horse_name, odds_decimal }
-    const runnerIds = [...new Set(picks.map(p => p.runner_id).filter(Boolean))]
-    const { data: runnerRows, error: runErr } = await supabase
-      .from('runners').select('id, horse_name, odds_decimal').in('id', runnerIds)
-    console.log(`[Scores] Runners:`, runnerRows, runErr)
-
-    if (runErr) return { ok: false, msg: `Runners fetch failed: ${runErr.message}` }
-    const runnerMap = {}
-    runnerRows?.forEach(r => {
-      runnerMap[r.id] = r
-    })
-
-    // 5. Resolve runner_count_at_lock — stamped by "Lock Picks", or auto-captured
-    // here as a safety net if that step was missed (each-way eligibility may then
-    // not be perfectly deadline-accurate, so we surface a warning).
-    let lockAutoCaptured = false
-    const { data: raceRow } = await supabase.from('races').select('runner_count_at_lock').eq('id', raceId).single()
-    let runnerCountAtLock = raceRow?.runner_count_at_lock
-    if (runnerCountAtLock == null) {
-      runnerCountAtLock = await countNonWithdrawnRunners('runners', 'race_id', raceId)
-      await supabase.from('races').update({ runner_count_at_lock: runnerCountAtLock }).eq('id', raceId)
-      lockAutoCaptured = true
-    }
-
-    // 6. Build score rows — new token formula for picks with bet_type set, legacy formula otherwise
-    const scoresToInsert = picks
-      .map(pick => {
-        const runner = runnerMap[pick.runner_id]
-        const horseName = runner?.horse_name
-        const p = horseName ? placed[horseName] : null
-        const position = p?.position ?? null
-
-        if (pick.bet_type) {
-          const oddsDecimal = runner?.odds_decimal ?? p?.sp ?? 0
-          const { winTokenPoints, placeTokenPoints, totalPoints } = calcTokenPoints({
-            betType: pick.bet_type, position, oddsDecimal, runnerCount: runnerCountAtLock,
-          })
-          return {
-            user_id: pick.user_id, race_id: raceId, pick_id: pick.id,
-            bet_type: pick.bet_type, win_token_points: winTokenPoints, place_token_points: placeTokenPoints,
-            total_points: totalPoints, position_achieved: position,
-          }
-        }
-
-        if (p) {
-          const { base, bonus, total } = calcPoints(p.position, p.sp)
-          return {
-            user_id: pick.user_id, race_id: raceId, pick_id: pick.id,
-            base_points: base, bonus_points: bonus, total_points: total,
-            position_achieved: p.position,
-          }
-        }
-        return {
-          user_id: pick.user_id, race_id: raceId, pick_id: pick.id,
-          base_points: 0, bonus_points: 0, total_points: 0, position_achieved: null,
-        }
-      })
-    console.log(`[Scores] Rows to insert for race ${raceNumber}:`, scoresToInsert)
-
-    const lockWarn = lockAutoCaptured
-      ? `Runner count for each-way eligibility was auto-captured at results-entry time (Lock Picks wasn't clicked before the deadline) — may not be perfectly deadline-accurate.`
-      : null
-
-    // 7. Try full insert first
-    const { error: insErr } = await supabase.from('scores').insert(scoresToInsert)
-    if (!insErr) {
-      console.log(`[Scores] Insert OK — ${scoresToInsert.length} rows`)
-      return { ok: true, count: scoresToInsert.length, warn: lockWarn }
-    }
-
-    console.error(`[Scores] Full insert failed:`, insErr)
-
-    // 8. Full insert failed — likely missing columns. Retry with minimal columns only.
-    console.warn(`[Scores] Retrying with minimal columns (user_id, race_id, total_points)`)
-    const minimal = scoresToInsert.map(s => ({
-      user_id: s.user_id,
-      race_id: s.race_id,
-      total_points: s.total_points,
-    }))
-    const { error: minErr } = await supabase.from('scores').insert(minimal)
-    if (!minErr) {
-      console.log(`[Scores] Minimal insert OK — ${minimal.length} rows`)
-      return {
-        ok: true, count: minimal.length,
-        warn: `Saved with minimal columns — run supabase/token_scoring_migration.sql to add the missing columns`,
-      }
-    }
-
-    console.error(`[Scores] Minimal insert also failed:`, minErr)
-    return { ok: false, msg: `Insert failed: ${minErr.message} (original: ${insErr.message})` }
-  }
-
   // ── Lock Picks: snapshot non-withdrawn runner count per race for each-way scoring ──
   async function lockWeekPicks(weekRaces) {
     if (!weekRaces?.length) return
@@ -1348,11 +1225,13 @@ export default function Admin() {
 
   async function submitResults(race, isEdit = false) {
     const form = resultForms[race.id] || {}
-    if (!form.horse1 || !form.horse2 || !form.horse3) { showToast('error', 'Select all 3 finishers'); return }
+    const raceRunners = runners[race.id] || []
+    // 1st plus every paid place are required; further places up to 4th are optional.
+    const check = validateResults(raceRunners, form)
+    if (!check.ok) { showToast('error', check.message); return }
     setLoading(true)
 
     // Look up opening odds from the runner records
-    const raceRunners = runners[race.id] || []
     function getRunnerOdds(horseName) {
       const runner = raceRunners.find(r => r.horse_name === horseName)
       return {
@@ -1360,23 +1239,16 @@ export default function Admin() {
         oddsDisplay: runner?.odds_fractional || null,
       }
     }
-    const o1 = getRunnerOdds(form.horse1)
-    const o2 = getRunnerOdds(form.horse2)
-    const o3 = getRunnerOdds(form.horse3)
-    const o4 = form.horse4 ? getRunnerOdds(form.horse4) : null
 
     // ── Step 1: delete old results for this race ────────────────
     const { error: delResErr } = await supabase.from('results').delete().eq('race_id', race.id)
     if (delResErr) { showToast('error', `Delete results failed: ${delResErr.message}`); setLoading(false); return }
 
-    // ── Step 2: insert the result rows (4th place is optional — only needed
-    // for each-way scoring in 16+ runner fields) ────────────────
-    const resultRows = [
-      { race_id: race.id, position: 1, horse_name: form.horse1, starting_price_decimal: o1.oddsDecimal, starting_price_display: o1.oddsDisplay },
-      { race_id: race.id, position: 2, horse_name: form.horse2, starting_price_decimal: o2.oddsDecimal, starting_price_display: o2.oddsDisplay },
-      { race_id: race.id, position: 3, horse_name: form.horse3, starting_price_decimal: o3.oddsDecimal, starting_price_display: o3.oddsDisplay },
-    ]
-    if (o4) resultRows.push({ race_id: race.id, position: 4, horse_name: form.horse4, starting_price_decimal: o4.oddsDecimal, starting_price_display: o4.oddsDisplay })
+    // ── Step 2: insert the result rows (only the positions that were filled in) ──
+    const resultRows = check.rows.map(({ position, horse_name }) => {
+      const o = getRunnerOdds(horse_name)
+      return { race_id: race.id, position, horse_name, starting_price_decimal: o.oddsDecimal, starting_price_display: o.oddsDisplay }
+    })
     const { error: resErr } = await supabase.from('results').insert(resultRows)
     if (resErr) { showToast('error', `Save results failed: ${resErr.message}`); setLoading(false); return }
 
@@ -1457,191 +1329,54 @@ export default function Admin() {
     }
   }
 
-  // ── Mark / reinstate a horse as withdrawn ────────────────────
-  async function withdrawRunner(runner, raceId) {
+  // ── Withdraw / reinstate a runner (Saturday and festival) ─────
+  // The work is in lib/raceDay.js; these open the confirm sheet, run it, and report back.
+  // `kind` is 'week' or 'festival'. The race's lock time is its week's or its festival day's.
+  const lockIsoFor = kind => (kind === 'week' ? currentWeek?.picks_deadline : selectedDay?.picks_deadline) || null
+
+  async function openRunnerSheet(mode, kind, runner, race) {
     setLoading(true)
-    // Find the favourite for this race (lowest odds_decimal, not already withdrawn, not this runner)
-    const { data: raceRunners } = await supabase
-      .from('runners')
-      .select('id, horse_name, odds_decimal, odds_fractional')
-      .eq('race_id', raceId)
-      .eq('is_withdrawn', false)
-      .neq('id', runner.id)
-      .order('odds_decimal', { ascending: true })
-      .limit(1)
-    setLoading(false)
-
-    const favourite = raceRunners?.[0] || null
-
-    if (!favourite) {
-      confirm(
-        `Cannot withdraw ${runner.horse_name}`,
-        `No valid favourite found — all other runners may also be withdrawn. Please handle this manually.`,
-        () => {}
-      )
-      return
+    try {
+      const plan = mode === 'withdraw'
+        ? await planWithdrawal(kind, runner, race, { lockIso: lockIsoFor(kind) })
+        : await planReinstate(kind, runner, race)
+      setRunnerSheet({ mode, kind, plan })
+    } catch (err) {
+      showToast('error', err.message || String(err))
     }
-
-    const oddsDisplay = favourite.odds_fractional || (favourite.odds_decimal ? `${favourite.odds_decimal}` : '?')
-
-    confirm(
-      `Mark ${runner.horse_name} as withdrawn?`,
-      `Any players who picked this horse will automatically be switched to the race favourite: ${favourite.horse_name} (${oddsDisplay}).`,
-      async () => {
-        setLoading(true)
-
-        // 1. Mark runner as withdrawn
-        const { error: wdErr } = await supabase.from('runners').update({ is_withdrawn: true }).eq('id', runner.id)
-        if (wdErr) { showToast('error', wdErr.message); setLoading(false); return }
-
-        // 2. Find all picks for this withdrawn runner
-        const { data: affectedPicks } = await supabase
-          .from('picks').select('id').eq('runner_id', runner.id)
-
-        // 3. Update each affected pick — switch to favourite and record the replacement
-        if (affectedPicks?.length) {
-          const { error: pickErr } = await supabase.from('picks').update({
-            runner_id: favourite.id,
-            original_runner_id: runner.id,
-            was_replaced: true,
-            replacement_reason: 'Horse withdrawn — replaced with race favourite',
-          }).eq('runner_id', runner.id)
-          if (pickErr) showToast('error', `Withdrawal saved but pick update failed: ${pickErr.message}`)
-        }
-
-        await loadRunners(raceId)
-        setLoading(false)
-        const pickCount = affectedPicks?.length || 0
-        showToast('success', `${runner.horse_name} withdrawn — ${pickCount} pick${pickCount !== 1 ? 's' : ''} switched to ${favourite.horse_name}`)
-      }
-    )
-  }
-
-  async function reinstateRunner(runner, raceId) {
-    confirm(
-      `Reinstate ${runner.horse_name}?`,
-      `The horse will be reinstated. Any auto-replaced picks will be reverted back to this horse.`,
-      async () => {
-        setLoading(true)
-
-        // 1. Reinstate the runner
-        const { error: reErr } = await supabase.from('runners').update({ is_withdrawn: false }).eq('id', runner.id)
-        if (reErr) { showToast('error', reErr.message); setLoading(false); return }
-
-        // 2. Revert any picks that were auto-replaced from this runner
-        const { data: replacedPicks } = await supabase
-          .from('picks').select('id').eq('original_runner_id', runner.id).eq('was_replaced', true)
-
-        if (replacedPicks?.length) {
-          const { error: revertErr } = await supabase.from('picks').update({
-            runner_id: runner.id,
-            original_runner_id: null,
-            was_replaced: false,
-            replacement_reason: null,
-          }).eq('original_runner_id', runner.id).eq('was_replaced', true)
-          if (revertErr) showToast('error', `Reinstated but pick revert failed: ${revertErr.message}`)
-        }
-
-        await loadRunners(raceId)
-        const revertCount = replacedPicks?.length || 0
-        setLoading(false)
-        showToast('success', `${runner.horse_name} reinstated${revertCount > 0 ? ` — ${revertCount} pick${revertCount !== 1 ? 's' : ''} reverted` : ''}`)
-      }
-    )
-  }
-
-
-  // ── Festival runner withdraw / reinstate ─────────────────────
-  async function withdrawFestivalRunner(runner, raceId) {
-    setLoading(true)
-    // Find the favourite for this race (lowest odds_decimal, not already withdrawn, not this runner)
-    const { data: raceRunners } = await supabase
-      .from('festival_runners')
-      .select('id, horse_name, odds_decimal, odds_fractional')
-      .eq('festival_race_id', raceId)
-      .eq('is_withdrawn', false)
-      .neq('id', runner.id)
-      .order('odds_decimal', { ascending: true })
-      .limit(1)
     setLoading(false)
-
-    const favourite = raceRunners?.[0] || null
-
-    if (!favourite) {
-      confirm(
-        `Cannot withdraw ${runner.horse_name}`,
-        `No valid favourite found — all other runners may also be withdrawn. Please handle this manually.`,
-        () => {}
-      )
-      return
-    }
-
-    const oddsDisplay = favourite.odds_fractional || (favourite.odds_decimal ? `${favourite.odds_decimal}` : '?')
-
-    confirm(
-      `Mark ${runner.horse_name} as withdrawn?`,
-      `Any players who picked this horse will automatically be switched to the race favourite: ${favourite.horse_name} (${oddsDisplay}).`,
-      async () => {
-        setLoading(true)
-
-        // 1. Mark runner as withdrawn
-        const { error: wdErr } = await supabase.from('festival_runners').update({ is_withdrawn: true }).eq('id', runner.id)
-        if (wdErr) { showToast('error', wdErr.message); setLoading(false); return }
-
-        // 2. Find all festival picks for this withdrawn runner
-        const { data: affectedPicks } = await supabase
-          .from('festival_picks').select('id').eq('runner_id', runner.id)
-
-        // 3. Update each affected pick — switch to favourite and record the replacement
-        if (affectedPicks?.length) {
-          const { error: pickErr } = await supabase.from('festival_picks').update({
-            runner_id:          favourite.id,
-            original_runner_id: runner.id,
-            was_replaced:       true,
-            replacement_reason: 'Horse withdrawn — replaced with race favourite',
-          }).eq('runner_id', runner.id)
-          if (pickErr) showToast('error', `Withdrawal saved but pick update failed: ${pickErr.message}`)
-        }
-
-        await loadFestivalRunners(raceId)
-        setLoading(false)
-        const pickCount = affectedPicks?.length || 0
-        showToast('success', `${runner.horse_name} withdrawn — ${pickCount} pick${pickCount !== 1 ? 's' : ''} switched to ${favourite.horse_name}`)
-      }
-    )
   }
 
-  async function reinstateFestivalRunner(runner, raceId) {
-    confirm(
-      `Reinstate ${runner.horse_name}?`,
-      `The horse will be reinstated. Any auto-replaced picks will be reverted back to this horse.`,
-      async () => {
-        setLoading(true)
-
-        // 1. Reinstate the runner
-        const { error: reErr } = await supabase.from('festival_runners').update({ is_withdrawn: false }).eq('id', runner.id)
-        if (reErr) { showToast('error', reErr.message); setLoading(false); return }
-
-        // 2. Revert any picks that were auto-replaced from this runner
-        const { data: replacedPicks } = await supabase
-          .from('festival_picks').select('id').eq('original_runner_id', runner.id).eq('was_replaced', true)
-
-        if (replacedPicks?.length) {
-          const { error: revertErr } = await supabase.from('festival_picks').update({
-            runner_id:          runner.id,
-            original_runner_id: null,
-            was_replaced:       false,
-            replacement_reason: null,
-          }).eq('original_runner_id', runner.id).eq('was_replaced', true)
-          if (revertErr) showToast('error', `Reinstated but pick revert failed: ${revertErr.message}`)
-        }
-
-        await loadFestivalRunners(raceId)
-        const revertCount = replacedPicks?.length || 0
-        setLoading(false)
-        showToast('success', `${runner.horse_name} reinstated${revertCount > 0 ? ` — ${revertCount} pick${revertCount !== 1 ? 's' : ''} reverted` : ''}`)
+  async function confirmRunnerSheet() {
+    const { mode, kind, plan } = runnerSheet
+    const { runner, race } = plan
+    setSheetBusy(true)
+    let toast = null
+    try {
+      if (mode === 'withdraw') {
+        const r = await withdrawRunnerNow(kind, plan, { lockIso: lockIsoFor(kind) })
+        const bits = [`${runner.horse_name} withdrawn`]
+        bits.push(r.moved ? `${r.moved} pick${r.moved !== 1 ? 's' : ''} moved to ${r.favourite.horse_name}` : 'no picks to move')
+        if (r.switched) bits.push(`${r.switched} each-way changed to win`)
+        if (r.rescored) bits.push(r.rescored.ok ? 'scores recalculated' : `SCORES NOT RECALCULATED: ${r.rescored.msg}`)
+        if (r.notified) bits.push(r.notified.ok ? `${r.notified.count} player${r.notified.count !== 1 ? 's' : ''} notified` : `NOTIFICATION FAILED: ${r.notified.error}`)
+        const bad = (r.rescored && !r.rescored.ok) || (r.notified && !r.notified.ok)
+        toast = { type: bad ? 'error' : 'success', text: bits.join(' · ') }
+      } else {
+        const r = await reinstateRunnerNow(kind, plan)
+        const bits = [`${runner.horse_name} reinstated`]
+        if (r.reverted) bits.push(`${r.reverted} pick${r.reverted !== 1 ? 's' : ''} reverted`)
+        if (r.rescored) bits.push(r.rescored.ok ? 'scores recalculated' : `SCORES NOT RECALCULATED: ${r.rescored.msg}`)
+        toast = { type: r.rescored && !r.rescored.ok ? 'error' : 'success', text: bits.join(' · ') }
       }
-    )
+    } catch (err) {
+      toast = { type: 'error', text: err.message || String(err) }
+    }
+    if (kind === 'week') await loadRunners(race.id)
+    else await loadFestivalRunners(race.id)
+    setSheetBusy(false)
+    setRunnerSheet(null)
+    showToast(toast.type, toast.text)
   }
 
   // ── Festival loaders ──────────────────────────────────────────
@@ -1917,6 +1652,7 @@ export default function Admin() {
       const hexValid = /^#[0-9a-fA-F]{6}$/.test(colour)
       const silkColour = hexValid ? colour : (colour ? '#1a3a10' : null)
       if (colour && !hexValid) warnings.push(`Line ${lineNum}: colour "${colour}" invalid — defaulted`)
+      if (!oddsDecimal) warnings.push(`Line ${lineNum}: ${noPriceMessage(name)}`)
       const horseNum = parseInt(numStr)
       toInsert.push({
         festival_race_id: raceId,
@@ -1975,29 +1711,20 @@ export default function Admin() {
 
   async function submitFestivalResults(race) {
     const form = festivalResultForms[race.id] || {}
-    if (!form.horse1 || !form.horse2 || !form.horse3) { showToast('error', 'Select all 3 finishers'); return }
-    setLoading(true)
-
     const raceRunnersArr = festivalRunners[race.id] || []
-    function getFestivalRunnerOdds(horseName) {
-      const r = raceRunnersArr.find(x => x.horse_name === horseName)
-      return { oddsDecimal: r?.odds_decimal || null, oddsDisplay: r?.odds_fractional || null }
-    }
-    const o1 = getFestivalRunnerOdds(form.horse1)
-    const o2 = getFestivalRunnerOdds(form.horse2)
-    const o3 = getFestivalRunnerOdds(form.horse3)
-    const o4 = form.horse4 ? getFestivalRunnerOdds(form.horse4) : null
+    // 1st plus every paid place are required; further places up to 4th are optional.
+    const check = validateResults(raceRunnersArr, form)
+    if (!check.ok) { showToast('error', check.message); return }
+    setLoading(true)
 
     // Delete old results
     await supabase.from('festival_results').delete().eq('festival_race_id', race.id)
 
-    // Insert results (4th place optional — only needed for each-way scoring in 16+ runner fields)
-    const festResultRows = [
-      { festival_race_id: race.id, position: 1, horse_name: form.horse1, starting_price_display: o1.oddsDisplay },
-      { festival_race_id: race.id, position: 2, horse_name: form.horse2, starting_price_display: o2.oddsDisplay },
-      { festival_race_id: race.id, position: 3, horse_name: form.horse3, starting_price_display: o3.oddsDisplay },
-    ]
-    if (o4) festResultRows.push({ festival_race_id: race.id, position: 4, horse_name: form.horse4, starting_price_display: o4.oddsDisplay })
+    // Insert results (only the positions that were filled in)
+    const festResultRows = check.rows.map(({ position, horse_name }) => {
+      const r = raceRunnersArr.find(x => x.horse_name === horse_name)
+      return { festival_race_id: race.id, position, horse_name, starting_price_display: r?.odds_fractional || null }
+    })
     const { error: resErr } = await supabase.from('festival_results').insert(festResultRows)
     if (resErr) { showToast('error', `Results save failed: ${resErr.message}`); setLoading(false); return }
 
@@ -2006,94 +1733,11 @@ export default function Admin() {
       notifyResultsIn(`${raceLabel} results are in — see how you did`, `${APP_ORIGIN}/results/festival/${selectedFestival.id}`)
     }
 
-    // Calculate scores for all picks on this race
-    const { data: picks } = await supabase
-      .from('festival_picks').select('id, user_id, runner_id, bet_type').eq('festival_race_id', race.id)
-
-    let lockAutoCaptured = false
-
-    if (picks?.length) {
-      const runnerIds = [...new Set(picks.map(p => p.runner_id).filter(Boolean))]
-      const { data: runnerRows } = await supabase.from('festival_runners').select('id, horse_name, odds_decimal').in('id', runnerIds)
-      const nameMap = {}; runnerRows?.forEach(r => { nameMap[r.id] = { name: r.horse_name, sp: r.odds_decimal } })
-
-      const placed = {
-        [form.horse1]: { position: 1, sp: o1.oddsDecimal },
-        [form.horse2]: { position: 2, sp: o2.oddsDecimal },
-        [form.horse3]: { position: 3, sp: o3.oddsDecimal },
-      }
-      if (o4) placed[form.horse4] = { position: 4, sp: o4.oddsDecimal }
-
-      // Resolve runner_count_at_lock — stamped by "Lock Picks", or auto-captured
-      // here as a safety net if that step was missed.
-      const { data: raceRow } = await supabase.from('festival_races').select('runner_count_at_lock').eq('id', race.id).single()
-      let runnerCountAtLock = raceRow?.runner_count_at_lock
-      if (runnerCountAtLock == null) {
-        runnerCountAtLock = await countNonWithdrawnRunners('festival_runners', 'festival_race_id', race.id)
-        await supabase.from('festival_races').update({ runner_count_at_lock: runnerCountAtLock }).eq('id', race.id)
-        lockAutoCaptured = true
-      }
-
-      // Delete old scores first
-      await supabase.from('festival_scores').delete().eq('festival_race_id', race.id)
-
-      const scoreRows = picks.map(pick => {
-        const runner = nameMap[pick.runner_id]
-        const p = runner ? placed[runner.name] : null
-        const position = p?.position ?? null
-
-        if (pick.bet_type) {
-          const oddsDecimal = runner?.sp ?? p?.sp ?? 0
-          const { winTokenPoints, placeTokenPoints, totalPoints } = calcTokenPoints({
-            betType: pick.bet_type, position, oddsDecimal, runnerCount: runnerCountAtLock,
-          })
-          return {
-            festival_race_id: race.id, user_id: pick.user_id,
-            bet_type: pick.bet_type, win_token_points: winTokenPoints, place_token_points: placeTokenPoints,
-            total_points: totalPoints, position_achieved: position,
-          }
-        }
-
-        if (p) {
-          const { base, bonus, total } = calcPoints(p.position, p.sp || 1)
-          return { festival_race_id: race.id, user_id: pick.user_id, base_points: base, bonus_points: bonus, total_points: total, position_achieved: p.position }
-        }
-        return { festival_race_id: race.id, user_id: pick.user_id, base_points: 0, bonus_points: 0, total_points: 0, position_achieved: null }
-      })
-
-      const { error: scoreErr } = await supabase.from('festival_scores').insert(scoreRows)
-      if (scoreErr) { showToast('error', `Results saved but scores failed: ${scoreErr.message}`); setLoading(false); return }
-
-      // ── Update festival_day_points ──────────────────────────────
-      // Find which day this race belongs to and recalculate the day total for each user
-      const day = festivalDays.find(d => d.id === race.festival_day_id)
-      if (day && selectedFestival) {
-        // Gather all races on this day (including the one just scored)
-        const { data: dayRaces } = await supabase
-          .from('festival_races').select('id').eq('festival_day_id', race.festival_day_id)
-        const dayRaceIds = (dayRaces || []).map(r => r.id)
-        if (dayRaceIds.length) {
-          // Sum festival_scores for all races on this day, grouped by user
-          const { data: dayScores } = await supabase
-            .from('festival_scores').select('user_id, total_points')
-            .in('festival_race_id', dayRaceIds)
-          const dayTotals = {}
-          ;(dayScores || []).forEach(s => {
-            dayTotals[s.user_id] = (dayTotals[s.user_id] || 0) + (s.total_points || 0)
-          })
-          const dayPointsRows = Object.entries(dayTotals).map(([userId, pts]) => ({
-            festival_id: selectedFestival.id,
-            user_id:     userId,
-            day_number:  day.day_number,
-            points:      pts,
-          }))
-          if (dayPointsRows.length) {
-            await supabase.from('festival_day_points')
-              .upsert(dayPointsRows, { onConflict: 'festival_id,user_id,day_number' })
-          }
-        }
-      }
-    }
+    // Calculate scores for all picks on this race, then the day's festival_day_points
+    const scored = await calculateFestivalScoresForRace(race)
+    if (!scored.ok) { showToast('error', `Results saved but scores failed: ${scored.msg}`); setLoading(false); return }
+    const lockAutoCaptured = !!scored.lockAutoCaptured
+    if (scored.count > 0) await updateFestivalDayPoints(race)
 
     setFestivalUnlocked(prev => { const s = new Set(prev); s.delete(race.id); return s })
     await loadFestivalResults(race.id)
@@ -2156,6 +1800,15 @@ export default function Admin() {
       )}
 
       {/* ── Delete confirmation modal ── */}
+      {runnerSheet && (
+        <WithdrawSheet
+          sheet={runnerSheet}
+          busy={sheetBusy}
+          onConfirm={confirmRunnerSheet}
+          onClose={() => { if (!sheetBusy) setRunnerSheet(null) }}
+        />
+      )}
+
       {deleteConfirm && (
         <div style={st.overlay} onClick={() => setDeleteConfirm(null)}>
           <div style={st.confirmBox} onClick={e => e.stopPropagation()}>
@@ -2474,13 +2127,6 @@ export default function Admin() {
                       </div>
                       {!isCurrentPastWeek && (
                         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                          {races.length > 0 && !isLinked && (
-                            currentWeek.picks_open_notified_at
-                              ? <button style={{ ...st.btnSmallGhost, color: '#4ade80', borderColor: 'rgba(74,222,128,0.35)' }}
-                                  title={`Sent ${new Date(currentWeek.picks_open_notified_at).toLocaleString('en-GB')} — click to resend`}
-                                  onClick={() => notifyPicksOpen('week')} disabled={loading}>✓ Notified</button>
-                              : <button style={st.btnSmallGhost} onClick={() => notifyPicksOpen('week')} disabled={loading}>🔔 Notify: Picks Open</button>
-                          )}
                           {!isLinked && <button style={st.btnSmallGhost} onClick={startEditWeek}>Edit</button>}
                           <button style={st.btnSmallDanger} onClick={deleteRaceWeek}>Delete Week</button>
                         </div>
@@ -2508,6 +2154,18 @@ export default function Admin() {
                       })}
                     </div>}
                   </div>
+                )}
+
+                {/* ── Checks after the races are loaded: prices, and the picks-open notification ── */}
+                {!isLinked && !isCurrentPastWeek && races.length > 0 && (
+                  <RaceDayChecklist
+                    title="Saturday's races"
+                    races={races}
+                    runnersByRace={runners}
+                    notifiedAt={currentWeek.picks_open_notified_at}
+                    onNotify={() => notifyPicksOpen('week')}
+                    busy={loading}
+                  />
                 )}
 
                 {/* ── Festival link: this Saturday as part of a festival day ── */}
@@ -2874,9 +2532,9 @@ runners: 6`}</code>
                                       <button style={st.btnSmallGhost} onClick={() => startEditRunner(runner)}>Edit</button>
                                     )}
                                     {runner.is_withdrawn ? (
-                                      <button style={{ ...st.btnSmallGhost, color: '#4ade80', borderColor: 'rgba(74,222,128,0.35)' }} onClick={() => reinstateRunner(runner, race.id)}>Reinstate</button>
+                                      <button className="rd-chip rd-chip--ok" disabled={loading} onClick={() => openRunnerSheet('reinstate', 'week', runner, race)}>Reinstate</button>
                                     ) : (
-                                      <button style={{ ...st.btnSmallGhost, color: '#fbbf24', borderColor: 'rgba(251,191,36,0.35)' }} onClick={() => withdrawRunner(runner, race.id)}>Withdraw</button>
+                                      <button className="rd-chip rd-chip--warn" disabled={loading} onClick={() => openRunnerSheet('withdraw', 'week', runner, race)}>Withdraw</button>
                                     )}
                                     <button style={st.btnSmallDanger} onClick={() => removeRunner(race.id, runner.id)}>Delete</button>
                                   </div>
@@ -3199,40 +2857,17 @@ runners: 6`}</code>
                                       </p>
                                     ) : (
                                       <>
-                                        {isUnlocked && (
-                                          <div style={{ fontSize: '0.8rem', color: '#fbbf24', marginBottom: '0.75rem', padding: '0.5rem 0.75rem', background: 'rgba(251,191,36,0.08)', borderRadius: '6px', border: '1px solid rgba(251,191,36,0.2)' }}>
-                                            Editing results — existing scores will be recalculated on save.
-                                          </div>
-                                        )}
-                                        {[1,2,3,4].map(pos => {
-                                          const hKey  = `horse${pos}`
-                                          const label = pos === 1 ? '1st' : pos === 2 ? '2nd' : pos === 3 ? '3rd' : '4th'
-                                          const bg    = pos === 1 ? '#c9a84c' : pos === 2 ? '#9ca3af' : pos === 3 ? '#b87333' : '#6b7280'
-                                          return (
-                                            <div key={pos} style={st.resultInputRow}>
-                                              <span style={{ ...st.posBadge, background: bg, minWidth: '44px' }}>{label}</span>
-                                              <select style={{ ...st.input, flex: 1 }} value={form[hKey] || ''}
-                                                onChange={e => setResultForms(p => ({ ...p, [race.id]: { ...p[race.id], [hKey]: e.target.value } }))}>
-                                                <option value="">{pos === 4 ? 'Select horse… (only needed for 16+ runner fields)' : 'Select horse…'}</option>
-                                                {raceRunners.map(r => (
-                                                  <option key={r.id} value={r.horse_name}>
-                                                    {r.horse_name}{r.odds_fractional ? ` (${r.odds_fractional})` : ''}
-                                                  </option>
-                                                ))}
-                                              </select>
-                                            </div>
-                                          )
-                                        })}
-                                        <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
-                                          <button style={st.btnGold}
-                                            onClick={() => submitResults(race, isUnlocked)}
-                                            disabled={loading}>
-                                            {loading ? 'Saving…' : isUnlocked ? 'Update Results & Recalculate' : 'Submit Results & Calculate Scores'}
-                                          </button>
-                                          {isUnlocked && (
-                                            <button style={st.btnGhost} onClick={() => lockResults(race.id)}>Cancel</button>
-                                          )}
-                                        </div>
+                                        <ResultsForm
+                                          runners={raceRunners}
+                                          form={form}
+                                          lockedCount={race.runner_count_at_lock}
+                                          isEdit={isUnlocked}
+                                          saving={loading}
+                                          submitLabel={isUnlocked ? 'Update results & recalculate' : 'Save results & calculate scores'}
+                                          onChange={(key, val) => setResultForms(p => ({ ...p, [race.id]: { ...p[race.id], [key]: val } }))}
+                                          onSubmit={() => submitResults(race, isUnlocked)}
+                                          onCancel={isUnlocked ? () => lockResults(race.id) : null}
+                                        />
                                       </>
                                     )}
                                   </div>
@@ -3488,15 +3123,6 @@ runners: 6`}</code>
                               )
                             })()}
                             <div style={{ display: 'flex', gap: '0.5rem' }}>
-                              {/* Picks-open notification — explicit admin action, not tied to import */}
-                              {festivalRaces.length > 0 && (
-                                selectedDay.picks_open_notified_at
-                                  ? <button style={{ ...st.btnSmall, color: '#4ade80', borderColor: 'rgba(74,222,128,0.35)' }}
-                                      title={`Sent ${new Date(selectedDay.picks_open_notified_at).toLocaleString('en-GB')} — click to resend`}
-                                      onClick={() => notifyPicksOpen('festivalDay')} disabled={loading}>✓ Notified</button>
-                                  : <button style={{ ...st.btnSmall, borderColor: '#5a8a5a', color: '#5a8a5a' }}
-                                      onClick={() => notifyPicksOpen('festivalDay')} disabled={loading}>🔔 Notify: Picks Open</button>
-                              )}
                               {/* Lock Picks button — stamps runner_count_at_lock for each-way scoring */}
                               {festivalRaces.length > 0 && (
                                 <button
@@ -3520,6 +3146,16 @@ runners: 6`}</code>
                               })()}
                             </div>
                           </div>
+
+                          {/* Checks after the day's races are loaded: prices, and the picks-open notification */}
+                          <RaceDayChecklist
+                            title={`${selectedFestival?.display_name || selectedFestival?.name || 'Festival'} Day ${selectedDay.day_number}`}
+                            races={festivalRaces}
+                            runnersByRace={festivalRunners}
+                            notifiedAt={selectedDay.picks_open_notified_at}
+                            onNotify={() => notifyPicksOpen('festivalDay')}
+                            busy={loading}
+                          />
 
                           {/* Festival combined bulk import panel */}
                           {festivalCombinedBulkOpen.has(selectedDay.id) && (
@@ -3667,9 +3303,9 @@ runners: 6`}</code>
                                           </div>
                                           <div style={{ display: 'flex', gap: '0.4rem', flexShrink: 0 }}>
                                             {r.is_withdrawn ? (
-                                              <button style={{ ...st.btnSmallGhost, color: '#4ade80', borderColor: 'rgba(74,222,128,0.35)' }} onClick={() => reinstateFestivalRunner(r, race.id)}>Reinstate</button>
+                                              <button className="rd-chip rd-chip--ok" disabled={loading} onClick={() => openRunnerSheet('reinstate', 'festival', r, race)}>Reinstate</button>
                                             ) : (
-                                              <button style={{ ...st.btnSmallGhost, color: '#fbbf24', borderColor: 'rgba(251,191,36,0.35)' }} onClick={() => withdrawFestivalRunner(r, race.id)}>Withdraw</button>
+                                              <button className="rd-chip rd-chip--warn" disabled={loading} onClick={() => openRunnerSheet('withdraw', 'festival', r, race)}>Withdraw</button>
                                             )}
                                             {!r.is_withdrawn && (
                                               <button style={st.btnSmallDanger} onClick={async () => { await supabase.from('festival_runners').delete().eq('id', r.id); loadFestivalRunners(race.id) }}>✕</button>
@@ -3698,22 +3334,17 @@ runners: 6`}</code>
                                       </div>
                                     ) : (
                                       <div>
-                                        <div style={{ fontSize: '0.7rem', fontWeight: '700', color: '#5a8a5a', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '0.6rem' }}>Enter Result</div>
-                                        {[1,2,3,4].map(pos => (
-                                          <div key={pos} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.5rem' }}>
-                                            <div style={{ ...st.posBadge, background: pos===1?'#c9a84c':pos===2?'#9ca3af':pos===3?'#b45309':'#6b7280', width: '28px' }}>{pos===1?'1st':pos===2?'2nd':pos===3?'3rd':'4th'}</div>
-                                            <select style={{ ...st.input, flex: 1 }}
-                                              value={resForm[`horse${pos}`] || ''}
-                                              onChange={e => setFestivalResultForms(p => ({...p, [race.id]: {...(p[race.id]||{}), [`horse${pos}`]: e.target.value}}))}>
-                                              <option value="">{pos === 4 ? '— Select horse — (only needed for 16+ runner fields)' : '— Select horse —'}</option>
-                                              {rRunners.map(r => <option key={r.id} value={r.horse_name}>{r.horse_number}. {r.horse_name}</option>)}
-                                            </select>
-                                          </div>
-                                        ))}
-                                        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
-                                          <button style={st.btnGold} onClick={() => submitFestivalResults(race)} disabled={loading}>Save Results & Scores</button>
-                                          <button style={st.btnGhost} onClick={() => setFestivalUnlocked(prev => { const s = new Set(prev); s.delete(race.id); return s })}>Cancel</button>
-                                        </div>
+                                        <ResultsForm
+                                          runners={rRunners}
+                                          form={resForm}
+                                          lockedCount={race.runner_count_at_lock}
+                                          isEdit={hasDone}
+                                          saving={loading}
+                                          submitLabel="Save results & scores"
+                                          onChange={(key, val) => setFestivalResultForms(p => ({ ...p, [race.id]: { ...(p[race.id] || {}), [key]: val } }))}
+                                          onSubmit={() => submitFestivalResults(race)}
+                                          onCancel={() => setFestivalUnlocked(prev => { const s = new Set(prev); s.delete(race.id); return s })}
+                                        />
                                       </div>
                                     )}
                                   </div>
