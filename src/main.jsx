@@ -18,6 +18,7 @@ import LeaguePastFestival from './pages/LeaguePastFestival.jsx'
 import LeaguePastSeason   from './pages/LeaguePastSeason.jsx'
 import Races          from './pages/Races.jsx'
 import Results        from './pages/Results.jsx'
+import BonusPoints    from './pages/BonusPoints.jsx'
 import Profile        from './pages/Profile.jsx'
 import Groups         from './pages/Groups.jsx'
 import PlayerPicks         from './pages/PlayerPicks.jsx'
@@ -53,6 +54,7 @@ createRoot(document.getElementById('root')).render(
             <Route path="/league/group/:groupId"       element={<LeagueGroup />}    />
             <Route path="/league/past/festival/:festivalId" element={<LeaguePastFestival />} />
             <Route path="/league/past/season/:seasonId"     element={<LeaguePastSeason />}   />
+            <Route path="/bonus-points" element={<BonusPoints />} />
             <Route path="/results"   element={<Results />}   />
             <Route path="/festivals" element={<Festivals />} />
             <Route path="/results/festival/:festivalId" element={<Results />} />

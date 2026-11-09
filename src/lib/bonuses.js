@@ -16,13 +16,22 @@ export const BONUS_RULES = Object.freeze({
   startDate: '2026-11-13',    // Cheltenham November Meeting, day 1: earlier race days have no bonuses
   introUntil: '2026-11-15',   // the launch pop-up is shown up to and including this date
   newTagDays: 7,              // how long "NEW" stays on the menu item
-  launchDate: '2026-11-11',   // the day the bonuses were announced (start of the NEW tag)
+  launchDate: '2026-11-12',   // the day the bonuses went live (start of the NEW tag)
 })
 
 export const BONUS_TYPES = Object.freeze({ banker: 'banker', lone: 'lone_winner', treble: 'treble' })
 
 // Does a race day (its date, 'YYYY-MM-DD' or an ISO timestamp) get bonuses?
 export const bonusesApply = date => !!date && String(date).slice(0, 10) >= BONUS_RULES.startDate
+
+const DAY_MS = 86400000
+
+// Is the "NEW" tag still on the menu item? (newTagDays from launchDate.)
+export const bonusIsNew = (nowMs = Date.now()) =>
+  nowMs >= Date.parse(BONUS_RULES.launchDate) && nowMs < Date.parse(BONUS_RULES.launchDate) + BONUS_RULES.newTagDays * DAY_MS
+
+// Is the launch pop-up still to be shown? (Up to and including introUntil.)
+export const bonusIntroOpen = (nowMs = Date.now()) => nowMs < Date.parse(BONUS_RULES.introUntil) + DAY_MS
 
 // The extra a banker gives: the race's normal points again (x2 in total).
 export const bankerExtra = rawPoints => Math.max(0, Math.round(rawPoints * (BONUS_RULES.bankerMultiplier - 1)))

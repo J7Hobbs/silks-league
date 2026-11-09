@@ -5,7 +5,7 @@
  *   <HowItWorksModal open={show} onClose={...} section="scoring" />
  *
  * `section` (optional) opens that accordion section and scrolls to it. Ids:
- * basics · picks · scoring · places · nonrunners · seasons · festivals.
+ * basics · picks · scoring · places · bonus · nonrunners · seasons · festivals.
  *
  * Every number on the screen comes from lib/scoring.js: the example points are worked out
  * by calcTokenPoints, and the places and share tables are read from the same rules scoring uses.
@@ -16,11 +16,12 @@ import { createPortal } from 'react-dom'
 import Silk from './Silk.jsx'
 import { ordinal } from '../lib/format.js'
 import { calcTokenPoints, placeTapers, placeTermTiers, SCORING_RULES } from '../lib/scoring.js'
+import BonusRules from './BonusRules.jsx'
 import '../styles/howitworks.css'
 
 const FOCUSABLE = 'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
-const SECTION_IDS = ['basics', 'picks', 'scoring', 'places', 'nonrunners', 'seasons', 'festivals']
+const SECTION_IDS = ['basics', 'picks', 'scoring', 'places', 'bonus', 'nonrunners', 'seasons', 'festivals']
 
 // Fractional price n/d as decimal odds (5/1 -> 6, 10/1 -> 11), the form scoring uses.
 const decimalOdds = (n, d = 1) => n / d + 1
@@ -247,6 +248,8 @@ function Body({ section }) {
           <p className="hw-p">Fewer than {eachWayFrom} runners means no each-way. Those races are win only.</p>
         </>
       ))}
+
+      {sec('bonus', 'Bonus points', <BonusRules />)}
 
       {sec('nonrunners', 'Non-runners', (
         <ul className="hw-list">

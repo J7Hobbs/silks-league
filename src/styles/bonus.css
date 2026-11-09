@@ -1,0 +1,15 @@
+.bp { display: flex; flex-direction: column; gap: 14px; color: var(--text); font-family: var(--font-body); }
+.bp-p { margin: 0; font-size: 14px; line-height: 1.5; }
+.bp-p--muted { color: var(--text-muted); font-size: 13px; }
+.bp-rule { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 14px; background: var(--surface); border: 1px solid rgba(201, 168, 76, 0.35); }
+.bp-rule__head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.bp-rule__name { font-family: var(--font-heading); font-weight: 700; font-size: 16px; color: var(--gold); }
+.bp-rule__val { font-family: var(--font-heading); font-weight: 700; font-size: 18px; color: var(--gold); }
+.bp-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 14px; line-height: 1.45; }
+.bp-example { display: flex; flex-direction: column; gap: 4px; padding: 10px 14px; border-radius: 12px; background: var(--gold-tint); font-size: 14px; line-height: 1.45; }
+.bp-example__label { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--gold); font-weight: 700; }
+.bp-page { background: var(--bg); color: var(--text); padding-bottom: 5rem; }
+.bp-page__main { max-width: 560px; margin: 0 auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+.bp-page__tag { align-self: flex-start; padding: 2px 8px; border-radius: 999px; background: var(--gold); color: var(--bg); font-size: 11px; font-weight: 700; letter-spacing: 0.06em; }
+.bp-page__title { margin: 0; font-family: var(--font-heading); font-size: 26px; }
+.bp-newtag { margin-left: 8px; padding: 1px 6px; border-radius: 999px; background: #c9a84c; color: #0a1a08; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; vertical-align: middle; }

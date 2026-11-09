@@ -7,6 +7,8 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import HowItWorksModal from './HowItWorksModal.jsx'
+import { bonusIsNew } from '../lib/bonuses.js'
+import '../styles/bonus.css'
 
 // "Jack Hobbs" -> "JH", "Jack" -> "J". Empty when there's no name.
 function initialsOf(name) {
@@ -62,6 +64,11 @@ export default function ProfileDropdown({ user, isAdmin }) {
 
           <button style={ds.item} onClick={() => { setOpen(false); setShowHowItWorks(true) }}>
             How it works
+          </button>
+
+          <button style={ds.item} onClick={() => { setOpen(false); navigate('/bonus-points') }}>
+            <span style={{ color: '#c9a84c' }}>★</span> Bonus points
+            {bonusIsNew() && <span className="bp-newtag">NEW</span>}
           </button>
 
           <div style={ds.divider} />
