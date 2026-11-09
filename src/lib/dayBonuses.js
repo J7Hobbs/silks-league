@@ -9,7 +9,7 @@
 //
 // Race days before BONUS_RULES.startDate, and score rows with no bet_type (the old scoring), are not touched.
 import { supabase } from './supabase'
-import { bonusesApply, computeDayBonuses } from './bonuses.js'
+import { bonusesApply, computeDayBonuses, bonusMessage } from './bonuses.js'
 
 export const DAY = {
   week: {
@@ -114,5 +114,57 @@ export async function applyDayBonuses(kind, dayId) {
   } catch (err) {
     console.error('[Bonuses]', err)
     return { ok: false, msg: err.message || String(err) }
+  }
+}
+
+// ── "You won a bonus" push ───────────────────────────────────
+// Sent once per award: an award is claimed (notified_at set) before anything is sent, so scoring the
+// race again, editing a result or a withdrawal never sends it twice. One push per player, covering all
+// the bonuses they just won. If a push fails, the claim is released so the next score retries it.
+// Never throws: a failed push must not affect scoring. Pass the `awards` from applyDayBonuses.
+const APP_ORIGIN = 'https://silks-league.vercel.app'
+
+export async function notifyNewBonuses(kind, awards) {
+  try {
+    const c = DAY[kind]
+    const pending = (awards || []).filter(a => !a.notified_at)
+    if (!pending.length) return { ok: true, sent: 0 }
+
+    const { data: claimed, error } = await supabase.from('bonus_awards')
+      .update({ notified_at: new Date().toISOString() }).in('id', pending.map(a => a.id)).is('notified_at', null).select('id')
+    if (error) throw fail('Could not claim the bonus notifications', error)
+    const mine = new Set((claimed || []).map(a => a.id))
+    const todo = pending.filter(a => mine.has(a.id))
+    if (!todo.length) return { ok: true, sent: 0 }
+
+    // The horse each player picked in the race they were rewarded on (for "the only one on <horse>").
+    const raceOf = a => a.race_id ?? a.festival_race_id
+    const raceIds = [...new Set(todo.map(raceOf))]
+    const userIds = [...new Set(todo.map(a => a.user_id))]
+    const { data: picks } = await supabase.from(c.picks).select(`user_id, runner_id, ${c.raceCol}`).in(c.raceCol, raceIds).in('user_id', userIds)
+    const runnerTable = kind === 'week' ? 'runners' : 'festival_runners'
+    const runnerIds = [...new Set((picks || []).map(p => p.runner_id).filter(Boolean))]
+    const { data: runners } = runnerIds.length ? await supabase.from(runnerTable).select('id, horse_name').in('id', runnerIds) : { data: [] }
+    const nameOf = Object.fromEntries((runners || []).map(r => [r.id, r.horse_name]))
+    const pickOf = Object.fromEntries((picks || []).map(p => [`${p.user_id}|${p[c.raceCol]}`, p.runner_id]))
+
+    let sent = 0
+    for (const userId of userIds) {
+      const mineAwards = todo.filter(a => a.user_id === userId)
+      const body = mineAwards.map(a => bonusMessage(a.bonus_type, {
+        points: a.points, horse: nameOf[pickOf[`${userId}|${raceOf(a)}`]], raceNumbers: a.detail?.race_numbers,
+      })).join('. ')
+      const { error: pushErr } = await supabase.functions.invoke('send-notification', {
+        body: { userIds: [userId], title: 'Bonus points ★', body, url: `${APP_ORIGIN}/results` },
+      })
+      if (pushErr) {
+        console.error('[Bonuses] push failed:', pushErr)
+        await supabase.from('bonus_awards').update({ notified_at: null }).in('id', mineAwards.map(a => a.id))
+      } else sent++
+    }
+    return { ok: true, sent }
+  } catch (err) {
+    console.error('[Bonuses] notify failed:', err)
+    return { ok: false, sent: 0, error: err.message || String(err) }
   }
 }
