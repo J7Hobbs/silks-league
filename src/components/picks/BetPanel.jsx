@@ -1,7 +1,10 @@
-// Under the selected runner: Win / Each-way where allowed, the points preview and Save.
+import BankerSwitch from './BankerSwitch.jsx'
+
+// Under the selected runner: Win / Each-way where allowed, what it's worth, the banker switch and Save.
 //   eachWayOffered  show the toggle; otherwise `note` explains why it's win only
-//   preview         { win, place } points, place null for a win bet
-export default function BetPanel({ eachWayOffered, betType, note, preview, isUpdate, saving, onBetType, onSave }) {
+//   worth           { text, doubled, runners } for the "What it's worth" line, or null with no price
+//   banker          { on, movesFrom, onToggle } when the race day has bonuses, otherwise null
+export default function BetPanel({ eachWayOffered, betType, note, worth, banker, isUpdate, saving, onBetType, onSave }) {
   return (
     <div className="pk-panel">
       {eachWayOffered ? (
@@ -18,12 +21,13 @@ export default function BetPanel({ eachWayOffered, betType, note, preview, isUpd
       ) : (
         note && <div className="pk-panel__note">{note}</div>
       )}
-      {preview && (
-        <div className="pk-panel__preview">
-          <span>If this wins: <strong>{preview.win} pts</strong></span>
-          {preview.place != null && <span>If it places (2nd): <strong>{preview.place} pts</strong></span>}
+      {worth && (
+        <div className="pk-worth">
+          <span className="pk-worth__label">What it's worth · based on {worth.runners} runners</span>
+          <span className={`pk-worth__figs${worth.doubled ? ' pk-worth__figs--gold' : ''}`}>{worth.text}</span>
         </div>
       )}
+      {banker && <BankerSwitch {...banker} />}
       <button type="button" className="pk-btn pk-btn--solid" onClick={onSave} disabled={saving}>
         {saving ? 'Saving…' : isUpdate ? 'Update Pick' : 'Save Pick'}
       </button>

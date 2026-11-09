@@ -12,7 +12,9 @@ import { supabase } from '../lib/supabase'
 import { currentUser } from '../lib/session.js'
 import { useCompetition } from '../context/competition.js'
 import { PICKS_CHANGED } from '../lib/navTabs.js'
-import { isWinOnly, canOfferEachWay, calcTokenPoints } from '../lib/scoring.js'
+import { isWinOnly, canOfferEachWay } from '../lib/scoring.js'
+import { bonusesApply } from '../lib/bonuses.js'
+import { worthFigures, worthText } from '../lib/bonusView.js'
 import { daysBetween, localDateStr, lockLabel } from '../lib/format.js'
 import { useNotifStatus } from '../lib/useNotifStatus.js'
 import {
@@ -28,17 +30,6 @@ import JoinCard from '../components/picks/JoinCard.jsx'
 import EmptyState from '../components/picks/EmptyState.jsx'
 import { PicksSkeleton, RunnerRowsSkeleton } from '../components/Skeletons.jsx'
 import '../styles/picks.css'
-
-// "If it places" preview always shows the 2nd-place figure (the best-case
-// place payout) — exact taper depends on the actual finishing position.
-function previewPoints(betType, oddsDecimal, runnerCount) {
-  if (!oddsDecimal) return { win: null, place: null }
-  const win = calcTokenPoints({ betType, position: 1, oddsDecimal, runnerCount }).totalPoints
-  const place = betType === 'each_way'
-    ? calcTokenPoints({ betType, position: 2, oddsDecimal, runnerCount }).totalPoints
-    : null
-  return { win, place }
-}
 
 export default function Picks() {
   const navigate = useNavigate()
@@ -71,6 +62,7 @@ export default function Picks() {
   const [festRunners,      setFestRunners]      = useState({})
   const [festPicks,        setFestPicks]        = useState({})
   const [festReplaced,     setFestReplaced]     = useState({})
+  const [festBanker,       setFestBanker]       = useState({})   // festival race id -> this pick is the banker
   const [festSelected,     setFestSelected]     = useState({})
   const [festBetType,      setFestBetType]      = useState({})
   const [festSaving,       setFestSaving]       = useState(null)
@@ -84,6 +76,8 @@ export default function Picks() {
 
   // Which runner's bet panel is open, per race.
   const [openRunner, setOpenRunner] = useState({})
+  // The banker switch as the player has set it but not yet saved, per race (the saved value is on the pick).
+  const [bankerDraft, setBankerDraft] = useState({})
   // Latest festival load; older ones are ignored if the player switches mid-load.
   const festReq = useRef(0)
   // Bet type last saved per festival race, to restore if a save fails.
@@ -132,7 +126,7 @@ export default function Picks() {
     if (!user) return
     if (!selFestId && !linkedDayId) return
     setFestEntry(null); setFestDays([]); setOpenDayIds([]); setRaceDayIds([]); setFestDay(null)
-    setFestRaces([]); setFestRunners({}); setFestPicks({}); setFestReplaced({})
+    setFestRaces([]); setFestRunners({}); setFestPicks({}); setFestReplaced({}); setFestBanker({})
     setFestSelected({}); setFestBetType({}); setFestIdx(0)
     if (selFestId) loadFestivalData(activeFestivals.find(f => f.id === selFestId))
     else loadLinkedSaturday(linkedDayId, user)
@@ -270,7 +264,7 @@ export default function Picks() {
     const [runnerResults, { data: picksData }] = await Promise.all([
       Promise.all(racesData.map(race => supabase
         .from('festival_runners').select('*').eq('festival_race_id', race.id).order('horse_number'))),
-      supabase.from('festival_picks').select('festival_race_id, runner_id, bet_type, was_replaced, original_runner_id')
+      supabase.from('festival_picks').select('festival_race_id, runner_id, bet_type, was_replaced, original_runner_id, is_banker')
         .eq('user_id', userId).in('festival_race_id', raceIds),
     ])
     if (stale()) return
@@ -280,7 +274,9 @@ export default function Picks() {
     const picksMap = {}
     const betMap   = {}
     const replacedMap = {}
+    const bankerMap = {}
     picksData?.forEach(p => {
+      bankerMap[p.festival_race_id] = !!p.is_banker
       picksMap[p.festival_race_id] = p.runner_id
       betMap[p.festival_race_id] = p.bet_type || 'win'
       replacedMap[p.festival_race_id] = !!p.was_replaced
@@ -290,6 +286,7 @@ export default function Picks() {
     setFestBetType(betMap)
     festSavedBet.current = betMap
     setFestReplaced(replacedMap)
+    setFestBanker(bankerMap)
     setFestIdx(firstUnpickedIndex(racesData, id => hasLivePick(picksMap[id], runnersMap[id] || [])))
   }
 
@@ -372,9 +369,23 @@ export default function Picks() {
       const res = await supabase.from('picks').upsert({ user_id: user.id, race_id: raceId, runner_id: runnerId, bet_type: effectiveBetType }, { onConflict: 'user_id,race_id' })
       error = res.error
     }
+    // The banker switch is saved with the pick (set_banker moves it off any other race that day).
+    const savedBanker = !!existing?.is_banker
+    const wantBanker = bonusesApply(currentWeek?.saturday_date) ? (bankerDraft[raceId] ?? savedBanker) : savedBanker
+    let bankerErr = null
+    if (!error && wantBanker !== savedBanker) {
+      bankerErr = (await supabase.rpc('set_banker', { p_kind: 'week', p_race_id: raceId, p_on: wantBanker })).error
+    }
     setSaving(null)
     if (error) { showToast('Failed to save — ' + error.message, 'error'); return }
-    setUserPicks(prev => ({ ...prev, [raceId]: { ...(existing || {}), user_id: user.id, race_id: raceId, runner_id: runnerId, bet_type: effectiveBetType } }))
+    const bankerNow = bankerErr ? savedBanker : wantBanker
+    setUserPicks(prev => {
+      const next = { ...prev, [raceId]: { ...(existing || {}), user_id: user.id, race_id: raceId, runner_id: runnerId, bet_type: effectiveBetType, is_banker: bankerNow } }
+      if (bankerNow) for (const id of Object.keys(next)) if (id !== raceId && next[id]?.is_banker) next[id] = { ...next[id], is_banker: false }
+      return next
+    })
+    setBankerDraft(prev => { const n = { ...prev }; delete n[raceId]; return n })
+    if (bankerErr) showToast(`Pick saved, but the banker was not changed: ${bankerErr.message}`, 'error')
     closePanel(raceId)
     window.dispatchEvent(new Event(PICKS_CHANGED))
     const picksNow = { ...Object.fromEntries(Object.entries(userPicks).map(([id, p]) => [id, p.runner_id])), [raceId]: runnerId }
@@ -408,6 +419,12 @@ export default function Picks() {
       bet_type: effectiveBetType,
       picked_at: new Date().toISOString(),
     }, { onConflict: 'festival_race_id,user_id' })
+    const savedBanker = !!festBanker[raceId]
+    const wantBanker = bonusesApply(festDay?.race_date) ? (bankerDraft[raceId] ?? savedBanker) : savedBanker
+    let bankerErr = null
+    if (!error && wantBanker !== savedBanker) {
+      bankerErr = (await supabase.rpc('set_banker', { p_kind: 'festival', p_race_id: raceId, p_on: wantBanker })).error
+    }
     setFestSaving(null)
     if (error) {
       // Put the selection back to the last saved pick (or none).
@@ -419,6 +436,12 @@ export default function Picks() {
     }
     setFestPicks(prev => ({ ...prev, [raceId]: runnerId }))
     setFestBetType(prev => ({ ...prev, [raceId]: effectiveBetType }))
+    const bankerNow = bankerErr ? savedBanker : wantBanker
+    setFestBanker(prev => (bankerNow
+      ? { ...Object.fromEntries(Object.keys(prev).map(k => [k, false])), [raceId]: true }
+      : { ...prev, [raceId]: false }))
+    setBankerDraft(prev => { const n = { ...prev }; delete n[raceId]; return n })
+    if (bankerErr) showToast(`Pick saved, but the banker was not changed: ${bankerErr.message}`, 'error')
     festSavedBet.current = { ...festSavedBet.current, [raceId]: effectiveBetType }
     closePanel(raceId)
     window.dispatchEvent(new Event(PICKS_CHANGED))
@@ -525,6 +548,21 @@ export default function Picks() {
   const allPicked = canTap && view.races.length > 0 && view.races.every(r => hasLivePick(view.picks[r.id], view.runners[r.id] || []))
   const lockUntil = lockText ? lockText.replace(/^Locks /, '') : ''
 
+  // Bonuses: only race days from the bonus start date have a banker. The saved banker is on the pick;
+  // bankerDraft is the switch as the player has set it since (saved with the pick).
+  const bonusOn = !noRaces && bonusesApply(usesFest ? festDay?.race_date : currentWeek?.saturday_date)
+  const savedBanker = id => (usesFest ? !!festBanker[id] : !!userPicks[id]?.is_banker)
+  const bankerFor = id => bankerDraft[id] ?? savedBanker(id)
+  const anyBanker = view.races.some(r => savedBanker(r.id))
+  function showBankerPanel() {
+    cancelAdvance()
+    const first = view.races[0]
+    if (!first) return
+    view.setIdx(0)
+    window.scrollTo({ top: 0 })
+    if (view.picks[first.id]) setOpenRunner(prev => ({ ...prev, [first.id]: view.picks[first.id] }))
+  }
+
   function nextRace() {
     cancelAdvance()
     if (isLastRace) { navigate('/dashboard'); return }
@@ -542,7 +580,15 @@ export default function Picks() {
       note: isWinOnly(runner.odds_decimal)
         ? 'Win only — under 4/1'
         : "Win only — each-way isn't offered in fields under 5 runners",
-      preview: previewPoints(current, runner.odds_decimal, nonWithdrawn),
+      worth: (() => {
+        const f = worthFigures({ betType: current, oddsDecimal: runner.odds_decimal, runnerCount: nonWithdrawn, banker: bonusOn && bankerFor(race.id) })
+        return f ? { text: worthText(f), doubled: f.doubled, runners: nonWithdrawn } : null
+      })(),
+      banker: bonusOn ? {
+        on: bankerFor(race.id),
+        movesFrom: view.races.find(r => r.id !== race.id && bankerFor(r.id))?.race_number ?? null,
+        onToggle: next => setBankerDraft(prev => ({ ...prev, [race.id]: next })),
+      } : null,
       isUpdate: !!pickedId,
       saving: view.saving === race.id,
     }
@@ -596,6 +642,7 @@ export default function Picks() {
               races={view.races}
               activeIndex={idx}
               picked={id => hasLivePick(view.picks[id], view.runners[id] || [])}
+              banker={bonusOn ? savedBanker : undefined}
               onSelect={i => { cancelAdvance(); view.setIdx(i) }}
             />
 
@@ -617,6 +664,11 @@ export default function Picks() {
               <p className="pk-done" role="status">
                 <span className="pk-done__head">All {view.races.length} {view.races.length === 1 ? 'race' : 'races'} picked ✓</span>
                 {lockUntil && ` · You can change any pick until ${lockUntil}`}
+                {bonusOn && !anyBanker && (
+                  <button type="button" className="pk-done__banker" onClick={showBankerPanel}>
+                    ★ No banker set yet · pick your banker ›
+                  </button>
+                )}
               </p>
             )}
 
