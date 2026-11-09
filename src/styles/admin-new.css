@@ -292,3 +292,23 @@ select.an-input { appearance: auto; }
 .an-member__open { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 8px 6px 8px 10px; min-height: 52px; background: none; border: 0; text-align: left; cursor: pointer; color: var(--text); font-family: var(--font-body); }
 .an-member .an-btn--sm { flex: none; min-height: 44px; padding: 0 8px; }
 .an-warnbox--block { display: block; margin-top: 10px; }
+
+/* ═══ Setup ═══ */
+.an-won strong { color: var(--gold); font-weight: 700; }
+.an-photo--yes { color: var(--an-ok); font-weight: 600; }
+.an-photo--no { color: var(--text-muted); }
+.an-problems { color: var(--an-warn); }
+.an-prow--group .an-prow__name .an-pill { padding: 3px 9px; font-size: 11px; }
+.an-phead__tags .an-pill, .an-fest .an-pill { margin-right: 2px; }
+.an-fest { min-height: 150px; display: flex; }
+.an-fest .an-day__body { justify-content: flex-end; width: 100%; box-sizing: border-box; }
+.an-file { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; pointer-events: none; }
+.an-switchrow { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.an-switchrow__text { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.an-switch { flex: none; position: relative; width: 58px; height: 34px; padding: 0; border-radius: 99px; border: 1px solid var(--border); background: var(--surface-deep); cursor: pointer; transition: background 0.15s; }
+.an-switch--on { background: rgba(143, 224, 156, 0.22); border-color: rgba(143, 224, 156, 0.55); }
+.an-switch__knob { position: absolute; top: 3px; left: 3px; width: 26px; height: 26px; border-radius: 50%; background: var(--text-muted); transition: transform 0.15s, background 0.15s; }
+.an-switch--on .an-switch__knob { transform: translateX(24px); background: var(--an-ok); }
+.an-switch:disabled { opacity: 0.6; cursor: default; }
+.an-switch:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .an-switch, .an-switch__knob { transition: none; } }
