@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { loadOnboarding } from '../lib/onboarding.js'
 import TopNav from './TopNav.jsx'
 import BottomNav from './BottomNav.jsx'
+import BonusIntroModal from './BonusIntroModal.jsx'
 
 let onboardingChecked = false // module-wide: ask the database once per visit
 
@@ -49,6 +50,7 @@ export default function TabLayout() {
       <TopNav />
       <Outlet />
       <BottomNav />
+      <BonusIntroModal />
     </div>
   )
 }
