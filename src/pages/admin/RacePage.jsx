@@ -152,7 +152,9 @@ export default function RacePage({ day, race, detail, onBack, onChanged }) {
             <li>The race is voided: all {plural(totalPicks, 'pick')} score 0, a banker included.</li>
             {hasResult && <li>Its saved result is removed.</li>}
             <li>The day&rsquo;s bonuses are recalculated without it.</li>
-            <li>It shows as Abandoned in Admin and in the app. Players are not notified.</li>
+            <li>It shows as Abandoned in Admin and in the app.</li>
+            <li>Everyone who picked in it is sent: &ldquo;Race {race.race_number}{race.venue ? ` at ${race.venue}` : ''} has been abandoned, so it scores 0 for everyone&rdquo;.</li>
+            {!locked && <li>Picks have not locked yet, so a banker on this race is cleared and that player is asked to pick a new one before the lock.</li>}
           </ul>
         </ConfirmSheet>
       )}

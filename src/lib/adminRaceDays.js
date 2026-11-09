@@ -3,14 +3,16 @@
 // raceLock.js and raceDay.js, called as they are. Every function returns { ok, ... } with `error` set in
 // plain words, or throws nothing the screen has to catch.
 import { supabase } from './supabase'
-import { ukWallToMs } from './format.js'
-import { KINDS, planWithdrawal, withdrawRunnerNow, planReinstate, reinstateRunnerNow } from './raceDay.js'
+import { ukWallToMs, lockMs } from './format.js'
+import { KINDS, lockTimeText, planWithdrawal, withdrawRunnerNow, planReinstate, reinstateRunnerNow } from './raceDay.js'
 import { DAY, applyDayBonuses } from './dayBonuses.js'
 import { recalculateRace, updateFestivalDayPoints } from './raceScoring.js'
 import { lockRaceIfEmpty } from './raceLock.js'
 import { buildDayList } from './raceDayList.js'
-import { buildRaceDays } from './adminToday.js'
+import { buildRaceDays, isLocked } from './adminToday.js'
 import { parseOdds } from './raceImport.js'
+
+const APP_ORIGIN = 'https://silks-league.vercel.app'
 
 const fail = error => ({ ok: false, error: error?.message || String(error) })
 const must = ({ data, error }) => { if (error) throw error; return data || [] }
@@ -423,6 +425,32 @@ export async function applyDeclarations(day, race, diff, { lockIso = null, locke
 
 // Void a race: clear its result, mark it abandoned, give every pick a 0-point score (banker included),
 // then bring the day's bonuses (and, for a festival, the day points) up to date.
+// The two pushes sent when a race is abandoned: to everyone who picked in it, and (before the lock) to the players whose
+// banker was on it. A failed push never undoes the abandon. Returns { sent, failed } (failed is a warning text or '').
+async function sendAbandonNotices(race, userIds, bankerUsers, day) {
+  if (!userIds.length) return { sent: 0, failed: '' }
+  const label = race.venue ? `Race ${race.race_number} at ${race.venue}` : `Race ${race.race_number}`
+  const url = `${APP_ORIGIN}/picks`
+  const push = body => supabase.functions.invoke('send-notification', { body }).then(r => { if (r.error) throw r.error })
+  let failed = ''
+  try {
+    await push({ userIds, title: 'Race abandoned', body: `${label} has been abandoned, so it scores 0 for everyone`, url })
+  } catch (err) {
+    console.error('[Admin] abandon notification failed:', err)
+    failed = 'The abandoned-race notification could not be sent.'
+  }
+  if (bankerUsers.length) {
+    try {
+      const lock = lockTimeText(day.deadline) || new Date(lockMs(day.deadline, day.date)).toISOString()
+      await push({ userIds: bankerUsers, title: 'Pick a new banker', body: `Your banker was on Race ${race.race_number}, which has been abandoned. Pick a new banker before ${lock}.`, url })
+    } catch (err) {
+      console.error('[Admin] banker notification failed:', err)
+      failed = `${failed} The new-banker notification could not be sent.`.trim()
+    }
+  }
+  return { sent: failed ? 0 : userIds.length, failed }
+}
+
 export async function abandonRace(day, race) {
   const kind = day.kind, c = DAY[kind], k = KINDS[kind], rc = raceCols(kind)
   try {
@@ -434,7 +462,16 @@ export async function abandonRace(day, race) {
 
     const ds = await supabase.from(c.scores).delete().eq(c.raceCol, race.id)
     if (ds.error) throw new Error(`Could not clear the old scores: ${ds.error.message}`)
-    const picks = must(await supabase.from(c.picks).select('id, user_id, bet_type').eq(c.raceCol, race.id))
+    const picks = must(await supabase.from(c.picks).select('id, user_id, bet_type, is_banker').eq(c.raceCol, race.id))
+    // Before the lock the banker can still move, so it is cleared and those players are asked to choose again.
+    // After the lock it stays on the race (and scores 0).
+    const beforeLock = !isLocked(day)
+    const bankerUsers = beforeLock ? [...new Set(picks.filter(p => p.is_banker).map(p => p.user_id))] : []
+    let warn = ''
+    if (bankerUsers.length) {
+      const clr = await supabase.from(c.picks).update({ is_banker: false }).eq(c.raceCol, race.id).eq('is_banker', true)
+      if (clr.error) throw new Error(`Could not clear the banker: ${clr.error.message}`)
+    }
     if (picks.length) {
       const rows = picks.map(p => ({
         user_id: p.user_id, [c.raceCol]: race.id, ...(kind === 'week' ? { pick_id: p.id } : {}),
@@ -444,14 +481,17 @@ export async function abandonRace(day, race) {
       const ins = await supabase.from(c.scores).insert(rows)
       if (ins.error) throw new Error(`Could not write the 0-point scores: ${ins.error.message}`)
     }
-    let warn = ''
     const bonus = await applyDayBonuses(kind, day.id)
     if (!bonus.ok) warn = `Bonuses were not updated: ${bonus.msg}. Use Recalculate scores on the race day.`
     if (kind === 'festival') {
       const pts = await updateFestivalDayPoints({ ...race, festival_day_id: day.id })
       if (!pts.ok) warn = `${warn} Day points were not updated: ${pts.msg}.`.trim()
     }
-    return { ok: !warn, text: `Race ${race.race_number} abandoned · ${picks.length} pick${picks.length === 1 ? '' : 's'} scored 0`, warn }
+    const note = await sendAbandonNotices(race, [...new Set(picks.map(p => p.user_id))], bankerUsers, day)
+    if (note.failed) warn = `${warn} ${note.failed}`.trim()
+    const told = note.sent ? ` · ${note.sent} player${note.sent === 1 ? '' : 's'} told` : ''
+    const cleared = bankerUsers.length ? ` · ${bankerUsers.length} banker${bankerUsers.length === 1 ? '' : 's'} cleared` : ''
+    return { ok: !warn, text: `Race ${race.race_number} abandoned · ${picks.length} pick${picks.length === 1 ? '' : 's'} scored 0${cleared}${told}`, warn }
   } catch (err) { return { ok: false, text: err.message || String(err) } }
 }
 
