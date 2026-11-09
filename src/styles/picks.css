@@ -118,6 +118,7 @@
 .pk-race__pills { display: flex; flex-wrap: wrap; gap: 8px; }
 .pk-pill { display: inline-flex; align-items: center; height: 26px; padding: 0 10px; border-radius: 13px; font-size: 12px; font-weight: 500; line-height: 1; white-space: nowrap; box-sizing: border-box; }
 .pk-pill--gold { background: var(--surface-deep); border: 1px solid rgba(201, 168, 76, 0.45); color: var(--gold); }
+.pk-pill--void { background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.28); color: #d8dfd4; }
 .pk-pill--green { background: rgba(143, 224, 156, 0.12); border: 1px solid rgba(143, 224, 156, 0.35); color: var(--win); }
 .pk-race__rulenote { font-size: 12px; line-height: 1.4; color: var(--text-muted); }
 

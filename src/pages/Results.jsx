@@ -222,7 +222,7 @@ function ResultsPage() {
               <p className="rs-msg">No races on this day yet.</p>
             ) : (
               <>
-                {current.rows.some(r => !r.pending) && (
+                {current.rows.some(r => !r.pending && !r.abandoned) && (
                   <p className="rs-hint">Tap a race to see the full result</p>
                 )}
                 <div className="rs-list">

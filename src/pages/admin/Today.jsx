@@ -3,7 +3,9 @@ import { Link } from 'react-router-dom'
 import Sheet from '../../components/groups/Sheet.jsx'
 import WithdrawSheet from '../../components/admin/WithdrawSheet.jsx'
 import ResultSheet from './ResultSheet.jsx'
-import { runnersWithoutPrice, planWithdrawal, withdrawRunnerNow, planReinstate, reinstateRunnerNow } from '../../lib/raceDay.js'
+import { ConfirmSheet } from './sheets.jsx'
+import { runnersWithoutPrice, planWithdrawal, planReinstate } from '../../lib/raceDay.js'
+import { runRunnerAction } from '../../lib/adminRaceDays.js'
 import { clockText, lockMs, ukClock, ukDateStr, weekdayShort, monthAbbr } from '../../lib/format.js'
 import {
   loadRaceDays, loadDayDetail, alsoThisWeek, isLocked, isRacingNow, lockCountdown, raceStatus, daySummary,
@@ -60,7 +62,7 @@ export default function Today({ goTab }) {
     return {
       resultIds, byRace, picked, runnerCount: liveRunners.length,
       missing: runnersWithoutPrice(detail.races, byRace),
-      resultsIn: detail.races.filter(r => resultIds.has(r.id)).length,
+      resultsIn: detail.races.filter(r => resultIds.has(r.id) || r.is_abandoned).length,
       summary: daySummary(detail.scores, detail.awards, detail.usernames),
       mismatches: totalsMismatches(detail.scores, detail.awards),
     }
@@ -147,29 +149,9 @@ export default function Today({ goTab }) {
 
   async function confirmRunnerSheet() {
     const { mode, plan } = runnerSheet
-    const { runner } = plan
     setBusy(true)
-    let msg
-    try {
-      if (mode === 'withdraw') {
-        const r = await withdrawRunnerNow(day.kind, plan, { lockIso: day.deadline || null })
-        const bits = [`${runner.horse_name} withdrawn`]
-        if (r.lockedNow) bits.push(`race locked first (field of ${r.lockedNow.count}${r.lockedNow.converted ? `, ${r.lockedNow.converted} each-way changed to win` : ''})`)
-        bits.push(r.moved ? `${plural(r.moved, 'pick')} moved to ${r.favourite.horse_name}` : 'no picks to move')
-        if (r.switched) bits.push(`${r.switched} each-way changed to win`)
-        if (r.rescored) bits.push(r.rescored.ok ? 'scores recalculated' : `SCORES NOT RECALCULATED: ${r.rescored.msg}`)
-        if (r.notified) bits.push(r.notified.ok ? `${plural(r.notified.count, 'player')} notified` : `NOTIFICATION FAILED: ${r.notified.error}`)
-        msg = { type: (r.rescored && !r.rescored.ok) || (r.notified && !r.notified.ok) ? 'error' : 'ok', text: bits.join(' · ') }
-      } else {
-        const r = await reinstateRunnerNow(day.kind, plan)
-        const bits = [`${runner.horse_name} reinstated`]
-        if (r.reverted) bits.push(`${plural(r.reverted, 'pick')} reverted`)
-        if (r.rescored) bits.push(r.rescored.ok ? 'scores recalculated' : `SCORES NOT RECALCULATED: ${r.rescored.msg}`)
-        msg = { type: r.rescored && !r.rescored.ok ? 'error' : 'ok', text: bits.join(' · ') }
-      }
-    } catch (err) {
-      msg = { type: 'error', text: err.message || String(err) }
-    }
+    const r = await runRunnerAction(day.kind, mode, plan, day.deadline)
+    const msg = { type: r.ok ? 'ok' : 'error', text: r.text }
     setBusy(false); setRunnerSheet(null)
     refreshAfter(msg.text, msg.type)
   }
@@ -214,7 +196,7 @@ export default function Today({ goTab }) {
               const winner = detail.results.find(r => r.race_id === race.id && r.position === 1)
               return (
                 <li key={race.id}>
-                  <button type="button" className="an-race" onClick={() => setSheet({ result: race })} data-return={`race-${race.id}`}>
+                  <button type="button" className="an-race" onClick={() => (race.is_abandoned ? say('error', `Race ${race.race_number} was abandoned. Restore it in Race days to enter a result.`) : setSheet({ result: race }))} data-return={`race-${race.id}`}>
                     <span className="an-race__time">{clockText(race.race_time) || 'TBA'}</span>
                     <span className="an-race__main">
                       <span className="an-race__name">{race.race_name || race.venue || `Race ${race.race_number}`}</span>
@@ -300,7 +282,7 @@ export default function Today({ goTab }) {
               const st = raceStatus(race, view.resultIds.has(race.id), day.date, now)
               return (
                 <li key={race.id}>
-                  <button type="button" className="an-race" onClick={() => setSheet({ result: race })}>
+                  <button type="button" className="an-race" onClick={() => (race.is_abandoned ? say('error', `Race ${race.race_number} was abandoned. Restore it in Race days to enter a result.`) : setSheet({ result: race }))}>
                     <span className="an-race__time">{clockText(race.race_time) || 'TBA'}</span>
                     <span className="an-race__main"><span className="an-race__name">{race.race_name || race.venue || `Race ${race.race_number}`}</span><span className="an-race__sub">Race {race.race_number}</span></span>
                     <span className={`an-pill an-pill--${st.key}`}>{st.label}</span>
@@ -375,19 +357,6 @@ function Checklist({ day, detail, view, lockAt, now, onFixPrices, onSend, onLock
 }
 
 // ── Small sheets ────────────────────────────────────────────────────
-function ConfirmSheet({ title, children, confirm, busy, onConfirm, onClose }) {
-  return (
-    <Sheet onClose={() => { if (!busy) onClose() }} labelledBy="an-confirm-title" dragToClose className="an-sheet">
-      <h2 className="gr-sheet__title gr-sheet__title--wrap" id="an-confirm-title">{title}</h2>
-      <p className="an-muted">{children}</p>
-      <div className="rd-actions rd-actions--stack">
-        <button type="button" className="gr-btn gr-btn--solid" onClick={onConfirm} disabled={busy} data-autofocus>{busy ? 'Working…' : confirm}</button>
-        <button type="button" className="gr-btn gr-btn--text" onClick={onClose} disabled={busy}>Cancel</button>
-      </div>
-    </Sheet>
-  )
-}
-
 // Prices for runners that have none. Race days will get full runner editing; this covers the gap.
 function PricesSheet({ missing, busy, onSave, onClose }) {
   const [vals, setVals] = useState({})

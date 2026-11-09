@@ -19,7 +19,10 @@ export default function RaceHeader({ race, runnerCount }) {
       <div className="pk-race__meta">{`Race ${race.race_number}${when ? ` · ${when}` : ''}`}</div>
       {race.race_name && <h2 className="pk-race__name">{race.race_name}</h2>}
       {sub && <div className="pk-race__sub">{sub}</div>}
-      {runnerCount > 0 && (
+      {race.is_abandoned && (
+        <div className="pk-race__pills"><span className="pk-pill pk-pill--void">Abandoned</span></div>
+      )}
+      {runnerCount > 0 && !race.is_abandoned && (
         <div className="pk-race__rules">
           <div className="pk-race__pills">
             <span className="pk-pill pk-pill--gold">{eachWayAvailable ? 'Win' : 'Win only'}</span>

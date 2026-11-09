@@ -7,6 +7,7 @@ import { ukDateStr, ukWallToMs, clockText, lockMs } from './format.js'
 import { KINDS, resultsRules } from './raceDay.js'
 import { DAY } from './dayBonuses.js'
 import { BONUS_TYPES } from './bonuses.js'
+import { parseOdds } from './raceImport.js'
 import { calculateScoresForRace, calculateFestivalScoresForRace, updateFestivalDayPoints } from './raceScoring.js'
 import { lockRaces } from './raceLock.js'
 
@@ -15,20 +16,7 @@ const DAY_MS = 86400000
 
 // ═══ Pure helpers ═══════════════════════════════════════════════════════
 
-// Fractional price text to decimal odds ("7/2" -> 4.5, "evens" -> 2). Same rules as the classic Admin.
-export function parseOdds(str) {
-  if (!str) return null
-  const s = String(str).trim().toLowerCase()
-  if (s === 'evs' || s === 'evens') return 2.0
-  const parts = s.split('/')
-  if (parts.length === 2) {
-    const n = parseFloat(parts[0]), d = parseFloat(parts[1])
-    if (!isNaN(n) && !isNaN(d) && d !== 0) return parseFloat(((n / d) + 1).toFixed(2))
-  }
-  const dec = parseFloat(s)
-  if (!isNaN(dec) && dec > 1) return dec
-  return null
-}
+export { parseOdds }
 
 // Race days from the rows read from Supabase. A Saturday linked to a festival day is that festival day
 // (`linkedWeek` says which week), so it is listed once.
@@ -126,6 +114,7 @@ export function alsoThisWeek(weeks, days, festivals, current, raceCounts = {}) {
 
 // A race's row in the list after the lock.
 export function raceStatus(race, hasResult, date, nowMs = Date.now()) {
+  if (race.is_abandoned) return { key: 'void', label: 'Abandoned' }
   if (hasResult) return { key: 'done', label: 'Result in ✓' }
   const off = ukWallToMs(date, race.race_time)
   if (off != null && nowMs >= off) return { key: 'enter', label: 'Enter result' }
@@ -195,8 +184,8 @@ export async function loadRaceDays(nowMs = Date.now()) {
   const festIds = [...new Set(days.map(d => d.festival_id))]
   const [festivals, weekRaceRows, dayRaceRows] = await Promise.all([
     festIds.length ? supabase.from('festivals').select('id, name, display_name, venue, banner_url, banner_position').in('id', festIds).then(must) : [],
-    weeks.length ? supabase.from('races').select('id, race_week_id').in('race_week_id', weeks.map(w => w.id)).then(must) : [],
-    days.length ? supabase.from('festival_races').select('id, festival_day_id').in('festival_day_id', days.map(d => d.id)).then(must) : [],
+    weeks.length ? supabase.from('races').select('id, race_week_id, is_abandoned').in('race_week_id', weeks.map(w => w.id)).then(must) : [],
+    days.length ? supabase.from('festival_races').select('id, festival_day_id, is_abandoned').in('festival_day_id', days.map(d => d.id)).then(must) : [],
   ])
   const raceCounts = {}
   weekRaceRows.forEach(r => { raceCounts[`week:${r.race_week_id}`] = (raceCounts[`week:${r.race_week_id}`] || 0) + 1 })
@@ -211,18 +200,12 @@ export async function loadRaceDays(nowMs = Date.now()) {
   ])
   const resultCounts = {}
   const seen = new Set()
-  weekResults.forEach(r => {
-    if (seen.has(r.race_id)) return
-    seen.add(r.race_id)
-    const race = weekRaceRows.find(x => x.id === r.race_id)
-    if (race) resultCounts[`week:${race.race_week_id}`] = (resultCounts[`week:${race.race_week_id}`] || 0) + 1
-  })
-  dayResults.forEach(r => {
-    if (seen.has(r.festival_race_id)) return
-    seen.add(r.festival_race_id)
-    const race = dayRaceRows.find(x => x.id === r.festival_race_id)
-    if (race) resultCounts[`festival:${race.festival_day_id}`] = (resultCounts[`festival:${race.festival_day_id}`] || 0) + 1
-  })
+  const countDone = (key, id) => { if (seen.has(id)) return; seen.add(id); resultCounts[key] = (resultCounts[key] || 0) + 1 }
+  // An abandoned race needs no result, so it counts as done.
+  weekRaceRows.filter(r => r.is_abandoned && pastWeek.has(r.race_week_id)).forEach(r => countDone(`week:${r.race_week_id}`, r.id))
+  dayRaceRows.filter(r => r.is_abandoned && pastDay.has(r.festival_day_id)).forEach(r => countDone(`festival:${r.festival_day_id}`, r.id))
+  weekResults.forEach(r => { const race = weekRaceRows.find(x => x.id === r.race_id); if (race) countDone(`week:${race.race_week_id}`, r.race_id) })
+  dayResults.forEach(r => { const race = dayRaceRows.find(x => x.id === r.festival_race_id); if (race) countDone(`festival:${race.festival_day_id}`, r.festival_race_id) })
   const raceDays = buildRaceDays({ weeks, days, festivals })
   return { raceDays, weeks, days, festivals, raceCounts, resultCounts, current: pickCurrent(raceDays, nowMs, raceCounts, resultCounts) }
 }
@@ -270,7 +253,7 @@ async function countPlayers(day) {
 export async function catchUpLocks(day, detail) {
   if (!isLocked(day)) return ''
   const hasResult = new Set(detail.results.map(r => r.race_id))
-  const todo = detail.races.filter(r => r.runner_count_at_lock == null && !hasResult.has(r.id))
+  const todo = detail.races.filter(r => r.runner_count_at_lock == null && !hasResult.has(r.id) && !r.is_abandoned)
   if (!todo.length) return ''
   const { locked, failed } = await lockRaces(day.kind, todo.map(r => r.id))
   const converted = locked.reduce((n, l) => n + l.converted, 0)

@@ -84,7 +84,7 @@ export async function loadWeekPeriod(userId, period) {
   const { races, rest } = await fetchPeriod(
     period.raceIds,
     () => supabase
-      .from('races').select('id, race_number, race_time, venue, race_name, runner_count_at_lock')
+      .from('races').select('id, race_number, race_time, venue, race_name, runner_count_at_lock, is_abandoned')
       .eq('race_week_id', period.id).order('race_number').then(must),
     ids => Promise.all([
       supabase.from('results').select('race_id, position, horse_name, starting_price_display').in('race_id', ids).then(must),
@@ -110,7 +110,7 @@ export async function loadFestivalPeriod(userId, period) {
   const { races, rest } = await fetchPeriod(
     period.raceIds,
     () => supabase
-      .from('festival_races').select('id, race_number, race_time, venue, race_name, runner_count_at_lock')
+      .from('festival_races').select('id, race_number, race_time, venue, race_name, runner_count_at_lock, is_abandoned')
       .eq('festival_day_id', period.id).order('race_number').then(must),
     ids => Promise.all([
       supabase.from('festival_results').select('festival_race_id, position, horse_name, starting_price_display')

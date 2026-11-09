@@ -260,7 +260,9 @@ export function buildResultRows({ races, results, picks, runners, scores, bonuse
       .slice()
       .sort((a, b) => a.position - b.position)
       .map(r => ({ position: r.position, name: r.horse_name, sp: r.starting_price_display || '' }))
-    const pending = placings.length === 0
+    // An abandoned race has no result and nothing is pending: every pick on it scored 0.
+    const abandoned = !!race.is_abandoned
+    const pending = !abandoned && placings.length === 0
 
     const p = pickByRace[race.id]
     const runner = p ? runnerById[p.runner_id] : null
@@ -274,7 +276,7 @@ export function buildResultRows({ races, results, picks, runners, scores, bonuse
       withdrawn: !p.was_replaced && !!runner?.is_withdrawn,
     } : null
 
-    const played = !pending && !!pick
+    const played = !pending && !abandoned && !!pick
     // The finishing position as stored with the score, or found in the placings; null when the
     // horse finished outside the positions we have results for.
     const placing = pick ? placings.find(pl => sameHorse(pl.name, pick.name)) : null
@@ -286,10 +288,11 @@ export function buildResultRows({ races, results, picks, runners, scores, bonuse
       raceNo: race.race_number,
       // Bonus tags for the card: "★ ×2" on the banker race, "Lone +25", "Treble +50".
       banker: !!p?.is_banker,
-      tags: raceTags(!!p?.is_banker, raceBonuses),
+      tags: abandoned ? [{ key: 'void', text: 'Abandoned' }] : raceTags(!!p?.is_banker, raceBonuses),
       bonusPoints: raceBonuses.reduce((n, b) => n + (b.points || 0), 0),
       time: clockText(race.race_time),
       pending,
+      abandoned,
       placings: placings.map(pl => ({ ...pl, mine: !!pick && sameHorse(pl.name, pick.name) })),
       pick,
       played,
@@ -300,7 +303,7 @@ export function buildResultRows({ races, results, picks, runners, scores, bonuse
       tone: played && points > 0 ? (position === 1 ? 'win' : 'placed') : 'none',
       // Top line of the score box: the finishing position ("2ND"), "UNPL" when the horse finished
       // outside the positions we have, "—" with no pick or result.
-      scoreTop: played ? (position ? ordinal(position).toUpperCase() : 'UNPL') : '—',
+      scoreTop: abandoned ? 'VOID' : played ? (position ? ordinal(position).toUpperCase() : 'UNPL') : '—',
       // Why a pick that finished 2nd to 4th scored nothing ('' when there is nothing to explain).
       note: played && points === 0 ? zeroNote(pick.betType, position, race.runner_count_at_lock) : '',
     }

@@ -543,9 +543,9 @@ export default function Picks() {
   const isLastRace = idx >= view.races.length - 1
   const pickedId = race ? view.picks[race.id] : undefined
   const pickedRunner = raceRunners.find(r => r.id === pickedId)
-  const canTap = view.joined && !view.locked
+  const canTap = view.joined && !view.locked && !race?.is_abandoned
   // Every race has a live pick (one on a withdrawn runner doesn't count, as on the race chips).
-  const allPicked = canTap && view.races.length > 0 && view.races.every(r => hasLivePick(view.picks[r.id], view.runners[r.id] || []))
+  const allPicked = canTap && view.races.length > 0 && view.races.every(r => r.is_abandoned || hasLivePick(view.picks[r.id], view.runners[r.id] || []))
   const lockUntil = lockText ? lockText.replace(/^Locks /, '') : ''
 
   // Bonuses: only race days from the bonus start date have a banker. The saved banker is on the pick;
@@ -662,6 +662,9 @@ export default function Picks() {
             {pickedRunner?.is_withdrawn && !wasReplaced(race.id) && (
               <p className="pk-note">Your pick was withdrawn – choose another runner</p>
             )}
+            {race.is_abandoned && (
+              <p className="pk-note">This race was abandoned – every pick on it scores 0 and there is nothing to pick.</p>
+            )}
             {view.locked && (
               <p className="pk-note">Picks are locked – results will appear in Results</p>
             )}
@@ -696,7 +699,7 @@ export default function Picks() {
                   />
                 )
               })}
-              {raceRunners.length === 0 && <p className="pk-note">No runners added yet — check back soon.</p>}
+              {raceRunners.length === 0 && !race.is_abandoned && <p className="pk-note">No runners added yet — check back soon.</p>}
             </div>
 
             <button type="button" className="pk-btn pk-btn--ghost" onClick={nextRace}>

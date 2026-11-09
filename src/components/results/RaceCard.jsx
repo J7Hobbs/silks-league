@@ -7,8 +7,8 @@ const BET = { win: 'Win', each_way: 'Each-way' }
 // points. Tap a race (once its result is in) to see the full placings.
 // `owner` is whose pick it is: "your" on the Results page, "their" when looking at another player.
 export default function RaceCard({ row, open, onToggle, owner = 'your' }) {
-  const { pick, pending } = row
-  const note = pick?.replaced
+  const { pick, pending, abandoned } = row
+  const note = abandoned ? 'Race abandoned – every pick on it scored 0' : pick?.replaced
     ? 'Original pick withdrawn – replaced with the favourite'
     : pick?.withdrawn ? `${owner === 'your' ? 'Your' : 'Their'} pick was withdrawn` : ''
 
@@ -36,7 +36,7 @@ export default function RaceCard({ row, open, onToggle, owner = 'your' }) {
         )}
       </span>
 
-      <span className={`rs-score rs-score--${pending ? 'none' : row.tone}`}>
+      <span className={`rs-score rs-score--${pending || abandoned ? 'none' : row.tone}`}>
         <span className="rs-score__top">{pending ? '—' : row.scoreTop}</span>
         {pending ? (
           <span className="rs-score__pending">Pending</span>
@@ -53,14 +53,14 @@ export default function RaceCard({ row, open, onToggle, owner = 'your' }) {
   )
 
   return (
-    <div className={`rs-card${open && !pending ? ' rs-card--open' : ''}`}>
-      {pending ? (
+    <div className={`rs-card${open && !pending && !abandoned ? ' rs-card--open' : ''}`}>
+      {pending || abandoned ? (
         <div className="rs-card__hit rs-card__hit--static">{body}</div>
       ) : (
         <button type="button" className="rs-card__hit" aria-expanded={open} onClick={onToggle}>{body}</button>
       )}
 
-      {open && !pending && (
+      {open && !pending && !abandoned && (
         <div className="rs-places">
           {row.note && <p className="rs-places__note">{row.note}</p>}
           <ol className="rs-places__list">

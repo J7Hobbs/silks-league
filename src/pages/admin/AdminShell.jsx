@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import Today from './Today.jsx'
+import RaceDays from './RaceDays.jsx'
 import '../../styles/admin-new.css'
 
-// The new Admin (/admin): four tabs. Today is built; the others are coming. The previous Admin stays
+// The new Admin (/admin): four tabs. Today and Race days are built; the others are coming. The previous Admin stays
 // at /admin/classic until it is replaced, so nothing is lost while the new one is built in stages.
 const TABS = [
   { id: 'today',    label: 'Today' },
@@ -50,7 +51,7 @@ export default function AdminShell() {
         </nav>
       </header>
       <main className="an-main" id="an-panel" role="tabpanel" aria-labelledby={`an-tab-${tab}`}>
-        {tab === 'today' ? <Today goTab={goTab} /> : (
+        {tab === 'today' ? <Today goTab={goTab} /> : tab === 'racedays' ? <RaceDays /> : (
           <section className="an-card an-card--plain an-empty">
             <h2 className="an-h2">Coming in the next update</h2>
             <p className="an-muted">{TABS.find(t => t.id === tab).label} is being rebuilt. Until it lands, everything it will do is in the classic Admin.</p>
