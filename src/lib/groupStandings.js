@@ -5,18 +5,7 @@
 // then winning picks, then name. Reading only; nothing is written.
 import { supabase } from './supabase'
 import { orderIds } from './standings.js'
-
-// Page through a table: Supabase returns at most 1000 rows per request.
-async function fetchAll(makeQuery) {
-  const rows = []
-  for (let from = 0; ; from += 1000) {
-    const { data, error } = await makeQuery().order('id').range(from, from + 999)
-    if (error || !data?.length) break
-    rows.push(...data)
-    if (data.length < 1000) break
-  }
-  return rows
-}
+import { weekRaces, weekScores } from './weekSource.js'
 
 // { [groupId]: [userId, …] } for these groups.
 export async function loadMembers(groupIds) {
@@ -33,13 +22,12 @@ export async function loadMembers(groupIds) {
 async function seasonScores() {
   const { data: season } = await supabase.from('seasons').select('id').eq('is_active', true).single()
   if (!season) return []
-  const { data: weeks } = await supabase.from('race_weeks').select('id').eq('season_id', season.id)
-  const weekIds = (weeks || []).map(w => w.id)
-  if (!weekIds.length) return []
-  const { data: races } = await supabase.from('races').select('id').in('race_week_id', weekIds)
-  const raceIds = (races || []).map(r => r.id)
-  if (!raceIds.length) return []
-  return fetchAll(() => supabase.from('scores').select('id, user_id, total_points, position_achieved').in('race_id', raceIds))
+  const { data: weeks } = await supabase.from('race_weeks').select('id, festival_day_id').eq('season_id', season.id)
+  if (!weeks?.length) return []
+  // A week linked to a festival day has that day's races and points (weekSource.js).
+  const races = await weekRaces(weeks).catch(() => [])
+  if (!races.length) return []
+  return weekScores(races, { cols: ['id', 'user_id', 'race_id', 'total_points', 'position_achieved'] }).catch(() => [])
 }
 
 // Standing of every group in `members` ({ groupId: [userIds] }), for `userId`.

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { NAV_TABS, activeTabIndex, PICKS_CHANGED } from '../lib/navTabs.js'
+import { weekRaces, weekPicks } from '../lib/weekSource.js'
 
 // Mobile bottom nav — floating bar with a gold pill on the active tab. Shown on
 // mobile only (styles in src/index.css, .bar-nav). The active tab comes from the
@@ -30,19 +31,18 @@ function usePicksLeft() {
       if (!season) return
 
       const { data: weeks } = await supabase
-        .from('race_weeks').select('id, saturday_date, picks_deadline')
+        .from('race_weeks').select('id, saturday_date, picks_deadline, festival_day_id')
         .eq('season_id', season.id).order('saturday_date', { ascending: true })
       const now = new Date()
       const week = weeks?.find(w => now < (w.picks_deadline ? new Date(w.picks_deadline) : new Date(w.saturday_date + 'T12:00:00')))
       if (!week) return
 
-      const { data: races } = await supabase.from('races').select('id').eq('race_week_id', week.id)
-      const raceIds = (races || []).map(r => r.id)
-      if (!raceIds.length) return
+      // A week linked to a festival day has that day's races and picks (weekSource.js).
+      const races = await weekRaces([week]).catch(() => [])
+      if (!races.length) return
 
-      const { data: picks } = await supabase
-        .from('picks').select('race_id').eq('user_id', user.id).in('race_id', raceIds)
-      if (!cancelled) setLeft(Math.max(0, raceIds.length - (picks?.length ?? 0)))
+      const picks = await weekPicks(races, { cols: ['race_id'], userId: user.id }).catch(() => [])
+      if (!cancelled) setLeft(Math.max(0, races.length - picks.length))
     }
 
     // The bar now stays mounted across tabs, so recount on a saved pick and when the app returns to the foreground.

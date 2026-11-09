@@ -30,6 +30,7 @@ function festivalCard(fest, nowMs) {
     deadlineMs: dl,
     context: place,
     title: f.display_name || f.name,
+    line: fest.alsoSaturday ? 'Also counts for your Saturday League' : null,
     image: { url: f.banner_url || null, position: f.banner_position || null },
     tiles: [
       { label: 'Closes in', value: formatCountdown(dl - nowMs), accent: live },

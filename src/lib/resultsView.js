@@ -101,12 +101,13 @@ const addDays = (dateStr, n) => {
   return d.toISOString().slice(0, 10)
 }
 
-// Race weeks that have races, as race days: { id, weekNumber, date, deadline, raceIds }.
+// Race weeks that have races, as race days: { id, weekNumber, date, deadline, festivalDayId, raceIds }.
+// A week linked to a festival day has that day's races (weekRaces), and festivalDayId says so.
 export function buildWeeks(weeks, races) {
   const racesByWeek = byKey(races, 'race_week_id')
   return weeks
     .filter(w => racesByWeek[w.id]?.length)
-    .map(w => ({ id: w.id, weekNumber: w.week_number, date: w.saturday_date, deadline: w.picks_deadline, raceIds: racesByWeek[w.id].map(r => r.id) }))
+    .map(w => ({ id: w.id, weekNumber: w.week_number, date: w.saturday_date, deadline: w.picks_deadline, festivalDayId: w.festival_day_id || null, raceIds: racesByWeek[w.id].map(r => r.id) }))
     .sort((a, b) => a.date.localeCompare(b.date))
 }
 

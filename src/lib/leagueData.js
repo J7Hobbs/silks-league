@@ -8,17 +8,7 @@ import { supabase } from './supabase'
 import { monthLong, picksRevealed } from './format.js'
 import { orderIds, festivalTotals, weekDayStanding } from './standings.js'
 import { buildSatTable, buildFestTable } from './leagueTable.js'
-
-// PostgREST returns at most 1000 rows a call, so page through a big read.
-async function fetchPages(build) {
-  const rows = []
-  for (let from = 0; ; from += 1000) {
-    const { data, error } = await build().range(from, from + 999)
-    if (error) throw error
-    rows.push(...(data || []))
-    if (!data || data.length < 1000) return rows
-  }
-}
+import { weekRaces, weekScores, weekPicks } from './weekSource.js'
 
 // ── Saturday League ───────────────────────────────────────────
 // { season, currentWeek, satRows, weekRows, completedWeeks, satTable, tableData }, or null when
@@ -43,32 +33,24 @@ export async function loadSaturdayLeague(myUserId, { withWeek = true, seasonId =
   if (!s) return null
 
   const { data: weeks } = await supabase
-    .from('race_weeks').select('id, week_number, saturday_date, picks_deadline')
+    .from('race_weeks').select('id, week_number, saturday_date, picks_deadline, festival_day_id')
     .eq('season_id', s.id).order('saturday_date', { ascending: false })
   const latestWeek = weeks?.[0] || null
 
-  const weekIds = (weeks || []).map(w => w.id)
-  let allRaceIds = [], weekRaceIds = [], raceWeekMap = {}
-  if (weekIds.length) {
-    const { data: allRaces } = await supabase
-      .from('races').select('id, race_week_id').in('race_week_id', weekIds)
-    if (allRaces?.length) {
-      allRaceIds  = allRaces.map(r => r.id)
-      weekRaceIds = latestWeek
-        ? allRaces.filter(r => r.race_week_id === latestWeek.id).map(r => r.id)
-        : []
-      allRaces.forEach(r => { raceWeekMap[r.id] = r.race_week_id })
-    }
+  // Each week's races. A week linked to a festival day has that day's races, and its picks and
+  // points are the festival day's (weekSource.js), so it counts here like any other week.
+  let allRaces = [], weekRaceIds = [], raceWeekMap = {}
+  if (weeks?.length) {
+    allRaces = await weekRaces(weeks).catch(() => [])
+    weekRaceIds = latestWeek ? allRaces.filter(r => r.race_week_id === latestWeek.id) : []
+    allRaces.forEach(r => { raceWeekMap[r.id] = r.race_week_id })
   }
 
   let allScores = []
   let pickRows = []   // who picked in which race, for "no picks that week" against "scored 0" in the columns
-  if (allRaceIds.length) {
-    const picksLoaded = fetchPages(() => supabase.from('picks').select('user_id, race_id').in('race_id', allRaceIds).order('id'))
-      .catch(() => [])
-    const { data: everyone, error: evErr } = await supabase
-      .from('scores').select('user_id, race_id, total_points, position_achieved').in('race_id', allRaceIds)
-    if (!evErr && everyone?.length) allScores = everyone
+  if (allRaces.length) {
+    const picksLoaded = weekPicks(allRaces, { cols: ['id', 'user_id', 'race_id'] }).catch(() => [])
+    allScores = await weekScores(allRaces).catch(() => [])
     pickRows = await picksLoaded
   }
   // else: no races in this season yet — all scores stay []
@@ -193,13 +175,14 @@ export async function loadPastSeasons(myUserId) {
 }
 
 // Which of these race weeks the player made at least one pick in: a Set of week ids.
-export async function loadPickedWeeks(userId, weekIds) {
-  if (!weekIds.length) return new Set()
-  const { data: races } = await supabase.from('races').select('id, race_week_id').in('race_week_id', weekIds)
-  const weekOf = Object.fromEntries((races || []).map(r => [r.id, r.race_week_id]))
-  if (!races?.length) return new Set()
-  const { data: picks } = await supabase.from('picks').select('race_id').eq('user_id', userId).in('race_id', races.map(r => r.id))
-  return new Set((picks || []).map(p => weekOf[p.race_id]).filter(Boolean))
+// `weeks` are race_weeks rows (id, festival_day_id): a linked week's picks are the festival day's.
+export async function loadPickedWeeks(userId, weeks) {
+  if (!weeks.length) return new Set()
+  const races = await weekRaces(weeks).catch(() => [])
+  const weekOf = Object.fromEntries(races.map(r => [r.id, r.race_week_id]))
+  if (!races.length) return new Set()
+  const picks = await weekPicks(races, { cols: ['race_id'], userId }).catch(() => [])
+  return new Set(picks.map(p => weekOf[p.race_id]).filter(Boolean))
 }
 
 // "October 2026" for a season (its start date), or its name when it has none.
@@ -309,7 +292,7 @@ export async function fetchGroupSatRows(memberIds, myUserId) {
     .from('seasons').select('id').eq('is_active', true).single()
   if (!season) return []
   const { data: weeks } = await supabase
-    .from('race_weeks').select('id').eq('season_id', season.id)
+    .from('race_weeks').select('id, festival_day_id').eq('season_id', season.id)
   const weekIds = (weeks || []).map(w => w.id)
   const { data: groupProfiles } = await namesLoaded
   const groupNameMap = {}
@@ -321,17 +304,13 @@ export async function fetchGroupSatRows(memberIds, myUserId) {
   }))
 
   if (!weekIds.length) return emptyRows()
-  const { data: races } = await supabase
-    .from('races').select('id, race_week_id').in('race_week_id', weekIds)
-  const raceIds = (races || []).map(r => r.id)
+  const races = await weekRaces(weeks).catch(() => [])
   const raceWeekMap = {}
-  races?.forEach(r => { raceWeekMap[r.id] = r.race_week_id })
+  races.forEach(r => { raceWeekMap[r.id] = r.race_week_id })
 
-  if (!raceIds.length) return emptyRows()
+  if (!races.length) return emptyRows()
 
-  const { data: scores } = await supabase
-    .from('scores').select('user_id, race_id, total_points, position_achieved')
-    .in('race_id', raceIds).in('user_id', memberIds)
+  const scores = await weekScores(races, { userIds: memberIds }).catch(() => [])
 
   const totals = {}
   const weekPtsMap = {}
@@ -373,27 +352,21 @@ export async function loadAnnualLeague(myUserId) {
 
   const seasonIds = seasons26.map(s => s.id)
   const { data: allWeeks } = await supabase
-    .from('race_weeks').select('id, season_id').in('season_id', seasonIds)
+    .from('race_weeks').select('id, season_id, festival_day_id').in('season_id', seasonIds)
   const weekIds = (allWeeks || []).map(w => w.id)
 
   const weekSeasonMap = {}
   allWeeks?.forEach(w => { weekSeasonMap[w.id] = w.season_id })
 
-  let allRaceIds = []
+  let annualRaces = []
   const raceSeasonMap = {}
   if (weekIds.length) {
-    const { data: allRaces } = await supabase
-      .from('races').select('id, race_week_id').in('race_week_id', weekIds)
-    allRaceIds = (allRaces || []).map(r => r.id)
-    allRaces?.forEach(r => { raceSeasonMap[r.id] = weekSeasonMap[r.race_week_id] })
+    annualRaces = await weekRaces(allWeeks).catch(() => [])
+    annualRaces.forEach(r => { raceSeasonMap[r.id] = weekSeasonMap[r.race_week_id] })
   }
 
   let allScores = []
-  if (allRaceIds.length) {
-    const { data: scores } = await supabase
-      .from('scores').select('user_id, race_id, total_points, position_achieved').in('race_id', allRaceIds)
-    allScores = scores || []
-  }
+  if (annualRaces.length) allScores = await weekScores(annualRaces).catch(() => [])
 
   // Fetch all profiles — every registered user appears even with 0 pts
   const { data: annualProfileData } = await supabase.from('profiles').select('id')

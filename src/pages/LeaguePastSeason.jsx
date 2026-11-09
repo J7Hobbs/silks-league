@@ -30,7 +30,7 @@ export default function LeaguePastSeason() {
     loadSaturdayLeague(user.id, { withWeek: false, seasonId })
       .then(async d => {
         // Weeks the player picked in, so a week they scored 0 in isn't shown as "didn't play".
-        const picked = d ? await loadPickedWeeks(user.id, d.completedWeeks.map(w => w.id)).catch(() => new Set()) : new Set()
+        const picked = d ? await loadPickedWeeks(user.id, d.completedWeeks).catch(() => new Set()) : new Set()
         if (!cancelled) setData(d && { ...d, picked })
       })
       .catch(() => { if (!cancelled) setData(null) })

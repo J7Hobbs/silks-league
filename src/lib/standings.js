@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { weekRaces, weekScores, weekPicks } from './weekSource.js'
 
 // Read-only ranking helpers for the Home page. Ties break the same way the
 // League page does: points, then number of winning picks, then name.
@@ -53,18 +54,19 @@ export function rankOf(totals, wins, names, userId) {
   return { rank: ids.indexOf(userId) + 1, total: ids.length, points: totals[userId] }
 }
 
+// The races of these seasons' weeks. A week linked to a festival day has that day's races
+// (weekSource.js), so a linked Saturday counts like any other week.
 async function raceIdsForSeasons(seasonIds) {
   if (!seasonIds.length) return []
-  const { data: weeks } = await supabase.from('race_weeks').select('id').in('season_id', seasonIds)
+  const { data: weeks } = await supabase.from('race_weeks').select('id, festival_day_id').in('season_id', seasonIds)
   if (!weeks?.length) return []
-  const { data: races } = await supabase.from('races').select('id').in('race_week_id', weeks.map(w => w.id))
-  return (races || []).map(r => r.id)
+  return weekRaces(weeks).catch(() => [])
 }
 
-function scoresForRaces(raceIds) {
-  if (!raceIds.length) return Promise.resolve([])
-  return fetchAll(() => supabase.from('scores')
-    .select('id, race_id, user_id, total_points, position_achieved').in('race_id', raceIds))
+// Score rows for races (race rows from weekRaces, or plain ids; festival races read festival_scores).
+function scoresForRaces(races) {
+  if (!races.length) return Promise.resolve([])
+  return weekScores(races, { cols: ['id', 'race_id', 'user_id', 'total_points', 'position_achieved'] }).catch(() => [])
 }
 
 // Rank across one or more seasons (a single season, or every season in a year).
@@ -88,11 +90,11 @@ export async function seasonsRank(userId, seasonIds) {
 export async function seasonTable(userId, seasonId, referenceWeekId = null) {
   const idsLoaded = allProfileIds()
   const weekScores = (async () => {
-    const { data: weeks } = await supabase.from('race_weeks').select('id, saturday_date').eq('season_id', seasonId)
+    const { data: weeks } = await supabase.from('race_weeks').select('id, saturday_date, festival_day_id').eq('season_id', seasonId)
     if (!weeks?.length) return { weeks: [], races: [], scores: [] }
-    const { data: races } = await supabase.from('races').select('id, race_week_id').in('race_week_id', weeks.map(w => w.id))
-    const scores = await scoresForRaces((races || []).map(r => r.id))
-    return { weeks, races: races || [], scores }
+    const races = await weekRaces(weeks).catch(() => [])
+    const scores = await scoresForRaces(races)
+    return { weeks, races, scores }
   })()
   const namesLoaded = idsLoaded.then(ids => namesFor([...new Set([...ids, userId])]))
   const [ids, { weeks, races, scores }, names] = await Promise.all([idsLoaded, weekScores, namesLoaded])
@@ -187,7 +189,7 @@ async function dayStanding(pickRows, scoreRows) {
 export async function weekDayStanding(raceIds) {
   if (!raceIds?.length) return { order: [], totals: {}, wins: {}, names: {} }
   const [pickRows, scoreRows] = await Promise.all([
-    fetchAll(() => supabase.from('picks').select('id, user_id').in('race_id', raceIds)),
+    weekPicks(raceIds, { cols: ['id', 'user_id'] }).catch(() => []),
     scoresForRaces(raceIds),
   ])
   return dayStanding(pickRows, scoreRows)

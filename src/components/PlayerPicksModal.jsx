@@ -71,13 +71,14 @@ export default function PlayerPicksModal({ userId, displayName, seasonPoints, se
             wantedSeason = season?.id || null
           }
           const { data: weeks } = wantedSeason
-            ? await supabase.from('race_weeks').select('id, week_number, saturday_date, picks_deadline')
+            ? await supabase.from('race_weeks').select('id, week_number, saturday_date, picks_deadline, festival_day_id')
                 .eq('season_id', wantedSeason).order('saturday_date', { ascending: true })
             : { data: [] }
           list = (weeks || []).map(w => ({
             id: w.id,
             label: `W${w.week_number}`,
             caption: `Week ${w.week_number} · ${shortDate(w.saturday_date)}`,
+            festivalDayId: w.festival_day_id || null,   // a week linked to a festival day shows that day's picks
             revealed: picksRevealed(w.picks_deadline, w.saturday_date, nowMs),
           }))
           // The latest week that has locked, or the newest week when none has.
@@ -103,7 +104,7 @@ export default function PlayerPicksModal({ userId, displayName, seasonPoints, se
     if (!sel || !sel.revealed || cache[sel.id]) return
     let cancelled = false
     const load = festivalId ? loadFestivalPeriod : loadWeekPeriod
-    load(userId, { id: sel.id })
+    load(userId, { id: sel.id, festivalDayId: sel.festivalDayId })
       .then(bundle => {
         if (cancelled) return
         const rows = buildResultRows(bundle)

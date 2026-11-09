@@ -2,6 +2,7 @@ import { supabase } from './supabase'
 import { seasonTable, festivalRank } from './standings'
 import { localDateStr, ukDateStr, daysBetween, deadlineMs } from './format'
 import { loadUpcomingFestivals, pickNextFestival, loadCurrentFestival } from './festivalData.js'
+import { weekRaces } from './weekSource.js'
 
 // Everything the Home page needs, in one read-only load. A failing part is
 // logged and left empty so the rest of the page still renders.
@@ -19,7 +20,7 @@ function groupBy(rows, key) {
 // announced the next race week exists but has no races yet
 // returns  nothing recent: "returns soon" with the position in the active season
 // The card itself (homeCards.js) works out what to show from this, as the clock moves on.
-const RACE_COLS = 'id, race_week_id, race_number, race_time, venue, race_name'
+const RACE_COLS = ['race_number', 'race_time', 'venue', 'race_name']   // race columns read for a week (weekRaces)
 const RUNNER_COLS = 'id, race_id, horse_name, horse_number, silk_colour, silk_colour_secondary, silk_pattern, odds_fractional, odds_decimal, is_withdrawn'
 
 // A race week's races, the player's picks and scores, the results and the season table.
@@ -41,14 +42,15 @@ async function findAnnouncedWeek(weeks, today, exceptId) {
     .filter(w => w.saturday_date >= today && w.id !== exceptId)
     .sort((a, b) => (a.saturday_date < b.saturday_date ? -1 : 1))[0]
   if (!next) return null
-  const { data: races } = await supabase.from('races').select('id').eq('race_week_id', next.id).limit(1)
-  return races?.length ? null : { id: next.id, saturday_date: next.saturday_date }
+  // A week linked to a festival day has that day's races (weekSource.js).
+  const races = await weekRaces([next])
+  return races.length ? null : { id: next.id, saturday_date: next.saturday_date }
 }
 
 async function loadSaturday(userId, today, nowMs) {
   const [{ data: season }, { data: weeks }] = await Promise.all([
     supabase.from('seasons').select('id, start_date').eq('is_active', true).maybeSingle(),
-    supabase.from('race_weeks').select('id, season_id, week_number, saturday_date, picks_deadline')
+    supabase.from('race_weeks').select('id, season_id, week_number, saturday_date, picks_deadline, festival_day_id')
       .order('saturday_date', { ascending: false }).limit(12),
   ])
   const all = weeks || []
@@ -59,17 +61,20 @@ async function loadSaturday(userId, today, nowMs) {
     .sort((a, b) => deadlineMs(a.picks_deadline, a.saturday_date) - deadlineMs(b.picks_deadline, b.saturday_date))
   const todayWeek = all.find(w => w.saturday_date === today)
 
-  const candidateIds = [...new Set([...upcoming.map(w => w.id), todayWeek?.id].filter(Boolean))]
+  const candidateWeeks = [...new Map([...upcoming, todayWeek].filter(Boolean).map(w => [w.id, w])).values()]
   let racesByWeek = {}
-  if (candidateIds.length) {
-    const { data: races } = await supabase.from('races').select(RACE_COLS).in('race_week_id', candidateIds)
-    racesByWeek = groupBy(races || [], 'race_week_id')
+  if (candidateWeeks.length) {
+    racesByWeek = groupBy(await weekRaces(candidateWeeks, RACE_COLS), 'race_week_id')
   }
   const hasRaces = w => (racesByWeek[w.id] || []).length > 0
 
   const openWeek = upcoming.find(hasRaces) || null
   const closedWeek = !openWeek && todayWeek && hasRaces(todayWeek) ? todayWeek : null
   const current = openWeek || closedWeek
+
+  // A week linked to a festival day has no Saturday League card of its own: the festival's card
+  // on Home covers it (and says the picks also count for the Saturday League).
+  if (current?.festival_day_id) return { state: 'linked', week: current, season: seasonInfo }
 
   if (current) {
     // Once picks have closed, movement in the table is measured from before this week.
@@ -86,8 +91,9 @@ async function loadSaturday(userId, today, nowMs) {
 
   const last = all.find(w => w.saturday_date < today)
   if (last && daysBetween(last.saturday_date, today) <= 14) {
-    const { data: races } = await supabase.from('races').select(RACE_COLS).eq('race_week_id', last.id)
-    if (races?.length) {
+    const races = await weekRaces([last], RACE_COLS)
+    if (races.length && last.festival_day_id) return { state: 'linked', week: last, season: seasonInfo }
+    if (races.length) {
       // The next week, if it has been announced without races, takes over from the
       // results card on the Wednesday after race day; the card decides when.
       const [detail, nextWeek] = await Promise.all([
@@ -117,7 +123,8 @@ async function loadSaturday(userId, today, nowMs) {
 // Just the Saturday part, re-read while races are running.
 export async function refreshSaturday(user) {
   const nowMs = Date.now()
-  return { ...(await loadSaturday(user.id, localDateStr(new Date(nowMs)), nowMs)), userId: user.id }
+  const saturday = await loadSaturday(user.id, localDateStr(new Date(nowMs)), nowMs)
+  return saturday?.state === 'linked' ? null : { ...saturday, userId: user.id }
 }
 
 // ── Festival ────────────────────────────────────────────────────────────────
@@ -153,11 +160,13 @@ async function loadFestival(userId, today, nowMs) {
   const dayRaces = racesByDay[day.id] || []
   const raceIds = dayRaces.map(r => r.id)
 
-  const [{ data: picks }, rank] = await Promise.all([
+  const [{ data: picks }, rank, { data: linkedWeek }] = await Promise.all([
     raceIds.length
       ? supabase.from('festival_picks').select('festival_race_id').eq('user_id', userId).in('festival_race_id', raceIds)
       : Promise.resolve({ data: [] }),
     festivalRank(userId, festival.id),
+    // Is this day also a week of the Saturday League? (race_weeks.festival_day_id)
+    supabase.from('race_weeks').select('id').eq('festival_day_id', day.id).maybeSingle(),
   ])
 
   return {
@@ -169,6 +178,7 @@ async function loadFestival(userId, today, nowMs) {
     picked: new Set((picks || []).map(p => p.festival_race_id)).size,
     deadline: day.picks_deadline || `${day.race_date}T12:00:00`,
     rank,
+    alsoSaturday: !!linkedWeek,
     venue: festival.venue || dayRaces[0]?.venue || null,
   }
 }
@@ -182,7 +192,11 @@ export async function loadHomeData(user) {
 
   const [profile, saturday, festival, upcoming] = await Promise.all([
     safe('profile', async () => (await supabase.from('profiles').select('is_admin, full_name, username').eq('id', user.id).single()).data, null),
-    safe('saturday', async () => ({ ...(await loadSaturday(user.id, today, nowMs)), userId: user.id }), null),
+    safe('saturday', async () => {
+      const sat = await loadSaturday(user.id, today, nowMs)
+      // Linked to a festival day: no Saturday card (the festival's card says it also counts).
+      return sat?.state === 'linked' ? null : { ...sat, userId: user.id }
+    }, null),
     safe('festival', () => loadFestival(user.id, today, nowMs), null),
     safe('upcoming', () => loadUpcomingFestivals(nowMs), null),
   ])

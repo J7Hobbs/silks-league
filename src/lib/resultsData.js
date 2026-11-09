@@ -2,6 +2,7 @@
 // festival_scores exactly as stored, and nothing here writes.
 import { supabase } from './supabase'
 import { weekDayRank, festivalRank, festivalDayRank } from './standings.js'
+import { weekRaces } from './weekSource.js'
 
 const PAGE = 1000
 
@@ -23,14 +24,17 @@ async function fetchAll(build) {
 // What the page needs to choose a race day: the race weeks and festivals with their days and
 // race ids (races only, no results), and each one's picks deadline.
 export async function loadResultsIndex() {
-  const [weeks, weekRaces, festivals, days, dayRaces] = await Promise.all([
-    supabase.from('race_weeks').select('id, week_number, saturday_date, picks_deadline').then(must),
-    fetchAll(() => supabase.from('races').select('id, race_week_id').order('id')),
+  const weeksLoaded = supabase.from('race_weeks')
+    .select('id, week_number, saturday_date, picks_deadline, festival_day_id').then(must)
+  const [weeks, weekRaceRows, festivals, days, dayRaces] = await Promise.all([
+    weeksLoaded,
+    // A week linked to a festival day has that day's races (weekSource.js).
+    weeksLoaded.then(ws => weekRaces(ws)),
     supabase.from('festivals').select('id, name, display_name, start_date, end_date, venue, banner_url, banner_position').then(must),
     supabase.from('festival_days').select('id, festival_id, day_number, race_date, picks_deadline').then(must),
     fetchAll(() => supabase.from('festival_races').select('id, festival_day_id').order('id')),
   ])
-  return { weeks, weekRaces, festivals, days, dayRaces }
+  return { weeks, weekRaces: weekRaceRows, festivals, days, dayRaces }
 }
 
 // The player's position among everyone who picked on the race day on screen (players who
@@ -66,6 +70,8 @@ async function fetchPeriod(guessIds, fetchRaces, fetchRest) {
 
 // Everything one Saturday race week needs for the signed-in player.
 export async function loadWeekPeriod(userId, period) {
+  // A week linked to a festival day is that day: its races, picks and points are the festival's.
+  if (period.festivalDayId) return loadFestivalPeriod(userId, { id: period.festivalDayId, raceIds: period.raceIds })
   const { races, rest } = await fetchPeriod(
     period.raceIds,
     () => supabase

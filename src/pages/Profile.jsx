@@ -31,6 +31,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { weekRaces, weekScores, weekPicks } from '../lib/weekSource.js'
 import TopNav from '../components/TopNav.jsx'
 import BottomNav from '../components/BottomNav.jsx'
 
@@ -110,24 +111,18 @@ export default function Profile() {
     const qWeeks = filterQuarterWeeks(allWeeks, s)
     setQuarterWeeks(qWeeks)
 
-    const weekIds = allWeeks.map(w => w.id)
-    const { data: allRaces } = await supabase
-      .from('races').select('id, race_week_id').in('race_week_id', weekIds)
-    if (!allRaces?.length) return
+    // A week linked to a festival day has that day's races and points (weekSource.js).
+    const allRaces = await weekRaces(allWeeks).catch(() => [])
+    if (!allRaces.length) return
 
-    const allRaceIds = allRaces.map(r => r.id)
     const raceToWeek = {}
     allRaces.forEach(r => { raceToWeek[r.id] = r.race_week_id })
 
     // My scores
-    const { data: myScores } = await supabase
-      .from('scores').select('race_id, total_points')
-      .eq('user_id', userId).in('race_id', allRaceIds)
+    const myScores = await weekScores(allRaces, { userId, cols: ['race_id', 'total_points'] }).catch(() => [])
 
     // All scores for ranking
-    const { data: allScores } = await supabase
-      .from('scores').select('user_id, race_id, total_points')
-      .in('race_id', allRaceIds)
+    const allScores = await weekScores(allRaces, { cols: ['user_id', 'race_id', 'total_points'] }).catch(() => [])
 
     // ── Season totals per user ────────────────────────────────────────────
     const userTotals = {}
@@ -192,25 +187,39 @@ export default function Profile() {
       .from('scores').select('total_points, position_achieved, race_id')
       .eq('user_id', userId)
 
-    const { data: allPicks } = await supabase
+    const { data: ownPicks } = await supabase
       .from('picks').select('id').eq('user_id', userId)
 
-    const allTimePoints = (allMyScores || []).reduce((s, r) => s + (r.total_points || 0), 0)
-    const totalPicks    = (allPicks || []).length
-    const wins          = (allMyScores || []).filter(s => s.position_achieved === 1).length
-    const places        = (allMyScores || []).filter(s => s.position_achieved === 2 || s.position_achieved === 3).length
-    const perfectRace   = (allMyScores || []).some(s => (s.total_points || 0) >= 15)
+    // Saturdays linked to a festival day count as Saturday League weeks: their races, picks and
+    // points are the festival day's (weekSource.js).
+    const { data: linkedWeeks } = await supabase
+      .from('race_weeks').select('id, festival_day_id').not('festival_day_id', 'is', null)
+    const linkedRaces = linkedWeeks?.length ? await weekRaces(linkedWeeks).catch(() => []) : []
+    const linkedScores = linkedRaces.length
+      ? await weekScores(linkedRaces, { userId, cols: ['race_id', 'total_points', 'position_achieved'] }).catch(() => []) : []
+    const linkedPicks = linkedRaces.length
+      ? await weekPicks(linkedRaces, { userId, cols: ['id', 'race_id'] }).catch(() => []) : []
+    const myScoresAll = [...(allMyScores || []), ...linkedScores]
+    const allPicks = [...(ownPicks || []), ...linkedPicks]
+
+    const allTimePoints = myScoresAll.reduce((s, r) => s + (r.total_points || 0), 0)
+    const totalPicks    = allPicks.length
+    const wins          = myScoresAll.filter(s => s.position_achieved === 1).length
+    const places        = myScoresAll.filter(s => s.position_achieved === 2 || s.position_achieved === 3).length
+    const perfectRace   = myScoresAll.some(s => (s.total_points || 0) >= 15)
 
     // Best ever week (all-time, across all seasons)
     const raceIds = [...new Set((allMyScores || []).map(s => s.race_id).filter(Boolean))]
     let bestEverWeek = 0
-    if (raceIds.length) {
-      const { data: raceMappings } = await supabase
-        .from('races').select('id, race_week_id').in('id', raceIds)
+    if (myScoresAll.length) {
+      const { data: raceMappings } = raceIds.length
+        ? await supabase.from('races').select('id, race_week_id').in('id', raceIds)
+        : { data: [] }
       const raceToWeek = {}
       raceMappings?.forEach(r => { raceToWeek[r.id] = r.race_week_id })
+      linkedRaces.forEach(r => { raceToWeek[r.id] = r.race_week_id })
       const weekTotals = {}
-      for (const sc of (allMyScores || [])) {
+      for (const sc of myScoresAll) {
         const wid = raceToWeek[sc.race_id]
         if (wid) weekTotals[wid] = (weekTotals[wid] || 0) + (sc.total_points || 0)
       }
@@ -257,14 +266,11 @@ export default function Profile() {
       let myWeekPts   = 0
 
       if (season && memberIds.length) {
-        const { data: weeks } = await supabase.from('race_weeks').select('id').eq('season_id', season.id)
-        const weekIds = (weeks || []).map(w => w.id)
-        if (weekIds.length) {
-          const { data: races } = await supabase.from('races').select('id').in('race_week_id', weekIds)
-          const raceIds = (races || []).map(r => r.id)
-          if (raceIds.length) {
-            const { data: gScores } = await supabase
-              .from('scores').select('user_id, total_points').in('race_id', raceIds).in('user_id', memberIds)
+        const { data: weeks } = await supabase.from('race_weeks').select('id, festival_day_id').eq('season_id', season.id)
+        if (weeks?.length) {
+          const races = await weekRaces(weeks).catch(() => [])
+          if (races.length) {
+            const gScores = await weekScores(races, { userIds: memberIds, cols: ['user_id', 'race_id', 'total_points'] }).catch(() => [])
             const totals = {}
             for (const s of (gScores || [])) {
               totals[s.user_id] = (totals[s.user_id] || 0) + s.total_points
@@ -273,16 +279,13 @@ export default function Profile() {
             myGroupRank = (ranked.findIndex(([uid]) => uid === userId) + 1) || 1
 
             const { data: latestWeek } = await supabase
-              .from('race_weeks').select('id').eq('season_id', season.id)
+              .from('race_weeks').select('id, festival_day_id').eq('season_id', season.id)
               .order('saturday_date', { ascending: false }).limit(1)
             if (latestWeek?.[0]) {
-              const { data: latestRaces } = await supabase
-                .from('races').select('id').eq('race_week_id', latestWeek[0].id)
-              const latestRaceIds = (latestRaces || []).map(r => r.id)
-              if (latestRaceIds.length) {
-                const { data: wkScores } = await supabase
-                  .from('scores').select('total_points').in('race_id', latestRaceIds).eq('user_id', userId)
-                myWeekPts = (wkScores || []).reduce((s, r) => s + r.total_points, 0)
+              const latestRaces = await weekRaces([latestWeek[0]]).catch(() => [])
+              if (latestRaces.length) {
+                const wkScores = await weekScores(latestRaces, { userId, cols: ['race_id', 'total_points'] }).catch(() => [])
+                myWeekPts = wkScores.reduce((s, r) => s + r.total_points, 0)
               }
             }
           }
