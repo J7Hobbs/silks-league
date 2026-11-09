@@ -80,6 +80,10 @@ export default function Picks() {
   const festReq = useRef(0)
   // Bet type last saved per festival race, to restore if a save fails.
   const festSavedBet = useRef({})
+  // After a save: the row that shows "Saved ✓" for a moment, and the timer that then moves on.
+  const [flash, setFlash] = useState(null)   // { raceId, runnerId }
+  const advance = useRef(null)
+  useEffect(() => () => clearTimeout(advance.current), [])
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 5000)
@@ -271,6 +275,31 @@ export default function Picks() {
     setTimeout(() => setToast(null), 2800)
   }
 
+  // A saved pick: "Saved ✓" on its row for 600ms, then on to the next race with no saved pick (in
+  // race order, wrapping round to earlier races). Stays put when every race has a pick.
+  function confirmAndMove(raceId, runnerId, raceList, picksNow, runnersMap, setIdx) {
+    clearTimeout(advance.current)
+    setFlash({ raceId, runnerId })
+    advance.current = setTimeout(() => {
+      setFlash(null)
+      const from = raceList.findIndex(r => r.id === raceId)
+      for (let k = 1; k < raceList.length; k++) {
+        const j = (from + k) % raceList.length
+        if (!hasLivePick(picksNow[raceList[j].id], runnersMap[raceList[j].id] || [])) {
+          setIdx(j)
+          window.scrollTo({ top: 0 })
+          return
+        }
+      }
+    }, 600)
+  }
+
+  // Anything the player does by hand in the meantime cancels the automatic move.
+  function cancelAdvance() {
+    clearTimeout(advance.current)
+    setFlash(null)
+  }
+
   function closePanel(raceId) {
     setOpenRunner(prev => ({ ...prev, [raceId]: null }))
   }
@@ -307,9 +336,10 @@ export default function Picks() {
     setSaving(null)
     if (error) { showToast('Failed to save — ' + error.message, 'error'); return }
     setUserPicks(prev => ({ ...prev, [raceId]: { ...(existing || {}), user_id: user.id, race_id: raceId, runner_id: runnerId, bet_type: effectiveBetType } }))
-    showToast(existing ? 'Pick updated!' : 'Pick saved!')
     closePanel(raceId)
     window.dispatchEvent(new Event(PICKS_CHANGED))
+    const picksNow = { ...Object.fromEntries(Object.entries(userPicks).map(([id, p]) => [id, p.runner_id])), [raceId]: runnerId }
+    confirmAndMove(raceId, runnerId, races, picksNow, runners, setWeekIdx)
   }
 
   function handleFestSelect(raceId, runnerId) {
@@ -348,12 +378,11 @@ export default function Picks() {
       closePanel(raceId)
       return
     }
-    const wasAlreadyPicked = !!festPicks[raceId]
     setFestPicks(prev => ({ ...prev, [raceId]: runnerId }))
     setFestBetType(prev => ({ ...prev, [raceId]: effectiveBetType }))
     festSavedBet.current = { ...festSavedBet.current, [raceId]: effectiveBetType }
-    showToast(wasAlreadyPicked ? 'Pick updated!' : 'Pick saved!')
     closePanel(raceId)
+    confirmAndMove(raceId, runnerId, festRaces, { ...festPicks, [raceId]: runnerId }, festRunners, setFestIdx)
   }
 
   async function handleJoin(activeFest) {
@@ -392,11 +421,13 @@ export default function Picks() {
   const dayChoices = festDays.filter(d => openDayIds.includes(d.id))
 
   function pickCompetition(item) {
+    cancelAdvance()
     if (item.key === 'saturday') setCompetition('saturday')
     else setCompetition('festival', item.key)
   }
 
   function tapRunner(raceId, runnerId) {
+    cancelAdvance()
     if (view.sel[raceId] !== runnerId) (isFest ? handleFestSelect : handleSelect)(raceId, runnerId)
     setOpenRunner(prev => ({ ...prev, [raceId]: prev[raceId] === runnerId ? null : runnerId }))
   }
@@ -409,8 +440,12 @@ export default function Picks() {
   const pickedId = race ? view.picks[race.id] : undefined
   const pickedRunner = raceRunners.find(r => r.id === pickedId)
   const canTap = view.joined && !view.locked
+  // Every race has a live pick (one on a withdrawn runner doesn't count, as on the race chips).
+  const allPicked = canTap && view.races.length > 0 && view.races.every(r => hasLivePick(view.picks[r.id], view.runners[r.id] || []))
+  const lockUntil = lockText ? lockText.replace(/^Locks /, '') : ''
 
   function nextRace() {
+    cancelAdvance()
     if (isLastRace) { navigate('/dashboard'); return }
     view.setIdx(idx + 1)
     window.scrollTo({ top: 0 })
@@ -461,7 +496,7 @@ export default function Picks() {
         )}
 
         {isFest && dayChoices.length > 1 && (
-          <DaySwitch days={dayChoices} activeId={festDay?.id} onSelect={handleFestDaySwitch} />
+          <DaySwitch days={dayChoices} activeId={festDay?.id} onSelect={id => { cancelAdvance(); handleFestDaySwitch(id) }} />
         )}
 
         {isFest && festLoading && <RunnerRowsSkeleton />}
@@ -480,7 +515,7 @@ export default function Picks() {
               races={view.races}
               activeIndex={idx}
               picked={id => hasLivePick(view.picks[id], view.runners[id] || [])}
-              onSelect={view.setIdx}
+              onSelect={i => { cancelAdvance(); view.setIdx(i) }}
             />
 
             <RaceHeader race={race} runnerCount={nonWithdrawn} />
@@ -495,6 +530,13 @@ export default function Picks() {
               <p className="pk-note">Picks are locked – results will appear in Results</p>
             )}
 
+            {allPicked && (
+              <p className="pk-done" role="status">
+                <span className="pk-done__head">All {view.races.length} {view.races.length === 1 ? 'race' : 'races'} picked ✓</span>
+                {lockUntil && ` · You can change any pick until ${lockUntil}`}
+              </p>
+            )}
+
             <div className="pk-list">
               {sortByPrice(raceRunners).map(runner => {
                 const shown = view.locked ? pickedId : (view.sel[race.id] ?? pickedId)
@@ -504,6 +546,7 @@ export default function Picks() {
                     runner={runner}
                     selected={shown === runner.id}
                     isPick={pickedId === runner.id}
+                    saved={flash?.raceId === race.id && flash.runnerId === runner.id}
                     disabled={!canTap}
                     panel={panelFor(runner)}
                     onTap={() => tapRunner(race.id, runner.id)}

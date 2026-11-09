@@ -4,9 +4,10 @@ import BetPanel from './BetPanel.jsx'
 // One runner. Tapping selects it and expands the bet panel underneath.
 //   selected  highlighted (the runner being picked / the saved pick when locked)
 //   isPick    the saved pick: gold-filled price, gold-bordered row, "Your pick" for screen readers
+//   saved     just saved: "Saved ✓" in gold replaces the form line for a moment
 //   panel     props for BetPanel when the row is expanded, otherwise null
 //   disabled  not tappable (locked, not joined)
-export default function RunnerRow({ runner, selected, isPick, disabled, panel, onTap, onBetType, onSave }) {
+export default function RunnerRow({ runner, selected, isPick, saved = false, disabled, panel, onTap, onBetType, onSave }) {
   const withdrawn = !!runner.is_withdrawn
   const line2 = [
     !withdrawn && runner.form_string ? `Form ${runner.form_string}` : null,
@@ -34,7 +35,9 @@ export default function RunnerRow({ runner, selected, isPick, disabled, panel, o
             {runner.horse_number != null && <span className="pk-runner__num">{runner.horse_number}</span>}
             <span className="pk-runner__name">{runner.horse_name}</span>
           </span>
-          {line2 && <span className="pk-runner__sub">{line2}</span>}
+          {saved
+            ? <span className="pk-runner__saved">Saved ✓</span>
+            : line2 && <span className="pk-runner__sub">{line2}</span>}
         </span>
         <span className="pk-runner__side">
           <span className={priceCls}>{withdrawn ? 'NR' : runner.odds_fractional || 'TBA'}</span>
