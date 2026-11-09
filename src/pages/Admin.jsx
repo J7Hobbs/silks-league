@@ -1776,12 +1776,15 @@ export default function Admin() {
     const scored = await calculateFestivalScoresForRace(race)
     if (!scored.ok) { showToast('error', `Results saved but scores failed: ${scored.msg}`); setLoading(false); return }
     const lockAutoCaptured = !!scored.lockAutoCaptured
-    if (scored.count > 0) await updateFestivalDayPoints(race)
+    // Always: the day's totals (festival_day_points) follow festival_scores, bonuses included.
+    await updateFestivalDayPoints(race)
 
     setFestivalUnlocked(prev => { const s = new Set(prev); s.delete(race.id); return s })
     await loadFestivalResults(race.id)
     setLoading(false)
-    if (lockAutoCaptured) {
+    if (scored.warn) {
+      showToast('error', `Race ${race.race_number} saved — ${scored.warn}`)
+    } else if (lockAutoCaptured) {
       showToast('error', `Race ${race.race_number} saved — runner count for each-way eligibility was auto-captured now (Lock Picks wasn't clicked before the deadline), may not be perfectly deadline-accurate.`)
     } else {
       showToast('success', `Race ${race.race_number} results saved`)

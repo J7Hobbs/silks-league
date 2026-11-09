@@ -5,6 +5,7 @@
 import { supabase } from './supabase'
 import { calcPoints, calcTokenPoints } from './scoring.js'
 import { countNonWithdrawnRunners, lockRaceIfEmpty } from './raceLock.js'
+import { applyDayBonuses, raceDayOf } from './dayBonuses.js'
 
 export { countNonWithdrawnRunners }
 
@@ -17,7 +18,7 @@ async function lockIfNeverLocked(kind, raceId) {
 }
 
 // ── Shared helper: score one race from its results + picks ───
-export async function calculateScoresForRace(raceId, raceNumber) {
+async function scoreWeekRace(raceId, raceNumber) {
   console.log(`[Scores] Starting race ${raceNumber} (${raceId})`)
 
   const lockStep = await lockIfNeverLocked('week', raceId)
@@ -145,10 +146,34 @@ export async function calculateScoresForRace(raceId, raceNumber) {
   return { ok: false, msg: `Insert failed: ${minErr.message} (original: ${insErr.message})` }
 }
 
+// ── Bonuses ──────────────────────────────────────────────────
+// After a race is scored, the race day's bonuses (Banker, Lone winner, Treble) are brought up to date, so
+// the stored total_points always includes them (see dayBonuses.js). A failure here never loses the
+// race's own scores: the result is still ok, with a warning to run Recalculate.
+function withBonuses(scored, bonus) {
+  if (bonus.ok) return { ...scored, bonus }
+  const warn = `Bonuses were not updated: ${bonus.msg}. Run Recalculate to fix it.`
+  return { ...scored, warn: scored.warn ? `${scored.warn} ${warn}` : warn, bonus }
+}
+
+export async function calculateScoresForRace(raceId, raceNumber) {
+  const scored = await scoreWeekRace(raceId, raceNumber)
+  if (!scored.ok) return scored
+  const dayId = await raceDayOf('week', raceId).catch(() => null)
+  return withBonuses(scored, await applyDayBonuses('week', dayId))
+}
+
+export async function calculateFestivalScoresForRace(race) {
+  const scored = await scoreFestivalRace(race)
+  if (!scored.ok) return scored
+  const dayId = race.festival_day_id || await raceDayOf('festival', race.id).catch(() => null)
+  return withBonuses(scored, await applyDayBonuses('festival', dayId))
+}
+
 // ── Festival races ───────────────────────────────────────────
 // Same steps as the Saturday function above, reading festival_results / festival_picks and writing
 // festival_scores. (This is the scoring block that used to sit inside submitFestivalResults.)
-export async function calculateFestivalScoresForRace(race) {
+async function scoreFestivalRace(race) {
   const lockStep = await lockIfNeverLocked('festival', race.id)
   if (lockStep.error) return { ok: false, msg: `Locking the race failed: ${lockStep.error}` }
 
