@@ -7,7 +7,7 @@ import '../../styles/admin-raceday.css'
 //   runners  all of the race's runners (withdrawn ones are filtered out here)
 //   form     { horse1, horse2, horse3, horse4 } by horse name
 //   lockedCount  runner_count_at_lock, when "Lock Picks" has stamped it
-export default function ResultsForm({ runners, form, onChange, onSubmit, onCancel, saving, isEdit, lockedCount, submitLabel }) {
+export default function ResultsForm({ runners, form, onChange, onSubmit, onCancel, saving, isEdit, lockedCount, submitLabel, hideHeadline = false, beforeStatus = null }) {
   const rules = resultsRules(runners)
   const check = validateResults(runners, form)
   const running = (runners || [])
@@ -18,7 +18,7 @@ export default function ResultsForm({ runners, form, onChange, onSubmit, onCance
   return (
     <div className="rd-form">
       <div className="rd-form__head">
-        <div className="rd-form__headline">{resultsHeadline(rules)}</div>
+        {!hideHeadline && <div className="rd-form__headline">{resultsHeadline(rules)}</div>}
         {lockedCount != null && lockedCount !== rules.ran && (
           <div className="rd-form__note">Scoring uses the {lockedCount} runners counted at Lock Picks.</div>
         )}
@@ -54,6 +54,7 @@ export default function ResultsForm({ runners, form, onChange, onSubmit, onCance
         )
       })}
 
+      {beforeStatus}
       <div className={`rd-form__status${check.ok ? ' rd-form__status--ok' : ''}`} role="status">
         {check.ok ? 'Ready to save' : check.message}
       </div>

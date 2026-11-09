@@ -9,6 +9,7 @@ import App            from './App.jsx'
 import Auth           from './pages/Auth.jsx'
 import Dashboard      from './pages/Dashboard.jsx'
 import Admin          from './pages/Admin.jsx'
+import AdminShell     from './pages/admin/AdminShell.jsx'
 import Picks          from './pages/Picks.jsx'
 import League         from './pages/League.jsx'
 import LeagueSaturday from './pages/LeagueSaturday.jsx'
@@ -59,7 +60,8 @@ createRoot(document.getElementById('root')).render(
             <Route path="/festivals" element={<Festivals />} />
             <Route path="/results/festival/:festivalId" element={<Results />} />
           </Route>
-          <Route path="/admin"     element={<Admin />}     />
+          <Route path="/admin"         element={<AdminShell />} />
+          <Route path="/admin/classic" element={<Admin />}      />
           <Route path="/races"     element={<Races />}     />
           <Route path="/profile"   element={<Profile />}   />
           <Route path="/groups"              element={<Groups />}      />
