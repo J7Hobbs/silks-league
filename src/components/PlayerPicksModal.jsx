@@ -23,8 +23,9 @@ import Sheet from './groups/Sheet.jsx'
 import OutcomeBoxes from './results/OutcomeBoxes.jsx'
 import DayTabs from './results/DayTabs.jsx'
 import RaceCard from './results/RaceCard.jsx'
+import BonusSummary from './results/BonusSummary.jsx'
 import { loadWeekPeriod, loadFestivalPeriod, loadWeekStanding, loadFestivalDayStanding } from '../lib/resultsData.js'
-import { buildResultRows, outcomeCounts, shortDate } from '../lib/resultsView.js'
+import { buildResultRows, outcomeCounts, bonusSummary, shortDate } from '../lib/resultsView.js'
 import { ordinal, picksRevealed, weekdayShort } from '../lib/format.js'
 import '../styles/groups.css'
 import '../styles/picks.css'
@@ -108,7 +109,7 @@ export default function PlayerPicksModal({ userId, displayName, seasonPoints, se
       .then(bundle => {
         if (cancelled) return
         const rows = buildResultRows(bundle)
-        setCache(prev => ({ ...prev, [sel.id]: { rows, counts: outcomeCounts(rows), standing: null } }))
+        setCache(prev => ({ ...prev, [sel.id]: { rows, counts: outcomeCounts(rows), bonus: bonusSummary(bundle.bonuses), standing: null } }))
         setFailedId(null)
         // Their position among everyone who picked that day, as on the Results hero. An extra: the
         // points still show if it can't be read.
@@ -184,6 +185,7 @@ export default function PlayerPicksModal({ userId, displayName, seasonPoints, se
             {current.standing && ` · ${ordinal(current.standing.rank)} of ${current.standing.total}`}
           </p>
         )}
+        <BonusSummary bonus={current.bonus} />
         <OutcomeBoxes won={current.counts.won} placed={current.counts.placed} unplaced={current.counts.unplaced} />
         {current.rows.some(r => !r.pending) && <p className="rs-hint">Tap a race to see the full result</p>}
         <div className="rs-list">

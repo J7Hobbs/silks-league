@@ -68,6 +68,15 @@ async function fetchPeriod(guessIds, fetchRaces, fetchRest) {
   return { races, rest: ids.length ? await fetchRest(ids) : null }
 }
 
+// The bonuses a player won on a race day (bonus_awards). An extra: if they can't be read the rest of the
+// page still shows, with the points as stored.
+async function loadBonuses(userId, dayCol, dayId) {
+  try {
+    return must(await supabase.from('bonus_awards')
+      .select('bonus_type, points, race_id, festival_race_id').eq('user_id', userId).eq(dayCol, dayId))
+  } catch { return [] }
+}
+
 // Everything one Saturday race week needs for the signed-in player.
 export async function loadWeekPeriod(userId, period) {
   // A week linked to a festival day is that day: its races, picks and points are the festival's.
@@ -79,20 +88,21 @@ export async function loadWeekPeriod(userId, period) {
       .eq('race_week_id', period.id).order('race_number').then(must),
     ids => Promise.all([
       supabase.from('results').select('race_id, position, horse_name, starting_price_display').in('race_id', ids).then(must),
-      supabase.from('picks').select('race_id, runner_id, bet_type, was_replaced').eq('user_id', userId).in('race_id', ids).then(must),
+      supabase.from('picks').select('race_id, runner_id, bet_type, was_replaced, is_banker').eq('user_id', userId).in('race_id', ids).then(must),
       supabase.from('scores')
         .select('race_id, total_points, position_achieved, bet_type, place_token_points')
         .eq('user_id', userId).in('race_id', ids).then(must),
+      loadBonuses(userId, 'race_week_id', period.id),
     ]),
   )
-  if (!rest) return { races, results: [], picks: [], runners: [], scores: [] }
-  const [results, picks, scores] = rest
+  if (!rest) return { races, results: [], picks: [], runners: [], scores: [], bonuses: [] }
+  const [results, picks, scores, bonuses] = rest
   const runnerIds = [...new Set(picks.map(p => p.runner_id).filter(Boolean))]
   const runners = runnerIds.length
     ? must(await supabase.from('runners')
         .select('id, horse_name, odds_fractional, silk_colour, silk_colour_secondary, silk_pattern, is_withdrawn').in('id', runnerIds))
     : []
-  return { races, results, picks, runners, scores }
+  return { races, results, picks, runners, scores, bonuses }
 }
 
 // The same for one festival day. Rows are mapped to the shape the weekly ones have.
@@ -105,20 +115,24 @@ export async function loadFestivalPeriod(userId, period) {
     ids => Promise.all([
       supabase.from('festival_results').select('festival_race_id, position, horse_name, starting_price_display')
         .in('festival_race_id', ids).then(must),
-      supabase.from('festival_picks').select('festival_race_id, runner_id, bet_type, was_replaced')
+      supabase.from('festival_picks').select('festival_race_id, runner_id, bet_type, was_replaced, is_banker')
         .eq('user_id', userId).in('festival_race_id', ids).then(must),
       supabase.from('festival_scores')
         .select('festival_race_id, total_points, position_achieved, bet_type, place_token_points')
         .eq('user_id', userId).in('festival_race_id', ids).then(must),
+      loadBonuses(userId, 'festival_day_id', period.id),
     ]),
   )
-  if (!rest) return { races, results: [], picks: [], runners: [], scores: [] }
-  const [results, picks, scores] = rest
+  if (!rest) return { races, results: [], picks: [], runners: [], scores: [], bonuses: [] }
+  const [results, picks, scores, bonuses] = rest
   const runnerIds = [...new Set(picks.map(p => p.runner_id).filter(Boolean))]
   const runners = runnerIds.length
     ? must(await supabase.from('festival_runners')
         .select('id, horse_name, odds_fractional, silk_colour, silk_colour_secondary, silk_pattern, is_withdrawn').in('id', runnerIds))
     : []
   const toRace = ({ festival_race_id, ...rest }) => ({ race_id: festival_race_id, ...rest })
-  return { races, results: results.map(toRace), picks: picks.map(toRace), runners, scores: scores.map(toRace) }
+  return {
+    races, results: results.map(toRace), picks: picks.map(toRace), runners, scores: scores.map(toRace),
+    bonuses: bonuses.map(({ festival_race_id, ...b }) => ({ ...b, race_id: festival_race_id })),
+  }
 }

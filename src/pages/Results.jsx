@@ -16,7 +16,7 @@ import {
   loadWeekStanding, loadFestivalDayStanding, loadFestivalOverall,
 } from '../lib/resultsData.js'
 import {
-  buildWeeks, buildFestivals, resolveView, dayTabs, saturdayLabel, buildResultRows, outcomeCounts, shortDate,
+  buildWeeks, buildFestivals, resolveView, dayTabs, saturdayLabel, buildResultRows, outcomeCounts, bonusSummary, shortDate,
 } from '../lib/resultsView.js'
 import { ordinal } from '../lib/format.js'
 import ResultsHero from '../components/results/ResultsHero.jsx'
@@ -110,7 +110,7 @@ function ResultsPage() {
       const counts = outcomeCounts(rows)
       setLoaded(prev => ({
         ...prev,
-        [period.id]: { rows, counts, standing: counts.played ? standing : null, label: festival ? '' : saturdayLabel(bundle.races) },
+        [period.id]: { rows, counts, bonus: bonusSummary(bundle.bonuses), standing: counts.played ? standing : null, label: festival ? '' : saturdayLabel(bundle.races) },
       }))
       setBadId(null)
     }).catch(() => { if (!cancelled) setBadId(period.id) })
@@ -209,6 +209,7 @@ function ResultsPage() {
               points={current.counts.points}
               standing={current.standing}
               line={heroLine}
+              bonus={current.bonus}
             />
 
             <OutcomeBoxes won={current.counts.won} placed={current.counts.placed} unplaced={current.counts.unplaced} />

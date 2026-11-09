@@ -1,6 +1,7 @@
 // Pure helpers for the Results page, kept apart from Supabase so they are easy to test.
 // Points are never worked out here: they are read straight from scores / festival_scores.
 import { getPlaceTerms } from './scoring.js'
+import { BONUS_TYPES } from './bonuses.js'
 import { ordinal, picksRevealed, ukDateStr, daysBetween, weekdayShort, clockText, wednesdayAfter } from './format.js'
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -218,9 +219,37 @@ function zeroNote(betType, position, runnerCount) {
   return ''
 }
 
+// The tags on one race card.
+function raceTags(banker, raceBonuses) {
+  const tags = []
+  if (banker) tags.push({ key: 'banker', text: '★ ×2' })
+  for (const b of raceBonuses) {
+    if (b.bonus_type === BONUS_TYPES.lone) tags.push({ key: 'lone', text: `Lone +${b.points}` })
+    if (b.bonus_type === BONUS_TYPES.treble) tags.push({ key: 'treble', text: `Treble +${b.points}` })
+  }
+  return tags
+}
+
+// The bonuses for the day, for the hero and the player pop-up: { total, tags }. total is the bonus
+// points already inside the day's points ("Includes x bonus pts").
+export function bonusSummary(bonuses) {
+  const sum = { banker: 0, lone: 0, loneN: 0, treble: 0 }
+  for (const b of bonuses || []) {
+    if (b.bonus_type === BONUS_TYPES.banker) sum.banker += b.points
+    else if (b.bonus_type === BONUS_TYPES.lone) { sum.lone += b.points; sum.loneN++ }
+    else if (b.bonus_type === BONUS_TYPES.treble) sum.treble += b.points
+  }
+  const tags = []
+  if (sum.banker) tags.push({ key: 'banker', text: `★ Banker +${sum.banker}` })
+  if (sum.lone) tags.push({ key: 'lone', text: `${sum.loneN > 1 ? `Lone winner ×${sum.loneN}` : 'Lone winner'} +${sum.lone}` })
+  if (sum.treble) tags.push({ key: 'treble', text: `Treble +${sum.treble}` })
+  return { total: sum.banker + sum.lone + sum.treble, tags }
+}
+
 // One entry per race for the Results cards. Inputs are the rows read from Supabase (see
 // resultsData.js). Points and positions are read as stored; nothing is worked out here.
-export function buildResultRows({ races, results, picks, runners, scores }) {
+export function buildResultRows({ races, results, picks, runners, scores, bonuses }) {
+  const bonusesByRace = byKey(bonuses || [], 'race_id')
   const resultsByRace = byKey(results, 'race_id')
   const pickByRace = Object.fromEntries((picks || []).map(p => [p.race_id, p]))
   const runnerById = Object.fromEntries((runners || []).map(r => [r.id, r]))
@@ -251,9 +280,14 @@ export function buildResultRows({ races, results, picks, runners, scores }) {
     const placing = pick ? placings.find(pl => sameHorse(pl.name, pick.name)) : null
     const position = played ? score?.position_achieved || placing?.position || null : null
     const points = played ? score?.total_points ?? 0 : 0
+    const raceBonuses = played ? (bonusesByRace[race.id] || []) : []
     return {
       id: race.id,
       raceNo: race.race_number,
+      // Bonus tags for the card: "★ ×2" on the banker race, "Lone +25", "Treble +50".
+      banker: !!p?.is_banker,
+      tags: raceTags(!!p?.is_banker, raceBonuses),
+      bonusPoints: raceBonuses.reduce((n, b) => n + (b.points || 0), 0),
       time: clockText(race.race_time),
       pending,
       placings: placings.map(pl => ({ ...pl, mine: !!pick && sameHorse(pl.name, pick.name) })),

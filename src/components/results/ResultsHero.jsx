@@ -1,6 +1,7 @@
 import EchoRings from '../home/EchoRings.jsx'
 import fallbackBanner from '../../assets/ebor-banner.jpg'
 import { ordinal } from '../../lib/format.js'
+import BonusSummary from './BonusSummary.jsx'
 
 // Same defaults as the festival card on Home.
 const FALLBACK_POSITION = 'center 80%'
@@ -10,7 +11,8 @@ const DEFAULT_POSITION = 'center 35%'
 // Saturday League sits on the gold ring echo from Home's Saturday card; a festival on its photo.
 //   festival  { banner: { url, position } } for a festival, otherwise null
 //   standing  { rank, total } or null (hidden when the player didn't play)
-export default function ResultsHero({ festival, label, points, standing, line }) {
+//   bonus     { total, tags } for "Includes x bonus pts" and the bonus tags, or null
+export default function ResultsHero({ festival, label, points, standing, line, bonus }) {
   const banner = festival?.banner
   const hasPhoto = !!banner?.url
   return (
@@ -41,6 +43,7 @@ export default function ResultsHero({ festival, label, points, standing, line })
           </div>
         )}
       </div>
+      <BonusSummary bonus={bonus} className="rs-bonus--hero" />
       {line && <div className="rs-hero__line">{line}</div>}
     </section>
   )

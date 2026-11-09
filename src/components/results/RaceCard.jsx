@@ -23,6 +23,11 @@ export default function RaceCard({ row, open, onToggle, owner = 'your' }) {
       <span className="rs-card__main">
         <span className="rs-card__meta">{`Race ${row.raceNo}${row.time ? ` · ${row.time}` : ''}`}</span>
         <span className={`rs-card__name${pick ? '' : ' rs-card__name--none'}`}>{pick ? pick.name : 'No pick'}</span>
+        {row.tags?.length > 0 && (
+          <span className="rs-card__tags">
+            {row.tags.map(t => <span key={t.key} className={`rs-tag rs-tag--${t.key}`}>{t.text}</span>)}
+          </span>
+        )}
         {pick && (pick.price || BET[pick.betType]) && (
           <span className="rs-card__bet">
             {pick.price && <span className="pk-price rs-price">{pick.price}</span>}
