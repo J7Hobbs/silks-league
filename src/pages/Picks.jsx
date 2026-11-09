@@ -73,6 +73,11 @@ export default function Picks() {
   const [festSaving,       setFestSaving]       = useState(null)
   const [festLoading,      setFestLoading]      = useState(false)
   const [festIdx,          setFestIdx]          = useState(0)
+  // A Saturday linked to a festival day (race_weeks.festival_day_id) has no races of its own: its
+  // picks are the festival day's, shown here under the Saturday League pill. linkedFest is that
+  // festival; satLinkedDays are the ids of the running festival's days that are linked to a Saturday.
+  const [linkedFest,       setLinkedFest]       = useState(null)
+  const [satLinkedDays,    setSatLinkedDays]    = useState([])
 
   // Which runner's bet panel is open, per race.
   const [openRunner, setOpenRunner] = useState({})
@@ -116,14 +121,19 @@ export default function Picks() {
   const selFest = selectedFestival(competition, activeFestivals)
   const selFestId = selFest?.id ?? null
 
+  // The Saturday League week on show, when it is linked to a festival day.
+  const linkedDayId = currentWeek?.festival_day_id || null
+
   useEffect(() => {
-    if (!selFestId || !user) return
+    if (!user) return
+    if (!selFestId && !linkedDayId) return
     setFestEntry(null); setFestDays([]); setOpenDayIds([]); setFestDay(null)
     setFestRaces([]); setFestRunners({}); setFestPicks({}); setFestReplaced({})
     setFestSelected({}); setFestBetType({}); setFestIdx(0)
-    loadFestivalData(activeFestivals.find(f => f.id === selFestId))
+    if (selFestId) loadFestivalData(activeFestivals.find(f => f.id === selFestId))
+    else loadLinkedSaturday(linkedDayId, user)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selFestId, user])
+  }, [selFestId, user, linkedDayId])
 
   // ── Weekly loader ─────────────────────────────────────────────
   async function loadData(u, alongside) {
@@ -200,9 +210,13 @@ export default function Picks() {
 
       if (daysData?.length) {
         // Days that still take picks: deadline not passed and races loaded.
-        const { data: dayRaces } = await supabase
-          .from('festival_races').select('festival_day_id').in('festival_day_id', daysData.map(d => d.id))
+        const dayIds = daysData.map(d => d.id)
+        const [{ data: dayRaces }, { data: linkedWeeks }] = await Promise.all([
+          supabase.from('festival_races').select('festival_day_id').in('festival_day_id', dayIds),
+          supabase.from('race_weeks').select('festival_day_id').in('festival_day_id', dayIds),
+        ])
         if (stale()) return
+        setSatLinkedDays((linkedWeeks || []).map(w => w.festival_day_id))
         const withRaces = new Set((dayRaces || []).map(r => r.festival_day_id))
         const today = localDateStr()
         const nowMs = Date.now()
@@ -213,6 +227,26 @@ export default function Picks() {
         // Races are readable by every signed-in player, so non-members see them too.
         await loadFestDayData(currentDay, u.id, token)
       }
+    } finally {
+      if (!stale()) setFestLoading(false)
+    }
+  }
+
+  // The Saturday League for a week linked to a festival day: that day's races, runners and the
+  // player's picks, loaded into the same state the festival view uses.
+  async function loadLinkedSaturday(dayId, u) {
+    const token = ++festReq.current
+    const stale = () => token !== festReq.current
+    setFestLoading(true)
+    try {
+      const { data: day } = await supabase.from('festival_days').select('*').eq('id', dayId).maybeSingle()
+      if (stale()) return
+      if (!day) return
+      const { data: fest } = await supabase.from('festivals').select('id, name, display_name').eq('id', day.festival_id).maybeSingle()
+      if (stale()) return
+      setLinkedFest(fest || null)
+      setFestDay(day)
+      await loadFestDayData(day, u.id, token)
     } finally {
       if (!stale()) setFestLoading(false)
     }
@@ -382,6 +416,7 @@ export default function Picks() {
     setFestBetType(prev => ({ ...prev, [raceId]: effectiveBetType }))
     festSavedBet.current = { ...festSavedBet.current, [raceId]: effectiveBetType }
     closePanel(raceId)
+    window.dispatchEvent(new Event(PICKS_CHANGED))
     confirmAndMove(raceId, runnerId, festRaces, { ...festPicks, [raceId]: runnerId }, festRunners, setFestIdx)
   }
 
@@ -397,19 +432,26 @@ export default function Picks() {
 
   // ── What's on screen: the Saturday League or the selected festival ──
   const isFest = !!selFest
-  const view = isFest
+  // The Saturday League for a linked week reads and saves through the festival code below.
+  const satLinked = !isFest && !!linkedDayId
+  const usesFest = isFest || satLinked
+  // The festival data for what's on screen is still on its way (the linked day isn't in yet).
+  const festBusy = usesFest && (festLoading || (satLinked && festDay?.id !== linkedDayId))
+  // A day linked to a Saturday takes picks without a separate join: the first pick enters the player.
+  const joinedFest = !!festEntry || (!!festDay && satLinkedDays.includes(festDay.id))
+  const view = usesFest
     ? { races: festRaces, runners: festRunners, picks: festPicks, sel: festSelected, bet: festBetType,
-        saving: festSaving, locked: festDayLocked, joined: !!festEntry, idx: festIdx, setIdx: setFestIdx }
+        saving: festSaving, locked: festDayLocked, joined: satLinked || joinedFest, idx: festIdx, setIdx: setFestIdx }
     : { races, runners, picks: Object.fromEntries(Object.entries(userPicks).map(([id, p]) => [id, p.runner_id])),
         sel: selected, bet: betType, saving, locked: isLocked, joined: true, idx: weekIdx, setIdx: setWeekIdx }
-  const wasReplaced = raceId => (isFest ? festReplaced[raceId] : userPicks[raceId]?.was_replaced)
+  const wasReplaced = raceId => (usesFest ? festReplaced[raceId] : userPicks[raceId]?.was_replaced)
 
-  const noRaces = isFest ? (!festLoading && festRaces.length === 0) : (noWeek || races.length === 0)
-  const lockIso = isFest ? festDay?.picks_deadline : currentWeek?.picks_deadline
+  const noRaces = usesFest ? (!festBusy && festRaces.length === 0) : (noWeek || races.length === 0)
+  const lockIso = usesFest ? festDay?.picks_deadline : currentWeek?.picks_deadline
   const lockText = noRaces ? null : view.locked ? 'Picks locked' : lockLabel(lockIso, now.getTime())
 
   // Under the title: which week or festival day this is. Left out until its data is in.
-  const headLine = noRaces || (isFest && festLoading) ? '' : competitionLine({
+  const headLine = noRaces || festBusy ? '' : competitionLine({
     festival: isFest, week: currentWeek, day: festDay, dayCount: festDays.length,
     races: view.races, festivalVenue: selFest?.venue,
   })
@@ -420,6 +462,11 @@ export default function Picks() {
   ]
   const dayChoices = festDays.filter(d => openDayIds.includes(d.id))
 
+  // One set of picks counts twice: say so, on the Saturday League and on the festival's linked day.
+  const alsoCounts = satLinked
+    ? `These picks also count for the ${linkedFest ? (linkedFest.display_name || linkedFest.name) : 'festival'}`
+    : (isFest && festDay && satLinkedDays.includes(festDay.id) ? 'These picks also count for your Saturday League' : '')
+
   function pickCompetition(item) {
     cancelAdvance()
     if (item.key === 'saturday') setCompetition('saturday')
@@ -428,7 +475,7 @@ export default function Picks() {
 
   function tapRunner(raceId, runnerId) {
     cancelAdvance()
-    if (view.sel[raceId] !== runnerId) (isFest ? handleFestSelect : handleSelect)(raceId, runnerId)
+    if (view.sel[raceId] !== runnerId) (usesFest ? handleFestSelect : handleSelect)(raceId, runnerId)
     setOpenRunner(prev => ({ ...prev, [raceId]: prev[raceId] === runnerId ? null : runnerId }))
   }
 
@@ -499,13 +546,13 @@ export default function Picks() {
           <DaySwitch days={dayChoices} activeId={festDay?.id} onSelect={id => { cancelAdvance(); handleFestDaySwitch(id) }} />
         )}
 
-        {isFest && festLoading && <RunnerRowsSkeleton />}
+        {usesFest && festBusy && <RunnerRowsSkeleton />}
 
-        {isFest && !festLoading && !festEntry && (
+        {isFest && !festBusy && !view.joined && (
           <JoinCard name={selFest.display_name || selFest.name} onJoin={() => handleJoin(selFest)} />
         )}
 
-        {!(isFest && festLoading) && noRaces && (
+        {!festBusy && noRaces && (
           <EmptyState text={isFest ? "Picks open when this festival's races are published." : undefined} />
         )}
 
@@ -519,6 +566,8 @@ export default function Picks() {
             />
 
             <RaceHeader race={race} runnerCount={nonWithdrawn} />
+
+            {alsoCounts && <p className="pk-note">{alsoCounts}</p>}
 
             {wasReplaced(race.id) && (
               <p className="pk-note">Your original pick was withdrawn – replaced with the favourite</p>
@@ -550,8 +599,8 @@ export default function Picks() {
                     disabled={!canTap}
                     panel={panelFor(runner)}
                     onTap={() => tapRunner(race.id, runner.id)}
-                    onBetType={type => (isFest ? handleFestBetTypeChange : handleBetTypeChange)(race.id, type)}
-                    onSave={() => (isFest ? handleFestSavePick : handleSavePick)(race.id)}
+                    onBetType={type => (usesFest ? handleFestBetTypeChange : handleBetTypeChange)(race.id, type)}
+                    onSave={() => (usesFest ? handleFestSavePick : handleSavePick)(race.id)}
                   />
                 )
               })}
