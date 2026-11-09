@@ -3,6 +3,7 @@
 // Nothing here runs until a player taps the button, except reading the status.
 import { OneSignal, oneSignalReady } from './oneSignal'
 import { currentDevice, iosNotInstalled } from './device.js'
+import { supabase } from './supabase'
 
 // iOS only allows push from a site added to the home screen.
 export function needsHomeScreen() {
@@ -56,4 +57,25 @@ export function notifOffer(status, device = currentDevice()) {
   if (iosNotInstalled(device)) return 'home'
   if (!status || !status.supported || status.optedIn) return null
   return status.permission === 'denied' ? 'denied' : 'enable'
+}
+
+// Tells Admin whether this player has notifications on: profiles.notifications_enabled, plus when it last changed.
+// "On" means this device can do push, the browser allows it and the player is opted in. It is written only when the
+// answer differs from the last one written from this browser, so opening the app does not write every time.
+// A player with several devices has whichever device opened the app (or changed the setting) last. Never throws:
+// Admin's bell is an extra, so a failure here must not get in anyone's way.
+export async function syncNotifStatus(userId) {
+  if (!userId) return
+  try {
+    const s = await pushStatus()
+    const enabled = !!(s.supported && s.permission === 'granted' && s.optedIn)
+    const key = `silks-notif-synced:${userId}`
+    let last = null
+    try { last = localStorage.getItem(key) } catch { /* storage blocked: just write */ }
+    if (last === String(enabled)) return
+    const { error } = await supabase.from('profiles')
+      .update({ notifications_enabled: enabled, notifications_updated_at: new Date().toISOString() }).eq('id', userId)
+    if (error) return
+    try { localStorage.setItem(key, String(enabled)) } catch { /* fine */ }
+  } catch { /* leave it for the next open */ }
 }

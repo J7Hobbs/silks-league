@@ -18,7 +18,7 @@ const fail = error => ({ ok: false, error: error?.message || String(error) })
 const must = ({ data, error }) => { if (error) throw error; return data || [] }
 
 // PostgREST returns 1000 rows a call at most, so page through a big read.
-async function pagedRows(table, cols) {
+export async function pagedRows(table, cols) {
   const rows = []
   for (let from = 0; ; from += 1000) {
     const { data, error } = await supabase.from(table).select(cols).order('id').range(from, from + 999)
