@@ -4,7 +4,7 @@ import Sheet from '../../components/groups/Sheet.jsx'
 import WithdrawSheet from '../../components/admin/WithdrawSheet.jsx'
 import ResultSheet from './ResultSheet.jsx'
 import { runnersWithoutPrice, planWithdrawal, withdrawRunnerNow, planReinstate, reinstateRunnerNow } from '../../lib/raceDay.js'
-import { clockText, lockMs, ukClock, weekdayShort, monthAbbr } from '../../lib/format.js'
+import { clockText, lockMs, ukClock, ukDateStr, weekdayShort, monthAbbr } from '../../lib/format.js'
 import {
   loadRaceDays, loadDayDetail, alsoThisWeek, isLocked, isRacingNow, lockCountdown, raceStatus, daySummary,
   totalsMismatches, catchUpLocks, lockPicksNow, sendPicksOpen, saveRunnerPrices,
@@ -92,6 +92,7 @@ export default function Today({ goTab }) {
 
   const locked = isLocked(day, now)
   const racing = isRacingNow(day, now)
+  const earlier = day.date < ukDateStr(now)      // an earlier race day still waiting on results
   const lockAt = lockMs(day.deadline, day.date)
   const lockClock = ukClock(lockAt)
   const lockDay = new Date(lockAt).toISOString().slice(0, 10) === day.date ? '' : `${dateText(day.date)} `
@@ -179,7 +180,7 @@ export default function Today({ goTab }) {
       <section className={`an-card an-day${banner ? ' an-day--photo' : ''}`} aria-label="Race day">
         {banner && <div className="an-day__photo" style={{ backgroundImage: `url("${String(banner).replace(/"/g, '%22')}")`, backgroundPosition: day.festival.banner_position || 'center' }} aria-hidden="true" />}
         <div className="an-day__body">
-          <div className="an-eyebrow">{racing ? 'Racing now' : 'Next race day'} · {dateText(day.date)}</div>
+          <div className="an-eyebrow">{earlier ? 'Results outstanding' : racing ? 'Racing now' : 'Next race day'} · {dateText(day.date)}</div>
           <h2 className="an-day__title">{day.title.replace(' · ', '\u00a0· ')}</h2>
           {day.linkedWeek && <div className="an-day__also">Also Saturday League week {day.linkedWeek.week_number}</div>}
           <div className="an-day__lock">

@@ -58,9 +58,14 @@ export function buildRaceDays({ weeks = [], days = [], festivals = [] }) {
   return out.sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.kind === 'week' ? -1 : 1))
 }
 
-// The next or current race day: the first one dated today or later (UK date).
-export function pickCurrent(raceDays, nowMs = Date.now()) {
+// The race day Today shows. A recent race day (up to a week back) that has races but is still missing
+// results stays on screen, the most recent one first, until every result is in. Then the next race day
+// (dated today or later, UK date) takes over.
+//   raceCounts / resultCounts  { 'week:<id>' | 'festival:<id>': number of races / races with a result }
+export function pickCurrent(raceDays, nowMs = Date.now(), raceCounts = {}, resultCounts = {}) {
   const today = ukDateStr(nowMs)
+  const unfinished = raceDays.filter(d => d.date < today && (raceCounts[d.key] || 0) > 0 && (resultCounts[d.key] || 0) < raceCounts[d.key])
+  if (unfinished.length) return unfinished[unfinished.length - 1]
   return raceDays.find(d => d.date >= today) || null
 }
 
@@ -180,9 +185,9 @@ export function daySummary(scores, awards, usernames = {}) {
 
 const must = ({ data, error }) => { if (error) throw error; return data || [] }
 
-// Race days from yesterday onwards, with what the "Also this week" list needs.
+// Race days from a week ago onwards, with what the "Also this week" list and the unfinished-day check need.
 export async function loadRaceDays(nowMs = Date.now()) {
-  const since = ukDateStr(nowMs - DAY_MS)
+  const since = ukDateStr(nowMs - 7 * DAY_MS)
   const [weeks, days] = await Promise.all([
     supabase.from('race_weeks').select('id, week_number, saturday_date, picks_deadline, picks_open_notified_at, festival_day_id').gte('saturday_date', since).order('saturday_date').then(must),
     supabase.from('festival_days').select('id, festival_id, day_number, race_date, picks_deadline, picks_open_notified_at').gte('race_date', since).order('race_date').then(must),
@@ -196,8 +201,30 @@ export async function loadRaceDays(nowMs = Date.now()) {
   const raceCounts = {}
   weekRaceRows.forEach(r => { raceCounts[`week:${r.race_week_id}`] = (raceCounts[`week:${r.race_week_id}`] || 0) + 1 })
   dayRaceRows.forEach(r => { raceCounts[`festival:${r.festival_day_id}`] = (raceCounts[`festival:${r.festival_day_id}`] || 0) + 1 })
+  // Which of those races already have a result (only races on days before today can be waiting on one).
+  const today = ukDateStr(nowMs)
+  const pastWeek = new Set(weeks.filter(w => w.saturday_date < today && !w.festival_day_id).map(w => w.id))
+  const pastDay = new Set(days.filter(d => d.race_date < today).map(d => d.id))
+  const [weekResults, dayResults] = await Promise.all([
+    weekRaceRows.some(r => pastWeek.has(r.race_week_id)) ? supabase.from('results').select('race_id').in('race_id', weekRaceRows.filter(r => pastWeek.has(r.race_week_id)).map(r => r.id)).then(must) : [],
+    dayRaceRows.some(r => pastDay.has(r.festival_day_id)) ? supabase.from('festival_results').select('festival_race_id').in('festival_race_id', dayRaceRows.filter(r => pastDay.has(r.festival_day_id)).map(r => r.id)).then(must) : [],
+  ])
+  const resultCounts = {}
+  const seen = new Set()
+  weekResults.forEach(r => {
+    if (seen.has(r.race_id)) return
+    seen.add(r.race_id)
+    const race = weekRaceRows.find(x => x.id === r.race_id)
+    if (race) resultCounts[`week:${race.race_week_id}`] = (resultCounts[`week:${race.race_week_id}`] || 0) + 1
+  })
+  dayResults.forEach(r => {
+    if (seen.has(r.festival_race_id)) return
+    seen.add(r.festival_race_id)
+    const race = dayRaceRows.find(x => x.id === r.festival_race_id)
+    if (race) resultCounts[`festival:${race.festival_day_id}`] = (resultCounts[`festival:${race.festival_day_id}`] || 0) + 1
+  })
   const raceDays = buildRaceDays({ weeks, days, festivals })
-  return { raceDays, weeks, days, festivals, raceCounts, current: pickCurrent(raceDays, nowMs) }
+  return { raceDays, weeks, days, festivals, raceCounts, resultCounts, current: pickCurrent(raceDays, nowMs, raceCounts, resultCounts) }
 }
 
 // Everything the card needs for one race day, rows keyed by race_id whatever the table.
