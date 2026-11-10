@@ -165,6 +165,40 @@ export async function logAgent({ actor = 'agent', action, summary, ok = true, de
   }
 }
 
+// ── The "Automatic mode" switch (app_settings.agent_auto_apply) ───────────────
+export const AUTO_KEY = 'agent_auto_apply'
+
+// Is automatic mode on right now? Read on every agent request, so the Admin switch takes effect at once.
+//   row present                  -> its value
+//   row or table missing         -> `fallback` (the AGENT_AUTO_APPLY secret: how it worked before the switch existed)
+//   any other read error         -> OFF, and say so in the log. Never guess "on".
+export async function readAutoApply(fallback = false) {
+  try {
+    const { data, error } = await supabase.from('app_settings').select('value').eq('key', AUTO_KEY).maybeSingle()
+    if (error) {
+      if (error.code === '42P01' || error.code === 'PGRST205') return { on: !!fallback, source: 'secret' }   // table not created yet
+      throw error
+    }
+    if (!data) return { on: !!fallback, source: 'secret' }
+    const v = data.value
+    return { on: v === true || v === 'true', source: 'setting' }
+  } catch (err) {
+    console.error('[agent] could not read the automatic mode setting, treating it as OFF:', err)
+    return { on: false, source: 'error' }
+  }
+}
+
+// Admin turns the switch on or off. Writes the row, then logs it. `by` is the admin's username for the log line.
+export async function writeAutoApply(on, { userId = null, by = 'an admin' } = {}) {
+  const { data, error } = await supabase.from('app_settings')
+    .update({ value: !!on, updated_at: new Date().toISOString(), updated_by: userId })
+    .eq('key', AUTO_KEY).select('key')
+  if (error) return { ok: false, error: error.message }
+  if (!(data || []).length) return { ok: false, error: 'The setting row is missing. Has the app settings migration been run?' }
+  await logAgent({ actor: 'admin', action: on ? 'auto_on' : 'auto_off', summary: `Automatic mode turned ${on ? 'on' : 'off'} by ${by}`, detail: { auto_apply: !!on, user_id: userId } })
+  return { ok: true, on: !!on }
+}
+
 // A push to every admin and nobody else: "Silks League agent: Race 3 result entered". Never throws.
 export async function notifyAdmins(text, { url = `${APP_ORIGIN}/admin` } = {}) {
   try {

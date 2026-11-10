@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 import Sheet from '../../components/groups/Sheet.jsx'
 import WithdrawSheet from '../../components/admin/WithdrawSheet.jsx'
 import ResultSheet from './ResultSheet.jsx'
 import { ConfirmSheet } from './sheets.jsx'
-import { AgentReview, AgentActivity } from './AgentPanel.jsx'
+import { AgentReview, AgentActivity, AutoModeCard } from './AgentPanel.jsx'
 import { runnersWithoutPrice, planWithdrawal, planReinstate } from '../../lib/raceDay.js'
 import { runRunnerAction } from '../../lib/adminRaceDays.js'
 import { clockText, lockMs, ukClock, ukDateStr, weekdayShort, monthAbbr } from '../../lib/format.js'
@@ -84,7 +83,8 @@ export default function Today({ goTab }) {
   if (!day) {
     return (
       <div className="an-stack">
-        <AgentReview version={agentVersion} onApplied={() => { setAgentVersion(v => v + 1); load(true) }} />
+        <AutoModeCard onChanged={() => setAgentVersion(v => v + 1)} />
+      <AgentReview version={agentVersion} onApplied={() => { setAgentVersion(v => v + 1); load(true) }} />
         <div className="an-card an-card--plain an-empty">
           <h2 className="an-h2">Nothing scheduled</h2>
           <p className="an-muted">There is no race day coming up. Create a Saturday week or a festival day to see it here.</p>
@@ -165,6 +165,7 @@ export default function Today({ goTab }) {
   return (
     <div className="an-stack">
       {/* ── What the race-day agent has left for you ── */}
+      <AutoModeCard onChanged={() => setAgentVersion(v => v + 1)} />
       <AgentReview version={agentVersion} onApplied={() => { setAgentVersion(v => v + 1); load(true) }} />
 
       {/* ── The race day ── */}
@@ -185,8 +186,8 @@ export default function Today({ goTab }) {
       {noRaces ? (
         <section className="an-card an-card--plain">
           <h3 className="an-h3">Races not loaded</h3>
-          <p className="an-muted">This race day has no races yet. Loading races is still in the classic Admin until Race days arrives.</p>
-          <Link to="/admin/classic" className="an-btn an-btn--ghost">Open classic Admin</Link>
+          <p className="an-muted">No races yet. The racecard agent will send them the day before, or add them in Race days.</p>
+          <button type="button" className="an-btn an-btn--ghost" onClick={() => goTab('racedays')}>Open Race days</button>
         </section>
       ) : !locked ? (
         <Checklist

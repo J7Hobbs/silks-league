@@ -6,8 +6,9 @@
 // that; `--no-verify-jwt` on the deploy command does the same).
 //
 //   AGENT_SECRET        required. A long random string, set with `supabase secrets set`. Without it every request is refused.
-//   AGENT_AUTO_APPLY    optional. "true" lets the server apply CONFIRMED non-runners, jockey changes and weighed-in results by
-//                       itself. Unset or anything else: nothing is applied automatically and every item waits as a draft.
+// Automatic mode (applying CONFIRMED non-runners, jockey changes and weighed-in results by itself) is the Admin switch on the
+// Today screen: app_settings.agent_auto_apply, read on every request. Off means every item waits as a draft.
+//   AGENT_AUTO_APPLY    optional, and only a fallback: "true" is used ONLY when the app_settings row does not exist.
 //
 // All the work is in ../_shared/agentApi.js (which runs the same scoring / withdrawal / result-saving code as the app) so it
 // can be tested without a server. SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are provided by the Edge runtime.

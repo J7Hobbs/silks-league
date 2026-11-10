@@ -14,7 +14,7 @@ import {
   ACTIONS, validateCalendarRequest, validateOwnerLookup, validateRacecard, validateMorningCheck, validateResultsSubmission, validateBackfill, isSaturday, MAX_WEEK_RACES,
 } from './agentValidate.js'
 import {
-  loadCalendar, resolveDay, loadDayRaces, getOwnerSilks, saveOwnerSilks, findDraftByRun, storeDraft, supersedeOlder, logAgent, notifyAdmins,
+  loadCalendar, resolveDay, loadDayRaces, getOwnerSilks, saveOwnerSilks, findDraftByRun, storeDraft, supersedeOlder, logAgent, notifyAdmins, readAutoApply,
 } from './agentData.js'
 import { processMorningCheck, processResults } from './agentApply.js'
 import { racecardFlags, racecardSummary } from './agentRacecard.js'
@@ -224,7 +224,7 @@ const HANDLERS = {
 
 const MAX_BODY = 2_000_000
 
-// request: { method, providedSecret, bodyText }   config: { secret, autoApply, nowMs }
+// request: { method, providedSecret, bodyText }   config: { secret, autoApply (fallback only), nowMs }
 // Returns { status, body }. The answer to a wrong or missing secret says nothing about why.
 export async function handleAgentRequest({ method, providedSecret, bodyText }, { secret, autoApply = false, nowMs = Date.now() } = {}) {
   if (!secret || secret.length < 16) return { status: 500, body: { ok: false, error: 'AGENT_SECRET is not set on the server (it must be at least 16 characters).' } }
@@ -239,7 +239,9 @@ export async function handleAgentRequest({ method, providedSecret, bodyText }, {
   if (!handler) return { status: 400, body: { ok: false, error: `Unknown action "${body.action ?? ''}". Use one of: ${ACTIONS.join(', ')}.` } }
 
   try {
-    return { status: 200, body: await handler(body, { autoApply, nowMs }) }
+    // The Admin switch decides; the AGENT_AUTO_APPLY secret (config.autoApply) only counts when there is no switch row.
+    const { on } = await readAutoApply(autoApply)
+    return { status: 200, body: await handler(body, { autoApply: on, nowMs }) }
   } catch (err) {
     if (err instanceof HttpError) return { status: err.status, body: { ok: false, error: err.message, ...(err.errors ? { errors: err.errors } : {}) } }
     console.error(`[agent-api] ${body.action} failed:`, err)

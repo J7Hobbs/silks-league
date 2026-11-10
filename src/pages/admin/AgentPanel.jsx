@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { approveDraft, rejectDraft, racecardSummary } from '../../lib/agentRacecard.js'
+import { AUTO_KEY, writeAutoApply } from '../../lib/agentData.js'
 import { ConfirmSheet } from './sheets.jsx'
 import { dateText, plural } from '../../lib/adminFmt.js'
 import { ukDateStr } from '../../lib/format.js'
@@ -14,6 +15,66 @@ const whenText = iso => {
   if (!iso || Number.isNaN(d.getTime())) return ''
   const clock = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London' })
   return ukDateStr(d.getTime()) === ukDateStr(Date.now()) ? clock : `${d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Europe/London' })} ${clock}`
+}
+
+// ── Agent: automatic mode ──────────────────────────────────────────────────
+// The switch behind app_settings.agent_auto_apply. It only changes what happens to NEW submissions: drafts already waiting stay
+// waiting. Turning it on or off asks first, writes the setting and logs it ("Automatic mode turned on by <name>").
+export function AutoModeCard({ onChanged }) {
+  const [on, setOn] = useState(null)                  // null = loading
+  const [problem, setProblem] = useState('')
+  const [ask, setAsk] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let live = true
+    ;(async () => {
+      const { data, error: err } = await supabase.from('app_settings').select('value').eq('key', AUTO_KEY).maybeSingle()
+      if (!live) return
+      if (err) { setProblem(err.message); setOn(false); return }
+      if (!data) { setProblem('The setting is missing. Has the app settings migration been run?'); setOn(false); return }
+      setProblem(''); setOn(data.value === true || data.value === 'true')
+    })()
+    return () => { live = false }
+  }, [])
+
+  async function change() {
+    setBusy(true); setError('')
+    const uid = (await supabase.auth.getUser()).data?.user?.id || null
+    const prof = uid ? (await supabase.from('profiles').select('username').eq('id', uid).maybeSingle()).data : null
+    const r = await writeAutoApply(!on, { userId: uid, by: prof?.username || 'an admin' })
+    setBusy(false)
+    if (!r.ok) { setError(r.error); return }
+    setOn(r.on); setAsk(false); onChanged?.()
+  }
+
+  if (on === null) return null
+  return (
+    <section className="an-card an-card--plain ag-auto" aria-label="Agent: automatic mode">
+      <div className="an-switchrow">
+        <div className="an-switchrow__text">
+          <h3 className="an-h3">Agent: automatic mode</h3>
+          <p className="an-muted">{on
+            ? 'Confirmed non-runners, jockey changes and weighed-in results go live automatically. Anything unclear still waits for you.'
+            : 'Everything the agent finds waits for you to approve.'}</p>
+        </div>
+        <button type="button" role="switch" aria-checked={on} aria-label="Automatic mode" className={`an-switch${on ? ' an-switch--on' : ''}`} onClick={() => { setError(''); setAsk(true) }} disabled={!!problem || busy}>
+          <span className="an-switch__knob" />
+        </button>
+      </div>
+      {problem && <p className="an-muted" role="status">{problem}</p>}
+      {ask && (
+        <ConfirmSheet title={on ? 'Turn automatic mode off?' : 'Turn automatic mode on?'} busy={busy} confirm={on ? 'Turn off' : 'Turn on'} onConfirm={change} onClose={() => setAsk(false)}>
+          {on
+            ? 'From now on everything the agent finds waits for you to approve. Anything it already applied stays as it is.'
+            : 'Confirmed non-runners, jockey changes and weighed-in results the agent finds will go live straight away, with players told as usual. Anything unclear still waits for you.'}
+          {' '}This applies to new submissions only; drafts already waiting stay waiting.
+          {error && <span className="an-rs__error" role="alert"> {error}</span>}
+        </ConfirmSheet>
+      )}
+    </section>
+  )
 }
 
 // ── What the race-day agent has left for you ──────────────────────────────

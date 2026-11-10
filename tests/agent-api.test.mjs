@@ -7,7 +7,7 @@ import { freezeClock } from './helpers/clock.js'
 import { seed } from './scenarios/pipeline.js'
 import { setClient } from '../supabase/functions/_shared/db.js'
 import { handleAgentRequest } from '../supabase/functions/_shared/agentApi.js'
-import { storeDraft } from '../supabase/functions/_shared/agentData.js'
+import { storeDraft, readAutoApply, writeAutoApply } from '../supabase/functions/_shared/agentData.js'
 import { approveRacecard, approveDraft, rejectDraft, replaceRace } from '../supabase/functions/_shared/agentRacecard.js'
 import { loadDay } from '../supabase/functions/_shared/adminRaceDays.js'
 
@@ -204,8 +204,8 @@ test('unconfirmed, single-source, unknown-horse and meeting items are drafts, an
     const why = r.body.needs_review.map(x => x.reasons.join(' | ')).join('\n')
     assert.match(why, /did not mark it confirmed/); assert.match(why, /only 1 source/); assert.match(why, /no runner called Nobody Known/); assert.match(why, /different horses/); assert.match(why, /admin decides/)
     const after = db.snapshot()
-    delete after.agent_drafts; delete after.agent_log
-    const strip = s => { const o = JSON.parse(s); delete o.agent_drafts; delete o.agent_log; return o }
+    delete after.agent_drafts; delete after.agent_log; delete after.app_settings
+    const strip = s => { const o = JSON.parse(s); delete o.agent_drafts; delete o.agent_log; delete o.app_settings; return o }
     assert.deepEqual(after, strip(before), 'no runner, pick or score was touched')
     assert.equal(db.tables.agent_drafts[0].status, 'pending')
   } finally { done() }
@@ -460,4 +460,62 @@ test('editing a draft on the review screen is checked, and flags follow the edit
   // an owner's silks being saved clears the new-owner flag at once
   assert.equal(racecardFlags(payload, { library: {} }).some(f => f.type === 'new_owner' && f.owner_id === '222'), true)
   assert.equal(racecardFlags(payload, { library: { 222: { silk_colour: '#27ae60' }, 111: { silk_colour: '#c0392b' } } }).some(f => f.type === 'new_owner'), false)
+})
+
+// ── The Admin "Automatic mode" switch (app_settings.agent_auto_apply) ──────
+const resultsBody = () => ({ action: 'submit_results', run_id: 'rs-sw', date: '2026-11-14', results: [result()] })
+
+test('the switch row decides: on applies a confirmed result, off makes it a draft, and it beats the secret', async () => {
+  const on = setup({ extra: { app_settings: [{ key: 'agent_auto_apply', value: true }] } })
+  try {
+    const r = await on.call(resultsBody(), { auto: false })           // secret says off, switch says on
+    assert.equal(r.status, 200); assert.equal(r.body.auto_apply, true)
+    assert.equal(r.body.applied.length, 1)
+  } finally { on.done() }
+  const off = setup({ extra: { app_settings: [{ key: 'agent_auto_apply', value: false }] } })
+  try {
+    const r = await off.call(resultsBody(), { auto: true })           // secret says on, switch says off
+    assert.equal(r.body.auto_apply, false)
+    assert.equal(r.body.applied.length, 0); assert.equal(r.body.needs_review.length, 1)
+    assert.equal(r.body.status, 'pending')
+  } finally { off.done() }
+})
+
+test('with no switch row the AGENT_AUTO_APPLY secret is the fallback', async () => {
+  const a = setup()
+  try {
+    assert.equal((await a.call({ action: 'get_calendar' }, { auto: true })).body.auto_apply, true)
+    assert.equal((await a.call({ action: 'get_calendar' }, { auto: false })).body.auto_apply, false)
+  } finally { a.done() }
+})
+
+test('turning it on or off in Admin changes only new submissions and is logged', async () => {
+  const { db, call, done } = setup({ extra: { app_settings: [{ key: 'agent_auto_apply', value: false }] } })
+  try {
+    const held = await call(resultsBody())                           // off: waits as a draft
+    assert.equal(held.body.status, 'pending')
+    assert.deepEqual(await writeAutoApply(true, { userId: 'u-admin', by: 'Jack' }), { ok: true, on: true })
+    assert.equal(db.tables.app_settings[0].value, true); assert.equal(db.tables.app_settings[0].updated_by, 'u-admin')
+    const log = db.tables.agent_log.find(l => l.action === 'auto_on')
+    assert.equal(log.actor, 'admin'); assert.equal(log.summary, 'Automatic mode turned on by Jack')
+    assert.equal(db.tables.agent_drafts.find(d => d.id === held.body.draft_id).status, 'pending')   // the draft already waiting stays waiting
+    const live = await call({ ...resultsBody(), run_id: 'rs-sw-2' })
+    assert.equal(live.body.applied.length, 1)                        // a new one now goes live
+    await writeAutoApply(false, { userId: 'u-admin', by: 'Jack' })
+    assert.equal(db.tables.agent_log.some(l => l.summary === 'Automatic mode turned off by Jack'), true)
+  } finally { done() }
+})
+
+test('the switch row missing is reported to Admin, and an unreadable setting fails safe to OFF', async () => {
+  const { done } = setup()
+  try {
+    const w = await writeAutoApply(true, { userId: 'u-admin', by: 'Jack' })
+    assert.equal(w.ok, false); assert.match(w.error, /migration/)
+    const fail = { from: () => { const q = { select: () => q, eq: () => q, maybeSingle: async () => ({ data: null, error: { code: 'XX000', message: 'boom' } }) }; return q } }
+    setClient(fail)
+    assert.deepEqual(await readAutoApply(true), { on: false, source: 'error' })   // even with the secret on
+    const gone = { from: () => { const q = { select: () => q, eq: () => q, maybeSingle: async () => ({ data: null, error: { code: '42P01', message: 'no table' } }) }; return q } }
+    setClient(gone)
+    assert.deepEqual(await readAutoApply(true), { on: true, source: 'secret' })   // table not created yet: the secret as before
+  } finally { done() }
 })
