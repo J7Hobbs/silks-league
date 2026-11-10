@@ -8,6 +8,7 @@
 //   AGENT_SECRET        required. A long random string, set with `supabase secrets set`. Without it every request is refused.
 // Automatic mode (applying CONFIRMED non-runners, jockey changes and weighed-in results by itself) is the Admin switch on the
 // Today screen: app_settings.agent_auto_apply, read on every request. Off means every item waits as a draft.
+//   ONESIGNAL_REST_API_KEY  required for pushes (already set for send-notification; secrets are shared by every function).
 //   AGENT_AUTO_APPLY    optional, and only a fallback: "true" is used ONLY when the app_settings row does not exist.
 //
 // All the work is in ../_shared/agentApi.js (which runs the same scoring / withdrawal / result-saving code as the app) so it
@@ -16,10 +17,25 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { setClient } from '../_shared/db.js'
 import { handleAgentRequest } from '../_shared/agentApi.js'
+import { logAgent } from '../_shared/agentData.js'
+import { withDirectPush } from '../_shared/sendPush.js'
 
-setClient(createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, {
-  auth: { persistSession: false, autoRefreshToken: false },
-}))
+// Pushes (admin alerts, player result teasers, non-runner notices, end of day ...) go straight to OneSignal with
+// ONESIGNAL_REST_API_KEY, not through the send-notification function: calling one function from another with the service-role
+// key was answered 401. A push that fails is written to agent_log as "Push failed: ..." so it shows in Admin.
+setClient(withDirectPush(
+  createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  }),
+  {
+    restApiKey: Deno.env.get('ONESIGNAL_REST_API_KEY') ?? '',
+    onFail: ({ reason, title, userCount, broadcast }) => logAgent({
+      action: 'push_failed', ok: false,
+      summary: `Push failed: ${reason}${title ? ` (${title})` : ''}`,
+      detail: { title, recipients: broadcast ? 'everyone' : userCount },
+    }),
+  },
+))
 
 const ON = ['1', 'true', 'on', 'yes']
 

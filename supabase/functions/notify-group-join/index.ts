@@ -13,6 +13,7 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { APP_ORIGIN, groupJoined } from '../_shared/notifyCopy.js'
+import { sendPush } from '../_shared/sendPush.js'
 
 const FRESH_MS = 5 * 60 * 1000
 
@@ -58,14 +59,14 @@ Deno.serve(async req => {
     if (!group?.name || !userIds.length) return json({ ok: true, sent: 0 })
 
     const username = profile?.username || profile?.full_name || 'A new player'
-    const res = await fetch(`${supabaseUrl}/functions/v1/send-notification`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${serviceKey}` },
-      body: JSON.stringify({ userIds, ...groupJoined({ username, groupName: group.name }), url: `${APP_ORIGIN}/league` }),
-    })
-    const data = await res.json().catch(() => null)
-    if (!res.ok) {
-      console.error('[notify-group-join] send-notification failed', res.status, data)
+    // Straight to OneSignal (../_shared/sendPush.js), not through send-notification.
+    try {
+      await sendPush(
+        { userIds, ...groupJoined({ username, groupName: group.name }), url: `${APP_ORIGIN}/league` },
+        { restApiKey: Deno.env.get('ONESIGNAL_REST_API_KEY') ?? '' },
+      )
+    } catch (err) {
+      console.error('[notify-group-join] push failed', err)
       return json({ error: 'Could not send the notification' }, 502)
     }
     return json({ ok: true, sent: userIds.length })

@@ -7,7 +7,8 @@ import { freezeClock } from './helpers/clock.js'
 import { seed } from './scenarios/pipeline.js'
 import { setClient } from '../supabase/functions/_shared/db.js'
 import { handleAgentRequest } from '../supabase/functions/_shared/agentApi.js'
-import { storeDraft, readAutoApply, writeAutoApply } from '../supabase/functions/_shared/agentData.js'
+import { storeDraft, readAutoApply, writeAutoApply, logAgent } from '../supabase/functions/_shared/agentData.js'
+import { sendPush, buildNotification, withDirectPush, ONESIGNAL_APP_ID } from '../supabase/functions/_shared/sendPush.js'
 import { approveRacecard, approveDraft, rejectDraft, replaceRace } from '../supabase/functions/_shared/agentRacecard.js'
 import { loadDay } from '../supabase/functions/_shared/adminRaceDays.js'
 
@@ -576,5 +577,79 @@ test('a duplicate racecard sends nothing, and the agent log still has its line',
     await call(card()); await call(card())
     assert.equal(adminPushes(db).length, 1)
     assert.equal(db.tables.agent_log.filter(l => /Racecard received/.test(l.summary)).length, 1)
+  } finally { done() }
+})
+
+// ── Pushes sent straight to OneSignal (not through send-notification) ──────
+const okFetch = () => {
+  const sent = []
+  const fn = async (url, init) => { sent.push({ url, headers: init.headers, body: JSON.parse(init.body) }); return new Response(JSON.stringify({ id: 'os-1', recipients: 2 }), { status: 200 }) }
+  return { fn, sent }
+}
+const onFail = ({ reason, title }) => logAgent({ action: 'push_failed', ok: false, summary: `Push failed: ${reason}${title ? ` (${title})` : ''}` })
+
+test('the OneSignal request is exactly what send-notification builds', () => {
+  assert.deepEqual(buildNotification({ userIds: ['a', 'b'], title: 'T', body: 'B', url: 'https://x/y' }), {
+    app_id: ONESIGNAL_APP_ID, target_channel: 'push', headings: { en: 'T' }, contents: { en: 'B' }, url: 'https://x/y', include_aliases: { external_id: ['a', 'b'] },
+  })
+  assert.deepEqual(buildNotification({ broadcast: true, title: 'T', body: 'B' }), {
+    app_id: ONESIGNAL_APP_ID, target_channel: 'push', headings: { en: 'T' }, contents: { en: 'B' }, included_segments: ['Active Subscriptions'],
+  })
+  assert.throws(() => buildNotification({ title: 'T', body: 'B' }), /userIds array or broadcast/)
+  assert.throws(() => buildNotification({ userIds: ['a'], broadcast: true, title: 'T', body: 'B' }), /not both/)
+  assert.throws(() => buildNotification({ userIds: ['a'], title: 'T' }), /title and body/)
+})
+
+test('sendPush: key in the header, plain reasons when OneSignal or the network fails', async () => {
+  const f = okFetch()
+  const out = await sendPush({ userIds: ['a'], title: 'T', body: 'B' }, { restApiKey: 'KEY', fetchFn: f.fn })
+  assert.deepEqual(out, { ok: true, id: 'os-1', recipients: 2 })
+  assert.equal(f.sent[0].url, 'https://api.onesignal.com/notifications'); assert.equal(f.sent[0].headers.Authorization, 'Key KEY')
+  await assert.rejects(sendPush({ userIds: ['a'], title: 'T', body: 'B' }, { restApiKey: '', fetchFn: f.fn }), /ONESIGNAL_REST_API_KEY is not set/)
+  const denied = async () => new Response(JSON.stringify({ errors: ['Access denied. Please include an Authorization header'] }), { status: 403 })
+  await assert.rejects(sendPush({ userIds: ['a'], title: 'T', body: 'B' }, { restApiKey: 'K', fetchFn: denied }), /OneSignal answered 403: .*Access denied/)
+  const down = async () => { throw new Error('getaddrinfo ENOTFOUND') }
+  await assert.rejects(sendPush({ userIds: ['a'], title: 'T', body: 'B' }, { restApiKey: 'K', fetchFn: down }), /could not reach OneSignal \(getaddrinfo/)
+})
+
+test('agent-api pushes go straight to OneSignal: admin alert, player teasers, end of day. Nothing calls send-notification', async () => {
+  const { db, call, done } = setup()
+  const f = okFetch()
+  const { setClient: set } = await import('../supabase/functions/_shared/db.js')
+  set(withDirectPush(db.client, { restApiKey: 'KEY', fetchFn: f.fn, onFail }))
+  try {
+    await call(card())
+    const r = await call({ action: 'submit_results', run_id: 'dp1', date: '2026-11-14', results: [result()] }, { auto: true })
+    assert.equal(r.status, 200); assert.equal(r.body.applied.length, 1)
+    assert.deepEqual(db.calls.invoked.filter(c => c.name === 'send-notification').map(c => c.body.title), [], 'no call to the send-notification function')
+    const admin = f.sent.find(p => p.body.headings.en === 'Silks League agent' && /Racecard ready/.test(p.body.contents.en))
+    assert.ok(admin, 'the admin alert reached OneSignal')
+    assert.deepEqual(admin.body.include_aliases.external_id, ['u1']); assert.equal(admin.body.url, 'https://silks-league.vercel.app/admin')
+    assert.equal(admin.headers.Authorization, 'Key KEY')
+    const teasers = f.sent.filter(p => p.body.headings.en === "Result's in")
+    assert.equal(teasers.length, 6, 'one result teaser per player who picked, same as before')
+    assert.ok(teasers.every(t => t.body.url === 'https://silks-league.vercel.app/results'))
+    assert.deepEqual(db.tables.agent_log.filter(l => /^Push failed/.test(l.summary)).map(l => l.summary), [], 'no push failures')
+  } finally { done() }
+})
+
+test('a push that fails is logged as "Push failed: ..." and never breaks the request', async () => {
+  const { db, call, done } = setup()
+  const denied = async () => new Response(JSON.stringify({ errors: ['Access denied'] }), { status: 403 })
+  const { setClient: set } = await import('../supabase/functions/_shared/db.js')
+  set(withDirectPush(db.client, { restApiKey: 'KEY', fetchFn: denied, onFail }))
+  try {
+    const r = await call({ action: 'submit_results', run_id: 'dp2', date: '2026-11-14', results: [result()] }, { auto: true })
+    assert.equal(r.status, 200); assert.equal(r.body.applied.length, 1, 'the result still went live')
+    assert.equal(db.tables.results.length, 4)
+    const bad = db.tables.agent_log.filter(l => /^Push failed/.test(l.summary))
+    assert.ok(bad.every(l => l.ok === false))
+    assert.ok(bad.length >= 2, 'the failures are in the log')
+    assert.ok(bad.every(l => /^Push failed: OneSignal answered 403/.test(l.summary)), bad.map(l => l.summary).join('\n'))
+    // no OneSignal key at all: the same, with the reason spelled out
+    const f2 = withDirectPush(db.client, { restApiKey: '', onFail })
+    set(f2)
+    await call(card())
+    assert.ok(db.tables.agent_log.some(l => l.ok === false && /Push failed: ONESIGNAL_REST_API_KEY is not set/.test(l.summary)))
   } finally { done() }
 })

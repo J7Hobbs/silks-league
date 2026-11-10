@@ -1,7 +1,7 @@
 // Supabase Edge Function: picks-deadline-reminder
 //
 // Scheduled with pg_cron every 5 minutes (see supabase/picks_deadline_reminder_cron.sql). Each run looks at every
-// race_week and festival_day whose picks lock soon and sends, through send-notification:
+// race_week and festival_day whose picks lock soon and sends (straight to OneSignal, see ../_shared/sendPush.js):
 //
 //   two_hour   (2h to 1h30 before the lock)   every player who has not picked every race:
 //              "Picks close at <time>. You've still got <n> races to fill[, and no banker set]"
@@ -17,6 +17,7 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { APP_ORIGIN, picksClosing, lastCall, describeDay, lockLabel } from '../_shared/notifyCopy.js'
+import { sendPush } from '../_shared/sendPush.js'
 import { dueKinds, planClosing, planLastCall, bankersApply } from '../_shared/reminderPlan.js'
 
 // deno-lint-ignore no-explicit-any
@@ -25,15 +26,12 @@ type Admin = any
 const json = (data: unknown, status = 200) =>
   new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } })
 
-async function callSendNotification(supabaseUrl: string, serviceKey: string, payload: Record<string, unknown>) {
-  const res = await fetch(`${supabaseUrl}/functions/v1/send-notification`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${serviceKey}` },
-    body: JSON.stringify(payload),
-  })
-  const data = await res.json().catch(() => null)
-  if (!res.ok) throw new Error(`send-notification failed (${res.status}): ${JSON.stringify(data)}`)
-  return data
+// Straight to OneSignal (../_shared/sendPush.js), not through send-notification: one fewer function in the chain, and no
+// dependence on that function accepting this one's service-role key. Throws with the reason if the push fails, so the caller
+// releases its reminder_log claim and the next run retries.
+// deno-lint-ignore no-unused-vars
+async function callSendNotification(_supabaseUrl: string, _serviceKey: string, payload: Record<string, unknown>) {
+  return await sendPush(payload, { restApiKey: Deno.env.get('ONESIGNAL_REST_API_KEY') ?? '' })
 }
 
 // PostgREST returns at most 1000 rows a call, so page through a big read.
