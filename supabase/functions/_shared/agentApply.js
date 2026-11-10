@@ -21,10 +21,11 @@ const nameOf = item => item.horse || `no. ${item.number}`
 const itemKey = item => horseKey(item.horse) || `n${item.number}`
 
 // The reasons an item cannot be applied by the server on its own.
+export const AUTO_OFF_REASON = 'automatic actions are switched off'
 function autoReasons(item, { mode, enabled }) {
   if (mode !== 'auto') return []
   const reasons = []
-  if (!enabled) reasons.push('automatic actions are switched off')
+  if (!enabled) reasons.push(AUTO_OFF_REASON)
   const c = confirmation(item)
   if (!c.ok) reasons.push(c.reason)
   return reasons
@@ -156,7 +157,7 @@ async function resultOutcome(day, ctx, item, opts) {
   }
   const winner = form.horse1 || item.positions.find(p => p.position === 1)?.horse || '?'
   const text = `${label}: ${winner} won`
-  if (reasons.length) return review(base, text, reasons)
+  if (reasons.length) return review({ ...base, winner }, text, reasons)
 
   // From here the item is applied. Late non-runners first, so the field the result is checked against and the picks match.
   try {

@@ -116,6 +116,37 @@ export function raceReplaced({ raceNumber, lockText }) {
 export const AGENT_TITLE = 'Silks League agent'
 export const agentAlert = text => ({ title: AGENT_TITLE, body: text })
 
+// When the agent leaves something for an admin to review: ONE push per submission, never one per item. Each returns the body
+// text; the title is AGENT_TITLE. Tapping the push opens /admin (Today).
+const n = (count, one, many = `${one}s`) => `${count} ${count === 1 ? one : many}`
+
+//   Racecard ready to review — Saturday League · Week 12. 6 races, 3 new owners need silks, 1 runner with no price.
+export function agentRacecardReady({ title, races, newOwners = 0, missingPrices = 0, oddPrices = 0, dayHasRaces = false }) {
+  const bits = []
+  if (newOwners) bits.push(`${n(newOwners, 'new owner')} ${newOwners === 1 ? 'needs' : 'need'} silks`)
+  if (missingPrices) bits.push(`${n(missingPrices, 'runner')} with no price`)
+  if (oddPrices) bits.push(n(oddPrices, 'odd price'))
+  if (dayHasRaces) bits.push('the day already has races')
+  return `Racecard ready to review — ${title}. ${n(races, 'race')}, ${bits.join(', ') || 'no flags'}.`
+}
+
+// items: [{ raceNumber, winner, why }] — `why` is left out when the only reason is that automatic mode is off.
+//   Race 3 result ready to approve — Horse 3-2 (stewards' enquiry).
+//   2 results ready to approve — e.g. Race 3, Horse 3-2 (stewards' enquiry).
+export function agentResultsHeld(items) {
+  const first = items[0]
+  const winner = first.winner ? ` — ${first.winner}` : ''
+  const why = first.why ? ` (${first.why})` : ''
+  if (items.length === 1) return `Race ${first.raceNumber ?? '?'} result ready to approve${winner}${why}.`
+  return `${items.length} results ready to approve — e.g. Race ${first.raceNumber ?? '?'}${first.winner ? `, ${first.winner}` : ''}${why}.`
+}
+
+//   1 item to check — Race 4 non-runner Bluey.
+//   3 items to check — e.g. Race 4 non-runner Bluey.
+export function agentItemsToCheck({ count, example }) {
+  return `${n(count, 'item')} to check — ${count === 1 ? '' : 'e.g. '}${example}.`
+}
+
 // ════════════════════════════════════════════════════════════════════════
 //  Rotation (no wording below this line)
 // ════════════════════════════════════════════════════════════════════════

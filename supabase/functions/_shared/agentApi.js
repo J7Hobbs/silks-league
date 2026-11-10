@@ -13,10 +13,11 @@ import { pagedRows } from './adminRaceDays.js'
 import {
   ACTIONS, validateCalendarRequest, validateOwnerLookup, validateRacecard, validateMorningCheck, validateResultsSubmission, validateBackfill, isSaturday, MAX_WEEK_RACES,
 } from './agentValidate.js'
+import { agentRacecardReady, agentResultsHeld, agentItemsToCheck } from './notifyCopy.js'
 import {
   loadCalendar, resolveDay, loadDayRaces, getOwnerSilks, saveOwnerSilks, findDraftByRun, storeDraft, supersedeOlder, logAgent, notifyAdmins, readAutoApply,
 } from './agentData.js'
-import { processMorningCheck, processResults } from './agentApply.js'
+import { processMorningCheck, processResults, AUTO_OFF_REASON } from './agentApply.js'
 import { racecardFlags, racecardSummary } from './agentRacecard.js'
 
 class HttpError extends Error {
@@ -87,7 +88,10 @@ async function submitRacecard(body) {
   const title = day ? day.title : `Saturday ${v.date}`
   const line = `Racecard received for ${title}: ${plural(summary.races, 'race')}, ${plural(summary.runners, 'runner')}${summary.new_owners ? `, ${plural(summary.new_owners, 'new owner')} need silks` : ''}`
   await logAgent({ action: 'draft_received', summary: line, detail: { summary, flags: flags.map(f => f.message) }, day, date: v.date, draftId: draft.id })
-  await notifyAdmins(`Racecard ready to review: ${title}`)
+  await notifyAdmins(agentRacecardReady({
+    title, races: summary.races, newOwners: summary.new_owners, missingPrices: summary.missing_prices, oddPrices: summary.odd_prices,
+    dayHasRaces: flags.some(f => f.type === 'day_has_races'),
+  }))
   return draftReply(draft, { duplicate: false, race_day: { ...(dayInfo(day) || { key: null, title, kind: 'week', date: v.date }), will_create_week: !day }, summary, flags })
 }
 
@@ -123,9 +127,21 @@ async function submitItems(kind, v, ctx, process) {
   else if (!outcomes.length) await logAgent({ action: 'draft_received', summary: `${KIND_LABEL[kind]} for ${day.title}: nothing to report`, day, draftId: draft.id })
   if (applied.length <= 3) for (const o of applied) await notifyAdmins(o.text)
   else await notifyAdmins(`${applied.length} automatic actions for ${day.title}, e.g. ${applied[0].text}`)
-  if (waiting.length) await notifyAdmins(`${KIND_LABEL[kind]} needs review: ${waiting[0].text}${waiting.length > 1 ? ` (+${waiting.length - 1} more)` : ''}`)
+  if (waiting.length) await notifyAdmins(reviewAlert(kind, waiting))     // one push for the whole submission, nothing at all when nothing is waiting
 
   return draftReply(draft, { duplicate: false, race_day: dayInfo(day), ...reportOf(outcomes, ctx) })
+}
+
+// The one admin push for what a submission left waiting. Results name the winner; the reason is added unless it is only that
+// automatic mode is off. Morning-check items give a count and an example.
+function reviewAlert(kind, waiting) {
+  if (kind === 'results') {
+    return agentResultsHeld(waiting.map(o => ({
+      raceNumber: o.race_number, winner: o.winner,
+      why: (o.reasons || []).filter(r => r !== AUTO_OFF_REASON).join('; '),
+    })))
+  }
+  return agentItemsToCheck({ count: waiting.length, example: waiting[0].text })
 }
 
 function reportOf(outcomes, ctx) {

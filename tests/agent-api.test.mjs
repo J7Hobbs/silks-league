@@ -104,7 +104,8 @@ test('a racecard becomes a pending draft with flags; a retry is not stored twice
     // races are numbered in time order: the 13:30 race is first
     const draft = db.tables.agent_drafts[0]
     assert.equal(draft.payload.races[0].race_time, '13:30')
-    assert.equal(adminPushes(db).length, 1); assert.match(adminPushes(db)[0].body.body, /Racecard ready to review/)
+    assert.equal(adminPushes(db).length, 1); assert.equal(adminPushes(db)[0].body.body, 'Racecard ready to review — Saturday 2026-11-21. 2 races, 1 new owner needs silks, 1 runner with no price, 1 odd price.')
+    assert.equal(adminPushes(db)[0].body.url, 'https://silks-league.vercel.app/admin', 'tapping it opens Today')
     assert.equal(playerPushes(db).length, 0, 'players are never told about a draft')
 
     const again = await call(card())
@@ -263,7 +264,8 @@ test('an enquiry, a dead heat, a provisional result or a wrong horse is a draft 
     assert.match(why, /enquiry/); assert.match(why, /not weighed in/); assert.match(why, /no runner called Not A Horse/); assert.match(why, /dead heat/)
     assert.equal(db.tables.results.length, 0); assert.equal(db.tables.scores.length, 0)
     assert.equal(playerPushes(db).length, 0)
-    assert.ok(adminPushes(db).some(p => /needs review/.test(p.body.body)))
+    assert.equal(adminPushes(db).length, 1, 'one push for the whole submission')
+    assert.match(adminPushes(db)[0].body.body, /^4 results ready to approve — e\.g\. Race 1, A Horse 1 \(stewards' enquiry\)\.$/)
     // duplicate positions without dead_heat are refused outright
     const dup = await call({ action: 'submit_results', run_id: 'r5', date: '2026-11-14', results: [result({ positions: [{ position: 1, horse: 'A Horse 1' }, { position: 1, horse: 'A Horse 2' }] })] }, { auto: true })
     assert.equal(dup.status, 400); assert.match(dup.body.errors[0], /dead_heat/)
@@ -517,5 +519,62 @@ test('the switch row missing is reported to Admin, and an unreadable setting fai
     const gone = { from: () => { const q = { select: () => q, eq: () => q, maybeSingle: async () => ({ data: null, error: { code: '42P01', message: 'no table' } }) }; return q } }
     setClient(gone)
     assert.deepEqual(await readAutoApply(true), { on: true, source: 'secret' })   // table not created yet: the secret as before
+  } finally { done() }
+})
+
+// ── Pushes to admins when something is left waiting ────────────────────────
+const bodies = db => adminPushes(db).map(p => p.body.body)
+
+test('results held only because automatic mode is off: one push naming the winner, no reason added', async () => {
+  const { db, call, done } = setup()
+  try {
+    const r = await call({ action: 'submit_results', run_id: 'p1', date: '2026-11-14', results: [result()] }, { auto: false })
+    assert.equal(r.body.needs_review.length, 1)
+    assert.deepEqual(bodies(db), ['Race 1 result ready to approve — A Horse 1.'])
+    assert.equal(adminPushes(db)[0].body.url, 'https://silks-league.vercel.app/admin')
+    assert.equal(playerPushes(db).length, 0)
+    assert.equal(adminPushes(db)[0].body.userIds.length, 1)                  // admins only (the seed has one)
+    // the same run again: nothing more is sent
+    const again = await call({ action: 'submit_results', run_id: 'p1', date: '2026-11-14', results: [result()] }, { auto: false })
+    assert.equal(again.body.duplicate, true); assert.equal(adminPushes(db).length, 1)
+  } finally { done() }
+})
+
+test('results held for a real reason say why; several held results are one push, not one each', async () => {
+  const { db, call, done } = setup()
+  try {
+    await call({ action: 'submit_results', run_id: 'p2', date: '2026-11-14', results: [result({ enquiry: true })] }, { auto: true })
+    await call({ action: 'submit_results', run_id: 'p3', date: '2026-11-14', results: [result({ confirmed: false })] }, { auto: true })
+    await call({ action: 'submit_results', run_id: 'p4', date: '2026-11-14', results: [result({ race_number: 1, dead_heat: true, positions: [{ position: 1, horse: 'A Horse 1' }, { position: 1, horse: 'A Horse 3' }, { position: 3, horse: 'A Horse 2' }] }), result({ race_number: 2, objection: true, positions: placed('B Horse 1', 'B Horse 2') })] }, { auto: true })
+    const b = bodies(db)
+    assert.equal(b.length, 3, 'one push per submission')
+    assert.equal(b[0], "Race 1 result ready to approve — A Horse 1 (stewards' enquiry).")
+    assert.match(b[1], /^Race 1 result ready to approve — A Horse 1 \(.*confirm/)
+    assert.match(b[2], /^2 results ready to approve — e\.g\. Race 1, A Horse \d \(dead heat/)
+  } finally { done() }
+})
+
+test('morning check items held: one push with a count and an example; nothing to report sends nothing', async () => {
+  const { db, call, done } = setup()
+  try {
+    const one = await call({ action: 'submit_morning_check', run_id: 'p5', date: '2026-11-14', non_runners: [nr()] }, { auto: false })
+    assert.equal(one.body.needs_review.length, 1)
+    const three = await call({ action: 'submit_morning_check', run_id: 'p6', date: '2026-11-14', non_runners: [nr({ horse: 'A Horse 2', race_number: 1 })], jockey_changes: [{ race_number: 1, horse: 'A Horse 3', new_jockey: 'X Rider', confirmed: true, sources: SOURCES }], meeting_issues: [{ venue: 'Cheltenham', type: 'inspection', confirmed: true, sources: SOURCES }] }, { auto: false })
+    assert.equal(three.body.needs_review.length, 3)
+    assert.deepEqual(bodies(db), ['1 item to check — Race 2 non-runner B Horse 3.', '3 items to check — e.g. Race 1 non-runner A Horse 2.'])
+    const sent = adminPushes(db).length
+    const empty = await call({ action: 'submit_morning_check', run_id: 'p7', date: '2026-11-14' }, { auto: true })
+    assert.equal(empty.status, 200); assert.equal(adminPushes(db).length, sent, 'an empty morning check sends nothing')
+    const dup = await call({ action: 'submit_morning_check', run_id: 'p5', date: '2026-11-14', non_runners: [nr()] }, { auto: false })
+    assert.equal(dup.body.duplicate, true); assert.equal(adminPushes(db).length, sent, 'a duplicate sends nothing')
+  } finally { done() }
+})
+
+test('a duplicate racecard sends nothing, and the agent log still has its line', async () => {
+  const { db, call, done } = setup()
+  try {
+    await call(card()); await call(card())
+    assert.equal(adminPushes(db).length, 1)
+    assert.equal(db.tables.agent_log.filter(l => /Racecard received/.test(l.summary)).length, 1)
   } finally { done() }
 })
