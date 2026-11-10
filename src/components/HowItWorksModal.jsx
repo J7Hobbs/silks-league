@@ -15,7 +15,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import Silk from './Silk.jsx'
 import { ordinal } from '../lib/format.js'
-import { calcTokenPoints, placeTapers, placeTermTiers, SCORING_RULES } from '../lib/scoring.js'
+import { calcTokenPoints, placeTapers, placeTermTiers, SCORING_RULES, RULE4_CAP_PENCE, rule4Table, rule4Example } from '../lib/scoring.js'
 import BonusRules from './BonusRules.jsx'
 import '../styles/howitworks.css'
 
@@ -251,12 +251,35 @@ function Body({ section }) {
 
       {sec('bonus', 'Bonus points', <BonusRules />)}
 
-      {sec('nonrunners', 'Non-runners', (
-        <ul className="hw-list">
-          <li>If your horse is withdrawn, your pick switches to the race favourite automatically.</li>
-          <li>The favourite is the horse with the shortest odds still running.</li>
-          <li>You&rsquo;ll see a note on that race on your picks screen, so you know it changed.</li>
-        </ul>
+      {sec('nonrunners', 'Non-runners and Rule 4', (
+        <>
+          <ul className="hw-list">
+            <li>If your horse is withdrawn, your pick switches to the race favourite automatically.</li>
+            <li>The favourite is the horse with the shortest odds still running.</li>
+            <li>You&rsquo;ll see a note on that race on your picks screen, so you know it changed.</li>
+          </ul>
+          <p className="hw-p">
+            If a horse is withdrawn after picks open, everyone who picked it moves to the favourite, and the winnings in that race are reduced, just like a bookmaker&rsquo;s Rule 4.
+            The shorter the withdrawn horse&rsquo;s price, the bigger the reduction: e.g. a {rule4Example.price} withdrawal takes {rule4Example.pence}p off every &pound;1 of winnings.
+            Your stake part is never reduced.
+          </p>
+          <p className="hw-p">If more than one horse is withdrawn, the reductions add up, up to {RULE4_CAP_PENCE}p in total. It applies to every pick in that race, and to Saturday races and festival races alike.</p>
+          <SubSection title="Rule 4 reductions">
+            <table className="hw-table">
+              <thead>
+                <tr><th scope="col">Withdrawn horse&rsquo;s price</th><th scope="col">Off each &pound;1 of winnings</th></tr>
+              </thead>
+              <tbody>
+                {rule4Table().map(r => (
+                  <tr key={r.range}>
+                    <td>{r.range}</td>
+                    <td className="hw-num">{r.pence ? `${r.pence}p` : 'None'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </SubSection>
+        </>
       ))}
 
       {sec('seasons', 'Seasons and groups', (

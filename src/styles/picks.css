@@ -358,3 +358,6 @@
 
 .pk-pill:focus-visible, .pk-chip:focus-visible, .pk-seg__btn:focus-visible, .pk-runner__row:focus-visible,
 .pk-bet__btn:focus-visible, .pk-btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+/* Rule 4: a small note under the race header when a horse was withdrawn after picks opened */
+.pk-race__rule4 { margin-top: 6px; font-size: 12px; line-height: 1.4; color: var(--text-muted); }

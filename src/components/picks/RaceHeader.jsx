@@ -7,7 +7,8 @@ import { getPlaceTerms, placeTermTiers, SCORING_RULES } from '../../lib/scoring.
 const winOnlyPrice = `${+(SCORING_RULES.winOnlyBelowDecimal - 1).toFixed(2)}/1`   // 5.0 decimal -> "4/1"
 const minEachWayField = placeTermTiers().find(t => t.eachWayAvailable)?.from        // smallest field with each-way
 
-export default function RaceHeader({ race, runnerCount }) {
+// `rule4` is the one-line Rule 4 note for the race (lib/scoring.js rule4Line), or '' when nothing applies.
+export default function RaceHeader({ race, runnerCount, rule4 = '' }) {
   const when = [race.race_time, race.venue].filter(Boolean).join(' ')
   const sub = [
     race.distance,
@@ -22,6 +23,7 @@ export default function RaceHeader({ race, runnerCount }) {
       {race.is_abandoned && (
         <div className="pk-race__pills"><span className="pk-pill pk-pill--void">Abandoned</span></div>
       )}
+      {rule4 && !race.is_abandoned && <div className="pk-race__rule4">{rule4}</div>}
       {runnerCount > 0 && !race.is_abandoned && (
         <div className="pk-race__rules">
           <div className="pk-race__pills">

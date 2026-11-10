@@ -28,6 +28,7 @@ export default function RaceCard({ row, open, onToggle, owner = 'your' }) {
             {row.tags.map(t => <span key={t.key} className={`rs-tag rs-tag--${t.key}`}>{t.text}</span>)}
           </span>
         )}
+        {row.rule4Tag && <span className="rs-card__tags"><span className="rs-tag rs-tag--rule4">{row.rule4Tag}</span></span>}
         {pick && (pick.price || BET[pick.betType]) && (
           <span className="rs-card__bet">
             {pick.price && <span className="pk-price rs-price">{pick.price}</span>}
@@ -49,6 +50,7 @@ export default function RaceCard({ row, open, onToggle, owner = 'your' }) {
       </span>
 
       {note && <span className="rs-card__note">{note}</span>}
+      {row.rule4 && <span className="rs-card__note rs-card__rule4">{row.rule4.line}</span>}
     </>
   )
 

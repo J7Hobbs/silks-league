@@ -168,5 +168,7 @@
   display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; line-height: 1.5;
   color: var(--gold); background: rgba(201, 168, 76, 0.14); border: 1px solid rgba(201, 168, 76, 0.45); white-space: nowrap;
 }
+.rs-tag--rule4 { color: var(--muted, #a9b8a4); background: rgba(255, 255, 255, 0.06); border-color: rgba(255, 255, 255, 0.28); font-weight: 600; }
+.rs-card__rule4 { margin-top: 6px; }
 .rs-tag--void { color: var(--muted, #a9b8a4); background: rgba(255, 255, 255, 0.06); border-color: rgba(255, 255, 255, 0.28); }
 .rs-hero--fest .rs-bonus__line, .rs-hero--fest .rs-tag { text-shadow: 0 1px 3px rgba(10, 26, 8, 0.85); }

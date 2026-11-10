@@ -3,6 +3,7 @@
 import { supabase } from './supabase'
 import { weekDayRank, festivalRank, festivalDayRank } from './standings.js'
 import { weekRaces } from './weekSource.js'
+import { rule4Applies, rule4For } from './scoring.js'
 
 const PAGE = 1000
 
@@ -77,6 +78,23 @@ async function loadBonuses(userId, dayCol, dayId) {
   } catch { return [] }
 }
 
+// Rule 4 (see scoring.js) for each race of a day: { [raceId]: { pence, items, missing } }. Read from the stored prices of the
+// runners marked withdrawn, so it always matches what scoring took off. An extra: if it can't be read the page still shows.
+async function loadRule4ByRace(kind, dayId, raceIds) {
+  try {
+    const week = kind === 'week'
+    const day = must(await supabase.from(week ? 'race_weeks' : 'festival_days').select(week ? 'saturday_date' : 'race_date').eq('id', dayId))[0]
+    const date = day && (week ? day.saturday_date : day.race_date)
+    if (!rule4Applies(date) || !raceIds.length) return {}
+    const col = week ? 'race_id' : 'festival_race_id'
+    const rows = must(await supabase.from(week ? 'runners' : 'festival_runners')
+      .select(`${col}, horse_name, odds_fractional, odds_decimal`).in(col, raceIds).eq('is_withdrawn', true))
+    const byRace = {}
+    for (const r of rows) (byRace[r[col]] ||= []).push(r)
+    return Object.fromEntries(Object.entries(byRace).map(([id, withdrawn]) => [id, rule4For({ date, withdrawn })]))
+  } catch { return {} }
+}
+
 // Everything one Saturday race week needs for the signed-in player.
 export async function loadWeekPeriod(userId, period) {
   // A week linked to a festival day is that day: its races, picks and points are the festival's.
@@ -95,14 +113,14 @@ export async function loadWeekPeriod(userId, period) {
       loadBonuses(userId, 'race_week_id', period.id),
     ]),
   )
-  if (!rest) return { races, results: [], picks: [], runners: [], scores: [], bonuses: [] }
+  if (!rest) return { races, results: [], picks: [], runners: [], scores: [], bonuses: [], rule4: {} }
   const [results, picks, scores, bonuses] = rest
   const runnerIds = [...new Set(picks.map(p => p.runner_id).filter(Boolean))]
   const runners = runnerIds.length
     ? must(await supabase.from('runners')
         .select('id, horse_name, odds_fractional, silk_colour, silk_colour_secondary, silk_pattern, is_withdrawn').in('id', runnerIds))
     : []
-  return { races, results, picks, runners, scores, bonuses }
+  return { races, results, picks, runners, scores, bonuses, rule4: await loadRule4ByRace('week', period.id, races.map(r => r.id)) }
 }
 
 // The same for one festival day. Rows are mapped to the shape the weekly ones have.
@@ -123,7 +141,7 @@ export async function loadFestivalPeriod(userId, period) {
       loadBonuses(userId, 'festival_day_id', period.id),
     ]),
   )
-  if (!rest) return { races, results: [], picks: [], runners: [], scores: [], bonuses: [] }
+  if (!rest) return { races, results: [], picks: [], runners: [], scores: [], bonuses: [], rule4: {} }
   const [results, picks, scores, bonuses] = rest
   const runnerIds = [...new Set(picks.map(p => p.runner_id).filter(Boolean))]
   const runners = runnerIds.length
@@ -134,5 +152,6 @@ export async function loadFestivalPeriod(userId, period) {
   return {
     races, results: results.map(toRace), picks: picks.map(toRace), runners, scores: scores.map(toRace),
     bonuses: bonuses.map(({ festival_race_id, ...b }) => ({ ...b, race_id: festival_race_id })),
+    rule4: await loadRule4ByRace('festival', period.id, races.map(r => r.id)),
   }
 }

@@ -84,3 +84,4 @@
 .rd-list strong { color: var(--text); }
 .rd-quote { margin: 0; padding: 10px 12px; border-radius: 12px; background: var(--surface-deep); border: 1px solid var(--border); font-size: 13px; line-height: 1.45; color: var(--text-muted); }
 .rd-blocked { margin: 0; padding: 12px 14px; border-radius: 12px; font-size: 14px; line-height: 1.45; background: rgba(240, 138, 122, 0.1); border: 1px solid rgba(240, 138, 122, 0.4); color: #f08a7a; }
+.rd-list .rd-warn { color: #f08a7a; }

@@ -3,8 +3,8 @@
 // The two kinds of race only differ in table and column names (KINDS), so one set of code does both.
 // Nothing here works out a score: re-scoring goes through raceScoring.js and scoring.js.
 import { supabase } from './db.js'
-import { getPlaceTerms, SCORING_RULES } from './scoring.js'
-import { recalculateRace } from './raceScoring.js'
+import { getPlaceTerms, SCORING_RULES, rule4For } from './scoring.js'
+import { recalculateRace, raceDayDate, loadRule4 } from './raceScoring.js'
 import { lockRaceIfEmpty } from './raceLock.js'
 import { nonRunner, lockLabel } from './notifyCopy.js'
 
@@ -138,8 +138,10 @@ export async function planWithdrawal(kind, runner, race, { lockIso, now = Date.n
     blocked = 'There is no priced runner left to move these picks to. Add prices to the other runners first (or reinstate one).'
   }
   const switchToWin = isShorterThanWinOnly(favourite)
+  // Rule 4: what this withdrawal (with any already withdrawn in the race) takes off every pick's winnings. See scoring.js.
+  const rule4 = rule4For({ date: await raceDayDate(kind, race.id), withdrawn: [...rs.data.filter(r => r.is_withdrawn && r.id !== runner.id), runner] })
   return {
-    runner, race, favourite, picks, hasResults, blocked,
+    runner, race, favourite, picks, hasResults, blocked, rule4,
     switchToWin,
     eachWayCount: switchToWin ? picks.filter(p => p.bet_type === 'each_way').length : 0,
     beforeLock: !lockIso || now < new Date(lockIso).getTime(),
@@ -229,7 +231,11 @@ export async function withdrawRunnerNow(kind, plan, { lockIso, now = Date.now() 
     })
   }
 
-  return { moved, switched, rescored, notified, favourite, lockedNow }
+  // Rule 4 for the race as it now stands (only reported when there is a deduction or a withdrawn horse had no price, so nothing else about the result changes).
+  let rule4 = null
+  try { rule4 = await loadRule4(kind, race.id) } catch { /* the deduction is applied when scoring; this is only for the message */ }
+
+  return { moved, switched, rescored, notified, favourite, lockedNow, ...(rule4?.pence || rule4?.missing?.length ? { rule4 } : {}) }
 }
 
 async function sendNotice(userIds, race, notice) {

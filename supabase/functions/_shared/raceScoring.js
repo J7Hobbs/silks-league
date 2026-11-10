@@ -3,9 +3,9 @@
 // withdrawal after the results are in all use the same code. The formulas themselves are in
 // scoring.js and are not touched here.
 import { supabase } from './db.js'
-import { calcPoints, calcTokenPoints } from './scoring.js'
+import { calcPoints, calcTokenPoints, rule4Applies, rule4For } from './scoring.js'
 import { countNonWithdrawnRunners, lockRaceIfEmpty } from './raceLock.js'
-import { applyDayBonuses, raceDayOf } from './dayBonuses.js'
+import { applyDayBonuses, raceDayOf, DAY } from './dayBonuses.js'
 
 export { countNonWithdrawnRunners }
 
@@ -16,6 +16,35 @@ async function lockIfNeverLocked(kind, raceId) {
   try { return { auto: await lockRaceIfEmpty(kind, raceId) } }
   catch (err) { return { error: err.message || String(err) } }
 }
+
+// ── Rule 4 (see scoring.js) ──────────────────────────────────
+// The deduction for a race: its date, and the runners marked withdrawn. Reads the database, so a failure is returned to the
+// caller (scoring stops with a message) instead of quietly scoring a race without the deduction it is owed.
+// Returns the rule4For() result: { applies, pence, items, missing }.
+const RULE4_RUNNERS = { week: { table: 'runners', col: 'race_id' }, festival: { table: 'festival_runners', col: 'festival_race_id' } }
+// The date of the race day a race is on (null if it cannot be found).
+export async function raceDayDate(kind, raceId) {
+  const c = DAY[kind]
+  const dayId = await raceDayOf(kind, raceId)
+  if (!dayId) return null
+  const { data, error } = await supabase.from(c.days).select(c.dateCol).eq('id', dayId).maybeSingle()
+  if (error) throw new Error(`Could not read the race day date: ${error.message}`)
+  return data?.[c.dateCol] || null
+}
+
+export async function loadRule4(kind, raceId) {
+  const r = RULE4_RUNNERS[kind]
+  const date = await raceDayDate(kind, raceId)
+  if (!rule4Applies(date)) return rule4For({ date, withdrawn: [] })
+  const { data, error } = await supabase.from(r.table).select('horse_name, odds_fractional, odds_decimal').eq(r.col, raceId).eq('is_withdrawn', true)
+  if (error) throw new Error(`Could not read the withdrawn runners: ${error.message}`)
+  return rule4For({ date, withdrawn: data || [] })
+}
+
+// Shown to the admin when a withdrawn horse has no price: nothing can be deducted for it.
+const rule4Warn = r4 => (r4.missing.length
+  ? `Rule 4: ${r4.missing.join(' and ')} ${r4.missing.length === 1 ? 'was' : 'were'} withdrawn with no price, so no deduction was taken for ${r4.missing.length === 1 ? 'it' : 'them'}.`
+  : '')
 
 // ── Shared helper: score one race from its results + picks ───
 async function scoreWeekRace(raceId, raceNumber) {
@@ -78,6 +107,10 @@ async function scoreWeekRace(raceId, raceNumber) {
     lockAutoCaptured = true
   }
 
+  // 5b. Rule 4: a horse withdrawn after picks opened reduces the winnings on every pick in this race.
+  let r4
+  try { r4 = await loadRule4('week', raceId) } catch (err) { return { ok: false, msg: err.message } }
+
   // 6. Build score rows — new token formula for picks with bet_type set, legacy formula otherwise
   const scoresToInsert = picks
     .map(pick => {
@@ -89,7 +122,7 @@ async function scoreWeekRace(raceId, raceNumber) {
       if (pick.bet_type) {
         const oddsDecimal = runner?.odds_decimal ?? p?.sp ?? 0
         const { winTokenPoints, placeTokenPoints, totalPoints } = calcTokenPoints({
-          betType: pick.bet_type, position, oddsDecimal, runnerCount: runnerCountAtLock,
+          betType: pick.bet_type, position, oddsDecimal, runnerCount: runnerCountAtLock, rule4Pence: r4.pence,
         })
         return {
           user_id: pick.user_id, race_id: raceId, pick_id: pick.id,
@@ -113,9 +146,9 @@ async function scoreWeekRace(raceId, raceNumber) {
     })
   console.log(`[Scores] Rows to insert for race ${raceNumber}:`, scoresToInsert)
 
-  const lockWarn = lockAutoCaptured
+  const lockWarn = [lockAutoCaptured
     ? `Runner count for each-way eligibility was auto-captured at results-entry time (Lock Picks wasn't clicked before the deadline) — may not be perfectly deadline-accurate.${lockStep.auto?.converted ? ` ${lockStep.auto.converted} each-way pick${lockStep.auto.converted === 1 ? '' : 's'} changed to win.` : ''}`
-    : null
+    : '', rule4Warn(r4)].filter(Boolean).join(' ') || null
 
   // 7. Try full insert first
   const { error: insErr } = await supabase.from('scores').insert(scoresToInsert)
@@ -212,6 +245,10 @@ async function scoreFestivalRace(race) {
     lockAutoCaptured = true
   }
 
+  // Rule 4: a horse withdrawn after picks opened reduces the winnings on every pick in this race.
+  let r4
+  try { r4 = await loadRule4('festival', race.id) } catch (err) { return { ok: false, msg: err.message } }
+
   // Delete old scores first
   await supabase.from('festival_scores').delete().eq('festival_race_id', race.id)
 
@@ -223,7 +260,7 @@ async function scoreFestivalRace(race) {
     if (pick.bet_type) {
       const oddsDecimal = runner?.sp ?? p?.sp ?? 0
       const { winTokenPoints, placeTokenPoints, totalPoints } = calcTokenPoints({
-        betType: pick.bet_type, position, oddsDecimal, runnerCount: runnerCountAtLock,
+        betType: pick.bet_type, position, oddsDecimal, runnerCount: runnerCountAtLock, rule4Pence: r4.pence,
       })
       return {
         festival_race_id: race.id, user_id: pick.user_id,
@@ -241,7 +278,8 @@ async function scoreFestivalRace(race) {
 
   const { error: scoreErr } = await supabase.from('festival_scores').insert(scoreRows)
   if (scoreErr) return { ok: false, msg: `Scores failed: ${scoreErr.message}` }
-  return { ok: true, count: scoreRows.length, lockAutoCaptured, converted: lockStep.auto?.converted || 0 }
+  const noPriceWarn = rule4Warn(r4)
+  return { ok: true, count: scoreRows.length, lockAutoCaptured, converted: lockStep.auto?.converted || 0, ...(noPriceWarn ? { warn: noPriceWarn } : {}) }
 }
 
 // festival_day_points (the leaderboard's numbers) for the day this race is on: each player's total of

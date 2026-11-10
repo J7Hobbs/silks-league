@@ -12,7 +12,7 @@ import { supabase } from '../lib/supabase'
 import { currentUser } from '../lib/session.js'
 import { useCompetition } from '../context/competition.js'
 import { PICKS_CHANGED } from '../lib/navTabs.js'
-import { isWinOnly, canOfferEachWay } from '../lib/scoring.js'
+import { isWinOnly, canOfferEachWay, rule4For, rule4Line } from '../lib/scoring.js'
 import { bonusesApply } from '../lib/bonuses.js'
 import { worthFigures, worthText } from '../lib/bonusView.js'
 import { daysBetween, localDateStr, lockLabel } from '../lib/format.js'
@@ -551,6 +551,8 @@ export default function Picks() {
   // Bonuses: only race days from the bonus start date have a banker. The saved banker is on the pick;
   // bankerDraft is the switch as the player has set it since (saved with the pick).
   const bonusOn = !noRaces && bonusesApply(usesFest ? festDay?.race_date : currentWeek?.saturday_date)
+  // Rule 4: a horse withdrawn after picks opened reduces the winnings on every pick in this race (see lib/scoring.js).
+  const rule4 = race ? rule4For({ date: usesFest ? festDay?.race_date : currentWeek?.saturday_date, withdrawn: raceRunners.filter(r => r.is_withdrawn) }) : null
   const savedBanker = id => (usesFest ? !!festBanker[id] : !!userPicks[id]?.is_banker)
   const bankerFor = id => bankerDraft[id] ?? savedBanker(id)
   const anyBanker = view.races.some(r => savedBanker(r.id))
@@ -584,7 +586,7 @@ export default function Picks() {
       worth: (() => {
         const dbl = bonusOn && bankerFor(race.id)
         const opt = type => {
-          const f = worthFigures({ betType: type, oddsDecimal: runner.odds_decimal, runnerCount: nonWithdrawn, banker: dbl && current === type })
+          const f = worthFigures({ betType: type, oddsDecimal: runner.odds_decimal, runnerCount: nonWithdrawn, banker: dbl && current === type, rule4Pence: rule4?.pence || 0 })
           return f && { type, text: worthText(f), doubled: f.doubled }
         }
         const options = [opt('win'), eachWayOffered ? opt('each_way') : null].filter(Boolean)
@@ -652,7 +654,7 @@ export default function Picks() {
               onSelect={i => { cancelAdvance(); view.setIdx(i) }}
             />
 
-            <RaceHeader race={race} runnerCount={nonWithdrawn} />
+            <RaceHeader race={race} runnerCount={nonWithdrawn} rule4={rule4Line(rule4)} />
 
             {alsoCounts && <p className="pk-note">{alsoCounts}</p>}
 

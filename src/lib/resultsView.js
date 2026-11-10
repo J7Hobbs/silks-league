@@ -1,6 +1,6 @@
 // Pure helpers for the Results page, kept apart from Supabase so they are easy to test.
 // Points are never worked out here: they are read straight from scores / festival_scores.
-import { getPlaceTerms } from './scoring.js'
+import { getPlaceTerms, rule4Line, rule4Tag } from './scoring.js'
 import { BONUS_TYPES } from './bonuses.js'
 import { ordinal, picksRevealed, ukDateStr, daysBetween, weekdayShort, clockText, wednesdayAfter } from './format.js'
 
@@ -248,7 +248,9 @@ export function bonusSummary(bonuses) {
 
 // One entry per race for the Results cards. Inputs are the rows read from Supabase (see
 // resultsData.js). Points and positions are read as stored; nothing is worked out here.
-export function buildResultRows({ races, results, picks, runners, scores, bonuses }) {
+// `rule4` is { [raceId]: rule4For(...) } (resultsData.js): a withdrawn horse's deduction, shown as a line on the race and as a tag
+// next to the points of a pick that was reduced by it. Points themselves are still only read as stored.
+export function buildResultRows({ races, results, picks, runners, scores, bonuses, rule4 }) {
   const bonusesByRace = byKey(bonuses || [], 'race_id')
   const resultsByRace = byKey(results, 'race_id')
   const pickByRace = Object.fromEntries((picks || []).map(p => [p.race_id, p]))
@@ -283,8 +285,13 @@ export function buildResultRows({ races, results, picks, runners, scores, bonuse
     const position = played ? score?.position_achieved || placing?.position || null : null
     const points = played ? score?.total_points ?? 0 : 0
     const raceBonuses = played ? (bonusesByRace[race.id] || []) : []
+    const r4 = rule4?.[race.id]
+    const r4Pence = r4?.pence > 0 ? r4.pence : 0
     return {
       id: race.id,
+      // "Rule 4: 25p — Bluey withdrawn at 3/1" for the race, and "Rule 4 −25p" on a pick whose points it reduced.
+      rule4: r4Pence ? { pence: r4Pence, line: rule4Line(r4) } : null,
+      rule4Tag: r4Pence && played && points > 0 ? rule4Tag(r4Pence) : '',
       raceNo: race.race_number,
       // Bonus tags for the card: "★ ×2" on the banker race, "Lone +25", "Treble +50".
       banker: !!p?.is_banker,
