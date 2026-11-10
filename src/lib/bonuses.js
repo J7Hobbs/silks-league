@@ -97,11 +97,3 @@ export function computeDayBonuses({ races, scores, bankers }) {
   }
   return { awards, bonusByRow }
 }
-
-// The sentence for a bonus a player won, for notifications. `horse` is the horse's name.
-export function bonusMessage(type, { points, horse, raceNumbers } = {}) {
-  if (type === BONUS_TYPES.lone) return `Lone winner! You were the only one on ${horse || 'the winner'}. +${points} bonus`
-  if (type === BONUS_TYPES.treble) return `Treble! Three winners in a row${raceNumbers?.length ? ` (races ${raceNumbers.join(', ')})` : ''}. +${points} bonus`
-  if (type === BONUS_TYPES.banker) return `Your banker came in${horse ? ` with ${horse}` : ''}. +${points} bonus`
-  return `+${points} bonus`
-}

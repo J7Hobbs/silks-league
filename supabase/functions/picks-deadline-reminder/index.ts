@@ -1,21 +1,29 @@
 // Supabase Edge Function: picks-deadline-reminder
 //
-// Scheduled via pg_cron every 15-30 minutes (see deploy notes). Each run
-// checks for any race_week or festival_day whose picks_deadline is ~2
-// hours away, and notifies every user who hasn't completed all their
-// picks for that race day — reusing send-notification rather than
-// talking to OneSignal directly. A row in reminder_log (see
-// supabase/reminder_log_migration.sql) prevents re-notifying on the next
-// scheduled run once a deadline's window has been handled.
+// Scheduled with pg_cron every 5 minutes (see supabase/picks_deadline_reminder_cron.sql). Each run looks at every
+// race_week and festival_day whose picks lock soon and sends, through send-notification:
+//
+//   two_hour   (2h to 1h30 before the lock)   every player who has not picked every race:
+//              "Picks close at <time>. You've still got <n> races to fill[, and no banker set]"
+//   last_call  (30 to 15 minutes before)       only players with NO picks for that race day:
+//              "Picks lock in 30 minutes for <race day>"
+//
+// Each notice goes once per race day: a row in reminder_log (race_week_id / festival_day_id + kind) is claimed BEFORE
+// sending, so two overlapping runs can never both send, and it is removed again if the send fails so the next run retries.
+// The wording is in ../_shared/notifyCopy.js and the who/when rules in ../_shared/reminderPlan.js.
+//
+// SECURITY: deploy this with JWT verification ON (the default) and it also checks, here, that the caller sent the
+// project's service-role key. Nobody else can trigger it.
 
 import { createClient } from 'npm:@supabase/supabase-js@2'
-
-const APP_ORIGIN = 'https://silks-league.vercel.app'
-const WINDOW_MIN_MS = (1 * 60 + 45) * 60 * 1000 // 1h45m from now
-const WINDOW_MAX_MS = (2 * 60 + 15) * 60 * 1000 // 2h15m from now
+import { APP_ORIGIN, picksClosing, lastCall, describeDay, lockLabel } from '../_shared/notifyCopy.js'
+import { dueKinds, planClosing, planLastCall, bankersApply } from '../_shared/reminderPlan.js'
 
 // deno-lint-ignore no-explicit-any
 type Admin = any
+
+const json = (data: unknown, status = 200) =>
+  new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } })
 
 async function callSendNotification(supabaseUrl: string, serviceKey: string, payload: Record<string, unknown>) {
   const res = await fetch(`${supabaseUrl}/functions/v1/send-notification`, {
@@ -28,135 +36,122 @@ async function callSendNotification(supabaseUrl: string, serviceKey: string, pay
   return data
 }
 
-// Handles one race day (a race_week or a festival_day) — finds incomplete
-// users, sends grouped reminders, and logs it as handled either way so
-// this deadline's window is never re-processed.
-async function handleRaceDay(opts: {
-  admin: Admin
-  supabaseUrl: string
-  serviceKey: string
-  racesTable: string   // 'races' | 'festival_races'
-  picksTable: string   // 'picks' | 'festival_picks'
-  raceFk: string       // 'race_id' | 'festival_race_id'
-  parentFk: string     // 'race_week_id' | 'festival_day_id'
-  parentId: string
-  logColumn: 'race_week_id' | 'festival_day_id'
-  url: string
-  contextLabel: string
-}): Promise<number> {
-  const { admin, supabaseUrl, serviceKey, racesTable, picksTable, raceFk, parentFk, parentId, logColumn, url, contextLabel } = opts
-
-  const { data: races } = await admin.from(racesTable).select('id').eq(parentFk, parentId)
-  const raceIds = (races || []).map((r: { id: string }) => r.id)
-  const total = raceIds.length
-
-  let recipientCount = 0
-
-  if (total > 0) {
-    const { data: profiles } = await admin.from('profiles').select('id')
-    const { data: picks } = await admin.from(picksTable).select(`user_id, ${raceFk}`).in(raceFk, raceIds)
-
-    const pickedByUser = new Map<string, Set<string>>()
-    for (const p of (picks || []) as Record<string, unknown>[]) {
-      const uid = p.user_id as string
-      const rid = p[raceFk] as string
-      if (!pickedByUser.has(uid)) pickedByUser.set(uid, new Set())
-      pickedByUser.get(uid)!.add(rid)
-    }
-
-    // Group incomplete users by their picked count, so everyone sharing the
-    // same "X of Y" message goes out in one send-notification call.
-    const groups = new Map<number, string[]>()
-    for (const profile of (profiles || []) as { id: string }[]) {
-      const pickedCount = pickedByUser.get(profile.id)?.size ?? 0
-      if (pickedCount < total) {
-        if (!groups.has(pickedCount)) groups.set(pickedCount, [])
-        groups.get(pickedCount)!.push(profile.id)
-      }
-    }
-
-    for (const [pickedCount, userIds] of groups) {
-      const body = pickedCount === 0
-        ? `Picks close in 2 hours for ${contextLabel} — you haven't picked yet!`
-        : `Picks close in 2 hours for ${contextLabel} — you've picked ${pickedCount} of ${total} races.`
-      await callSendNotification(supabaseUrl, serviceKey, {
-        userIds, title: 'Picks closing soon', body, url,
-      })
-      recipientCount += userIds.length
-    }
+// PostgREST returns at most 1000 rows a call, so page through a big read.
+// deno-lint-ignore no-explicit-any
+async function allRows(build: (from: number, to: number) => any): Promise<any[]> {
+  const out = []
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await build(from, from + 999)
+    if (error) throw new Error(error.message)
+    out.push(...(data || []))
+    if ((data || []).length < 1000) return out
   }
-
-  const { error: logErr } = await admin
-    .from('reminder_log')
-    .insert({ [logColumn]: parentId, recipient_count: recipientCount })
-  if (logErr) throw new Error(`Failed to log reminder for ${parentId}: ${logErr.message}`)
-
-  return recipientCount
 }
 
-Deno.serve(async () => {
+interface DayInfo {
+  kind: 'week' | 'festival'
+  id: string
+  date: string
+  deadline: string
+  festivalName?: string
+  dayNumber?: number
+}
+
+// One race day, one notice kind. Returns how many players were messaged (0 when the notice was skipped).
+async function handleDay(admin: Admin, supabaseUrl: string, serviceKey: string, day: DayInfo, kind: 'two_hour' | 'last_call', nowMs: number): Promise<number> {
+  const isWeek = day.kind === 'week'
+  const c = isWeek
+    ? { races: 'races', picks: 'picks', raceFk: 'race_id', parentFk: 'race_week_id', url: `${APP_ORIGIN}/picks` }
+    : { races: 'festival_races', picks: 'festival_picks', raceFk: 'festival_race_id', parentFk: 'festival_day_id', url: `${APP_ORIGIN}/festival-picks` }
+
+  // Already sent?
+  const { data: already } = await admin.from('reminder_log').select('id').eq(c.parentFk, day.id).eq('kind', kind).maybeSingle()
+  if (already) return 0
+
+  const { data: races, error: rErr } = await admin.from(c.races).select('id').eq(c.parentFk, day.id)
+  if (rErr) throw new Error(`races: ${rErr.message}`)
+  const raceIds = (races || []).map((r: { id: string }) => r.id)
+  if (!raceIds.length) return 0     // nothing loaded yet: no reminder, and no log row, so a late import still gets one
+
+  const playerIds = (await allRows((a, b) => admin.from('profiles').select('id').range(a, b))).map((p: { id: string }) => p.id)
+  const picks = await allRows((a, b) => admin.from(c.picks).select(`user_id, ${c.raceFk}, is_banker`).in(c.raceFk, raceIds).range(a, b))
+    .then(rows => rows.map(r => ({ user_id: r.user_id as string, race_id: r[c.raceFk] as string, is_banker: !!r.is_banker })))
+
+  const dayName = describeDay({ kind: day.kind, festivalName: day.festivalName, dayNumber: day.dayNumber }).name
+  const messages: { userIds: string[]; title: string; body: string }[] = []
+  if (kind === 'two_hour') {
+    const lockTime = lockLabel(day.deadline, nowMs)
+    for (const g of planClosing({ raceIds, picks, playerIds, bankers: bankersApply(day.date) })) {
+      messages.push({ userIds: g.userIds, ...picksClosing({ lockTime, remaining: g.remaining, noBanker: g.noBanker }) })
+    }
+  } else {
+    const userIds = planLastCall({ raceIds, picks, playerIds })
+    if (userIds.length) messages.push({ userIds, ...lastCall({ dayName }) })
+  }
+  const recipients = messages.reduce((n, m) => n + m.userIds.length, 0)
+
+  // Claim the row first. A second run that gets here at the same moment hits the unique index and stops.
+  const claim = await admin.from('reminder_log').insert({ [c.parentFk]: day.id, kind, recipient_count: recipients })
+  if (claim.error) {
+    if (claim.error.code === '23505') return 0
+    throw new Error(`Failed to log ${kind} for ${day.id}: ${claim.error.message}`)
+  }
+  try {
+    for (const m of messages) await callSendNotification(supabaseUrl, serviceKey, { ...m, url: c.url })
+  } catch (err) {
+    await admin.from('reminder_log').delete().eq(c.parentFk, day.id).eq('kind', kind)   // release, so the next run retries
+    throw err
+  }
+  return recipients
+}
+
+Deno.serve(async req => {
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+
+  // Only the scheduler (which sends the service-role key) may run this.
+  if (req.headers.get('Authorization') !== `Bearer ${serviceKey}`) return json({ error: 'Unauthorized' }, 401)
+
   const admin = createClient(supabaseUrl, serviceKey)
-
   const now = Date.now()
-  const windowStart = new Date(now + WINDOW_MIN_MS).toISOString()
-  const windowEnd = new Date(now + WINDOW_MAX_MS).toISOString()
+  // Anything locking in the next 2 hours can have a notice due; dueKinds() decides which.
+  const from = new Date(now).toISOString()
+  const to = new Date(now + 2 * 60 * 60 * 1000).toISOString()
 
-  const summary = { raceWeeksHandled: 0, festivalDaysHandled: 0, totalRecipients: 0, errors: [] as string[] }
+  const summary = { daysHandled: 0, twoHour: 0, lastCall: 0, totalRecipients: 0, errors: [] as string[] }
+  const days: DayInfo[] = []
 
-  const { data: dueWeeks, error: weeksErr } = await admin
-    .from('race_weeks')
-    .select('id, week_number, picks_deadline')
-    .gte('picks_deadline', windowStart)
-    .lte('picks_deadline', windowEnd)
+  const { data: weeks, error: weeksErr } = await admin.from('race_weeks').select('id, saturday_date, picks_deadline').gte('picks_deadline', from).lte('picks_deadline', to)
   if (weeksErr) summary.errors.push(`race_weeks query: ${weeksErr.message}`)
-
-  for (const week of (dueWeeks || []) as { id: string; week_number: number }[]) {
-    const { data: already } = await admin.from('reminder_log').select('id').eq('race_week_id', week.id).maybeSingle()
-    if (already) continue
-    try {
-      const count = await handleRaceDay({
-        admin, supabaseUrl, serviceKey,
-        racesTable: 'races', picksTable: 'picks', raceFk: 'race_id', parentFk: 'race_week_id',
-        parentId: week.id, logColumn: 'race_week_id',
-        url: `${APP_ORIGIN}/picks`,
-        contextLabel: `Week ${week.week_number}`,
-      })
-      summary.raceWeeksHandled++
-      summary.totalRecipients += count
-    } catch (e) {
-      console.error('[picks-deadline-reminder] race_week failed:', week.id, e)
-      summary.errors.push(`race_week ${week.id}: ${e}`)
-    }
+  for (const w of (weeks || []) as { id: string; saturday_date: string; picks_deadline: string }[]) {
+    days.push({ kind: 'week', id: w.id, date: w.saturday_date, deadline: w.picks_deadline })
   }
 
-  const { data: dueDays, error: daysErr } = await admin
-    .from('festival_days')
-    .select('id, label, picks_deadline')
-    .gte('picks_deadline', windowStart)
-    .lte('picks_deadline', windowEnd)
+  const { data: fdays, error: daysErr } = await admin.from('festival_days').select('id, day_number, race_date, picks_deadline, festival_id').gte('picks_deadline', from).lte('picks_deadline', to)
   if (daysErr) summary.errors.push(`festival_days query: ${daysErr.message}`)
+  const fIds = [...new Set((fdays || []).map((d: { festival_id: string }) => d.festival_id))]
+  const { data: fests } = fIds.length ? await admin.from('festivals').select('id, name, display_name').in('id', fIds) : { data: [] }
+  const festName = Object.fromEntries((fests || []).map((f: { id: string; name: string; display_name: string | null }) => [f.id, f.display_name || f.name]))
+  for (const d of (fdays || []) as { id: string; day_number: number; race_date: string; picks_deadline: string; festival_id: string }[]) {
+    days.push({ kind: 'festival', id: d.id, date: d.race_date, deadline: d.picks_deadline, festivalName: festName[d.festival_id], dayNumber: d.day_number })
+  }
 
-  for (const day of (dueDays || []) as { id: string; label: string }[]) {
-    const { data: already } = await admin.from('reminder_log').select('id').eq('festival_day_id', day.id).maybeSingle()
-    if (already) continue
-    try {
-      const count = await handleRaceDay({
-        admin, supabaseUrl, serviceKey,
-        racesTable: 'festival_races', picksTable: 'festival_picks', raceFk: 'festival_race_id', parentFk: 'festival_day_id',
-        parentId: day.id, logColumn: 'festival_day_id',
-        url: `${APP_ORIGIN}/festival-picks`,
-        contextLabel: day.label,
-      })
-      summary.festivalDaysHandled++
-      summary.totalRecipients += count
-    } catch (e) {
-      console.error('[picks-deadline-reminder] festival_day failed:', day.id, e)
-      summary.errors.push(`festival_day ${day.id}: ${e}`)
+  for (const day of days) {
+    for (const kind of dueKinds(day.deadline, now) as ('two_hour' | 'last_call')[]) {
+      try {
+        const n = await handleDay(admin, supabaseUrl, serviceKey, day, kind, now)
+        if (n > 0) {
+          summary.daysHandled++
+          summary.totalRecipients += n
+          if (kind === 'two_hour') summary.twoHour++; else summary.lastCall++
+        }
+      } catch (e) {
+        console.error(`[picks-deadline-reminder] ${kind} failed:`, day.kind, day.id, e)
+        summary.errors.push(`${kind} ${day.kind} ${day.id}: ${e}`)
+      }
     }
   }
 
   console.log('[picks-deadline-reminder] Run complete', summary)
-  return new Response(JSON.stringify(summary), { headers: { 'Content-Type': 'application/json' } })
+  return json(summary)
 })

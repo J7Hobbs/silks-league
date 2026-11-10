@@ -1,15 +1,23 @@
 -- ════════════════════════════════════════════════════════════════
 --  Silks League — Picks Deadline Reminder: Scheduling
---  Run once in the Supabase SQL Editor, AFTER reminder_log_migration.sql
+--  Run in the Supabase SQL Editor, AFTER notifications_migration.sql
+--  (safe to re-run: it replaces the existing job).
 --
---  Schedules picks-deadline-reminder to run every 20 minutes via
---  pg_cron + pg_net (Postgres-native scheduled HTTP calls — no
---  external scheduler needed).
+--  Schedules picks-deadline-reminder to run EVERY 5 MINUTES via pg_cron + pg_net.
+--  Each run sends, once per race day:
+--    - the "Picks closing soon" reminder, from 2 hours before the lock
+--    - the "Last call", from 30 minutes before the lock
+--  Running every 5 minutes (it used to be every 20) is what makes "30 minutes
+--  before" accurate.
 --
---  BEFORE RUNNING: replace YOUR_SERVICE_ROLE_KEY below with the real
---  value from Project Settings → API → service_role key (NOT the anon
---  key). This lets the cron job authenticate to both this function's
---  own JWT check and, internally, to send-notification.
+--  BEFORE RUNNING: replace YOUR_SERVICE_ROLE_KEY below (keep the word Bearer and
+--  the space) with the project's service_role key:
+--    Supabase Dashboard -> project wfytwcwletznzyayjkrv -> Project Settings (cog,
+--    bottom left) -> API Keys -> the "Legacy anon, service_role API keys" tab ->
+--    service_role -> Reveal -> Copy. It is a long string starting "eyJ".
+--  Use that legacy service_role key, not the anon key and not an "sb_secret_" key:
+--  the function checks the key it receives against the one it runs with.
+--  Never share it or commit it to the repo: it can read and change everything.
 -- ════════════════════════════════════════════════════════════════
 
 -- 1. Enable required extensions (safe to re-run if already enabled).
@@ -24,10 +32,10 @@ SELECT cron.unschedule(jobid)
 FROM cron.job
 WHERE jobname = 'picks-deadline-reminder';
 
--- 3. Schedule the run — every 20 minutes, any time of day.
+-- 3. Schedule the run — every 5 minutes, any time of day.
 SELECT cron.schedule(
   'picks-deadline-reminder',
-  '*/20 * * * *',
+  '*/5 * * * *',
   $$
   SELECT net.http_post(
     url     := 'https://wfytwcwletznzyayjkrv.supabase.co/functions/v1/picks-deadline-reminder',

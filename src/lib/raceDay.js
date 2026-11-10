@@ -6,6 +6,7 @@ import { supabase } from './supabase'
 import { getPlaceTerms, SCORING_RULES } from './scoring.js'
 import { recalculateRace } from './raceScoring.js'
 import { lockRaceIfEmpty } from './raceLock.js'
+import { nonRunner, lockLabel } from './notifyCopy.js'
 
 const APP_ORIGIN = 'https://silks-league.vercel.app'
 
@@ -47,12 +48,10 @@ export function lockTimeText(iso) {
   return `${parts.weekday} ${parts.day} ${parts.month}, ${parts.hour}:${parts.minute}`
 }
 
-// The push sent to a player whose pick was a non-runner.
-export function withdrawalNotice({ beforeLock, horse, raceNumber, favourite, lockText }) {
-  const lead = `Your pick ${horse} in Race ${raceNumber} is a non-runner`
-  return beforeLock
-    ? `${lead}. We've moved you to the favourite, ${favourite}. You can change it until ${lockText || 'picks lock'}.`
-    : `${lead}, so you've been moved to the favourite, ${favourite}.`
+// The push sent to a player whose pick was a non-runner (the wording is in notifyCopy.js). `horse` and `favourite` are
+// accepted so callers need not change, but the message no longer names them.
+export function withdrawalNotice({ beforeLock, raceNumber, lockText }) {
+  return nonRunner({ beforeLock, raceNumber, lockText }).body
 }
 
 // What a results form has to ask for. `runners` are all of a race's runners, withdrawn ones included.
@@ -144,7 +143,7 @@ export async function planWithdrawal(kind, runner, race, { lockIso, now = Date.n
     switchToWin,
     eachWayCount: switchToWin ? picks.filter(p => p.bet_type === 'each_way').length : 0,
     beforeLock: !lockIso || now < new Date(lockIso).getTime(),
-    lockText: lockTimeText(lockIso),
+    lockText: lockLabel(lockIso),
   }
 }
 
@@ -226,7 +225,7 @@ export async function withdrawRunnerNow(kind, plan, { lockIso, now = Date.now() 
       horse: runner.horse_name,
       raceNumber: race.race_number,
       favourite: favourite.horse_name,
-      lockText: lockTimeText(lockIso),
+      lockText: lockLabel(lockIso),
     })
   }
 
@@ -238,8 +237,7 @@ async function sendNotice(userIds, race, notice) {
     const { error } = await supabase.functions.invoke('send-notification', {
       body: {
         userIds,
-        title: `Non-runner in Race ${notice.raceNumber}`,
-        body: withdrawalNotice(notice),
+        ...nonRunner(notice),
         url: `${APP_ORIGIN}/picks`,
       },
     })

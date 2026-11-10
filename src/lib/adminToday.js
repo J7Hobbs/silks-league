@@ -11,6 +11,8 @@ import { parseOdds } from './raceImport.js'
 import { calculateScoresForRace, calculateFestivalScoresForRace, updateFestivalDayPoints } from './raceScoring.js'
 import { lockRaces } from './raceLock.js'
 import { syncWeekStatusForRace } from './weekStatus.js'
+import { sendResultTeasers, sendEndOfDay } from './notifyPlayers.js'
+import { picksOpen, describeDay } from './notifyCopy.js'
 
 const APP_ORIGIN = 'https://silks-league.vercel.app'
 const DAY_MS = 86400000
@@ -297,28 +299,27 @@ export async function saveRaceResult(kind, race, runners, rows, { festivalId = n
   if (!scored.ok) return { ok: false, msg: `Results saved but scores failed: ${scored.msg}` }
   await syncWeekStatusForRace(kind, race)
 
-  const label = race.venue ? `Race ${race.race_number} at ${race.venue}` : `Race ${race.race_number}`
-  const url = kind === 'festival' && festivalId ? `${APP_ORIGIN}/results/festival/${festivalId}` : `${APP_ORIGIN}/results`
-  let notified = true
   if (!notify) return { ok: true, warn: scored.warn || '', notified: false, count: scored.count }
-  try {
-    const { error } = await supabase.functions.invoke('send-notification', {
-      body: { broadcast: true, title: 'Results are in!', body: `${label} results are in — see how you did`, url },
-    })
-    if (error) throw error
-  } catch (err) {
-    console.error('[Admin] results notification failed:', err)
-    notified = false
-  }
-  return { ok: true, warn: scored.warn || '', notified, count: scored.count }
+  // Tell only the players who picked in this race (a teaser, never the points), then, if that was the day's last race,
+  // everyone who picked that day. Corrections (notify false) never message anyone.
+  const teaser = await sendResultTeasers(kind, race, { festivalId })
+  const dayId = race[DAY[kind].raceDayCol] || await dayOfRace(kind, race.id)
+  const wrap = await sendEndOfDay(kind, dayId, { festivalId })
+  return { ok: true, warn: scored.warn || '', notified: teaser.ok && wrap.ok, count: scored.count }
+}
+
+// The race day a race belongs to (when the race object in hand does not say).
+async function dayOfRace(kind, raceId) {
+  const c = DAY[kind]
+  return (await supabase.from(c.races).select(c.raceDayCol).eq('id', raceId).maybeSingle()).data?.[c.raceDayCol] ?? null
 }
 
 // The picks-open push, then record when it went. Returns { ok, error? }.
 export async function sendPicksOpen(day) {
-  const label = day.kind === 'week' ? `Saturday's races (Week ${day.weekNumber})` : day.title.replace(' · ', ' — ')
+  const named = describeDay({ kind: day.kind, festivalName: day.festival?.display_name || day.festival?.name, dayNumber: day.dayNumber })
   try {
     const { error } = await supabase.functions.invoke('send-notification', {
-      body: { broadcast: true, title: 'Picks are open!', body: `${label} are live — make your picks`, url: `${APP_ORIGIN}/picks` },
+      body: { broadcast: true, ...picksOpen({ dayName: named.name, plural: named.plural }), url: `${APP_ORIGIN}/picks` },
     })
     if (error) throw error
     const at = new Date().toISOString()

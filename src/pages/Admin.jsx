@@ -69,20 +69,19 @@ import RaceDayChecklist from '../components/admin/RaceDayChecklist.jsx'
 import WithdrawSheet from '../components/admin/WithdrawSheet.jsx'
 import { ukClock, ukWallToMs } from '../lib/format.js'
 import { weekRaces, weekScores, weekPicks } from '../lib/weekSource.js'
+import { sendResultTeasers, sendEndOfDay } from '../lib/notifyPlayers.js'
+import { picksOpen, describeDay } from '../lib/notifyCopy.js'
 
 const APP_ORIGIN = 'https://silks-league.vercel.app'
 
-// Broadcasts a "results are in" push via send-notification. Never blocks or
-// fails the results save it's called from — logs and swallows any error.
-async function notifyResultsIn(body, url) {
-  try {
-    const { error } = await supabase.functions.invoke('send-notification', {
-      body: { broadcast: true, title: 'Results are in!', body, url },
-    })
-    if (error) console.error('[Admin] notifyResultsIn failed:', error)
-  } catch (err) {
-    console.error('[Admin] notifyResultsIn failed:', err)
-  }
+// After a result is saved and scored: a teaser to the players who picked in that race, then the end-of-day message if it
+// was the day's last race. The same messages as the new Admin (wording in notifyCopy.js). Corrections never message
+// anyone. Never throws, so it can never undo a results save.
+async function notifyResultSaved(kind, race, isEdit, festivalId = null) {
+  if (isEdit) return
+  await sendResultTeasers(kind, race, { festivalId })
+  const dayId = kind === 'week' ? race.race_week_id : race.festival_day_id
+  if (dayId) await sendEndOfDay(kind, dayId, { festivalId })
 }
 
 // ── Points calculation ───────────────────────────────────────
@@ -456,15 +455,13 @@ export default function Admin() {
 
     const send = async () => {
       const table = kind === 'week' ? 'race_weeks' : 'festival_days'
-      const label = kind === 'week'
-        ? `Saturday's races (Week ${currentWeek.week_number})`
-        : `${selectedFestival?.display_name || selectedFestival?.name || 'Festival'} — Day ${selectedDay.day_number}`
+      const named = describeDay({ kind, festivalName: selectedFestival?.display_name || selectedFestival?.name, dayNumber: selectedDay?.day_number })
       const url = `${APP_ORIGIN}/picks`
 
       setLoading(true)
       try {
         const { error } = await supabase.functions.invoke('send-notification', {
-          body: { broadcast: true, title: 'Picks are open!', body: `${label} are live — make your picks`, url },
+          body: { broadcast: true, ...picksOpen({ dayName: named.name, plural: named.plural }), url },
         })
         if (error) throw error
         const notifiedAt = new Date().toISOString()
@@ -1299,11 +1296,9 @@ export default function Admin() {
     const { error: resErr } = await supabase.from('results').insert(resultRows)
     if (resErr) { showToast('error', `Save results failed: ${resErr.message}`); setLoading(false); return }
 
-    const raceLabel = race.venue ? `Race ${race.race_number} at ${race.venue}` : `Race ${race.race_number}`
-    notifyResultsIn(`${raceLabel} results are in — see how you did`, `${APP_ORIGIN}/results`)
-
     // ── Step 3: calculate scores ────────────────────────────────
     const result = await calculateScoresForRace(race.id, race.race_number)
+    if (result.ok) notifyResultSaved('week', race, isEdit)
 
     lockResults(race.id)
     await loadResults(race.id)
@@ -1767,15 +1762,11 @@ export default function Admin() {
     const { error: resErr } = await supabase.from('festival_results').insert(festResultRows)
     if (resErr) { showToast('error', `Results save failed: ${resErr.message}`); setLoading(false); return }
 
-    if (selectedFestival) {
-      const raceLabel = race.venue ? `Race ${race.race_number} at ${race.venue}` : `Race ${race.race_number}`
-      notifyResultsIn(`${raceLabel} results are in — see how you did`, `${APP_ORIGIN}/results/festival/${selectedFestival.id}`)
-    }
-
     // Calculate scores for all picks on this race, then the day's festival_day_points
     const scored = await calculateFestivalScoresForRace(race)
     if (!scored.ok) { showToast('error', `Results saved but scores failed: ${scored.msg}`); setLoading(false); return }
     const lockAutoCaptured = !!scored.lockAutoCaptured
+    notifyResultSaved('festival', race, festivalUnlocked.has(race.id), selectedFestival?.id || null)
     // Always: the day's totals (festival_day_points) follow festival_scores, bonuses included.
     await updateFestivalDayPoints(race)
 

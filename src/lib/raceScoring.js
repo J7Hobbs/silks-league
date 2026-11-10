@@ -5,7 +5,7 @@
 import { supabase } from './supabase'
 import { calcPoints, calcTokenPoints } from './scoring.js'
 import { countNonWithdrawnRunners, lockRaceIfEmpty } from './raceLock.js'
-import { applyDayBonuses, notifyNewBonuses, raceDayOf } from './dayBonuses.js'
+import { applyDayBonuses, raceDayOf } from './dayBonuses.js'
 
 export { countNonWithdrawnRunners }
 
@@ -161,7 +161,6 @@ export async function calculateScoresForRace(raceId, raceNumber) {
   if (!scored.ok) return scored
   const dayId = await raceDayOf('week', raceId).catch(() => null)
   const bonus = await applyDayBonuses('week', dayId)
-  if (bonus.ok) await notifyNewBonuses('week', bonus.awards)
   return withBonuses(scored, bonus)
 }
 
@@ -170,7 +169,6 @@ export async function calculateFestivalScoresForRace(race) {
   if (!scored.ok) return scored
   const dayId = race.festival_day_id || await raceDayOf('festival', race.id).catch(() => null)
   const bonus = await applyDayBonuses('festival', dayId)
-  if (bonus.ok) await notifyNewBonuses('festival', bonus.awards)
   return withBonuses(scored, bonus)
 }
 

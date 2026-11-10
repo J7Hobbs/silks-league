@@ -12,6 +12,8 @@ import { buildDayList } from './raceDayList.js'
 import { buildRaceDays, isLocked } from './adminToday.js'
 import { parseOdds } from './raceImport.js'
 import { syncWeekStatus } from './weekStatus.js'
+import { sendEndOfDay } from './notifyPlayers.js'
+import { raceAbandoned, pickNewBanker } from './notifyCopy.js'
 
 const APP_ORIGIN = 'https://silks-league.vercel.app'
 
@@ -440,7 +442,7 @@ async function sendAbandonNotices(race, userIds, bankerUsers, day) {
   const push = body => supabase.functions.invoke('send-notification', { body }).then(r => { if (r.error) throw r.error })
   let failed = ''
   try {
-    await push({ userIds, title: 'Race abandoned', body: `${label} has been abandoned, so it scores 0 for everyone`, url })
+    await push({ userIds, ...raceAbandoned({ raceLabel: label }), url })
   } catch (err) {
     console.error('[Admin] abandon notification failed:', err)
     failed = 'The abandoned-race notification could not be sent.'
@@ -448,7 +450,7 @@ async function sendAbandonNotices(race, userIds, bankerUsers, day) {
   if (bankerUsers.length) {
     try {
       const lock = lockTimeText(day.deadline) || new Date(lockMs(day.deadline, day.date)).toISOString()
-      await push({ userIds: bankerUsers, title: 'Pick a new banker', body: `Your banker was on Race ${race.race_number}, which has been abandoned. Pick a new banker before ${lock}.`, url })
+      await push({ userIds: bankerUsers, ...pickNewBanker({ raceNumber: race.race_number, lockText: lock }), url })
     } catch (err) {
       console.error('[Admin] banker notification failed:', err)
       failed = `${failed} The new-banker notification could not be sent.`.trim()
@@ -496,6 +498,9 @@ export async function abandonRace(day, race) {
     }
     const note = await sendAbandonNotices(race, [...new Set(picks.map(p => p.user_id))], bankerUsers, day)
     if (note.failed) warn = `${warn} ${note.failed}`.trim()
+    // If this was the last race left on the day, the end-of-day message goes too (once per race day).
+    const wrap = await sendEndOfDay(kind, day.id, { festivalId: day.festival?.id || null })
+    if (!wrap.ok) warn = `${warn} The end-of-day notification could not be sent.`.trim()
     const told = note.sent ? ` · ${note.sent} player${note.sent === 1 ? '' : 's'} told` : ''
     const cleared = bankerUsers.length ? ` · ${bankerUsers.length} banker${bankerUsers.length === 1 ? '' : 's'} cleared` : ''
     return { ok: !warn, text: `Race ${race.race_number} abandoned · ${picks.length} pick${picks.length === 1 ? '' : 's'} scored 0${cleared}${told}`, warn }

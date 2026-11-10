@@ -64,6 +64,8 @@ export async function joinGroupByCode(userId, rawCode) {
   const { error: mErr } = await supabase
     .from('group_members').insert({ group_id: group.id, user_id: userId, is_founder: false })
   if (mErr) return { status: 'error', message: mErr.message || 'Could not join the group.' }
+  // Tell the group's other members. Never waits for it and never fails the join.
+  try { supabase.functions.invoke('notify-group-join', { body: { groupId: group.id } }).catch(() => {}) } catch { /* ignore */ }
   return { status: 'joined', group }
 }
 
