@@ -54,8 +54,8 @@ export default function WithdrawSheet({ sheet, busy, onConfirm, onClose }) {
               ? <li>{plural(picks.length, 'pick')} on {runner.horse_name} move to the favourite, <strong>{favourite.horse_name}</strong> ({oddsText(favourite)}).</li>
               : <li>Nobody has picked {runner.horse_name}, so no picks move.</li>}
             {plan.eachWayCount > 0 && <li>{plural(plan.eachWayCount, 'each-way pick')} become win bets, because {favourite.horse_name} is shorter than 4/1.</li>}
-            {plan.rule4?.pence > 0 && <li><strong>Rule 4 of {plan.rule4.pence}p will apply to all picks in this race.</strong></li>}
-            {plan.rule4?.missing?.length > 0 && <li className="rd-warn" role="alert">{plan.rule4.missing.join(' and ')} {plan.rule4.missing.length === 1 ? 'has' : 'have'} no price, so no Rule 4 deduction can be taken for {plan.rule4.missing.length === 1 ? 'it' : 'them'}. Add the price first if one should apply.</li>}
+            {plan.rule4?.cut > 0 && <li><strong>A {plan.rule4.cut}% Rule 4 cut will apply to all picks in this race.</strong></li>}
+            {plan.rule4?.missing?.length > 0 && <li className="rd-warn" role="alert">{plan.rule4.missing.join(' and ')} {plan.rule4.missing.length === 1 ? 'has' : 'have'} no price, so no Rule 4 cut can be taken for {plan.rule4.missing.length === 1 ? 'it' : 'them'}. Add the price first if one should apply.</li>}
             {plan.hasResults && <li>Results are already in, so this race&rsquo;s scores{' '}are recalculated{race.festival_day_id ? ' (and the festival day totals)' : ''}.</li>}
             {picks.length > 0 && <li>{plural(new Set(picks.map(p => p.user_id)).size, 'player')} will be notified.</li>}
           </ul>

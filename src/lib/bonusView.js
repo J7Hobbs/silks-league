@@ -9,11 +9,11 @@ import { ordinal } from './format.js'
 //   Each-way: 'Wins' plus one entry per paying place, e.g. Wins 95 · 2nd 25 · 3rd 20
 // With the banker on, every figure is doubled (the banker doubles that race's normal points).
 // Returns null when the runner has no price yet.
-// rule4Pence: the race's Rule 4 deduction, so the figures shown are what the pick would really score.
-export function worthFigures({ betType, oddsDecimal, runnerCount, banker = false, rule4Pence = 0 }) {
+// rule4Cut: the race's Rule 4 deduction, so the figures shown are what the pick would really score.
+export function worthFigures({ betType, oddsDecimal, runnerCount, banker = false, rule4Cut = 0 }) {
   if (!(oddsDecimal > 0)) return null
   const mult = banker ? BONUS_RULES.bankerMultiplier : 1
-  const at = position => calcTokenPoints({ betType, position, oddsDecimal, runnerCount, rule4Pence }).totalPoints * mult
+  const at = position => calcTokenPoints({ betType, position, oddsDecimal, runnerCount, rule4Cut }).totalPoints * mult
   const parts = [{ label: 'Wins', pts: at(1) }]
   if (betType === 'each_way') {
     for (let p = 2; p <= getPlaceTerms(runnerCount).placesPaid; p++) parts.push({ label: ordinal(p), pts: at(p) })

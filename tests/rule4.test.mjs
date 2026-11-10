@@ -9,7 +9,7 @@ import { setClient } from '../supabase/functions/_shared/db.js'
 import * as today from '../supabase/functions/_shared/adminToday.js'
 import * as raceDay from '../supabase/functions/_shared/raceDay.js'
 import {
-  calcTokenPoints, getPlaceTerms, canOfferEachWay, isWinOnly, rule4Deduction, rule4For, rule4Line, rule4Tag, rule4Table, rule4Applies, applyRule4, RULE4_CAP_PENCE,
+  calcTokenPoints, getPlaceTerms, canOfferEachWay, isWinOnly, rule4Deduction, rule4For, rule4Line, rule4Tag, rule4Table, rule4Example, rule4Applies, applyRule4, RULE4_CAP_PERCENT,
 } from '../supabase/functions/_shared/scoring.js'
 
 const dec = f => (f === 'evens' ? 2 : 1 + Number(f.split('/')[0]) / Number(f.split('/')[1]))
@@ -25,9 +25,9 @@ test('every band edge in the table, as the decimal price that is stored (2 place
     ['16/5', 20], ['4/1', 20], ['9/2', 15], ['11/2', 15], ['6/1', 10], ['9/1', 10], ['10/1', 5], ['14/1', 5],
     ['15/1', 0], ['16/1', 0], ['100/1', 0],
   ]
-  for (const [price, pence] of edges) {
-    assert.equal(rule4Deduction(dec(price)), pence, `${price} (${dec(price)})`)
-    assert.equal(rule4Deduction(Math.round(dec(price) * 100) / 100), pence, `${price} as stored`)
+  for (const [price, cut] of edges) {
+    assert.equal(rule4Deduction(dec(price)), cut, `${price} (${dec(price)})`)
+    assert.equal(rule4Deduction(Math.round(dec(price) * 100) / 100), cut, `${price} as stored`)
   }
 })
 
@@ -50,58 +50,58 @@ test('no price or a nonsense price gives no deduction', () => {
 
 test('the table shown on How it works is the same table', () => {
   const rows = rule4Table()
-  assert.deepEqual(rows[0], { range: '1/9 or shorter', pence: 90 })
-  assert.deepEqual(rows[1], { range: '2/17 to 2/11', pence: 85 })
-  assert.deepEqual(rows.find(r => r.range.startsWith('evens')), { range: 'evens to 6/5', pence: 45 })
-  assert.deepEqual(rows[rows.length - 1], { range: 'Longer than 14/1', pence: 0 })
+  assert.deepEqual(rows[0], { range: '1/9 or shorter', cut: 90 })
+  assert.deepEqual(rows[1], { range: '2/17 to 2/11', cut: 85 })
+  assert.deepEqual(rows.find(r => r.range.startsWith('Evens')), { range: 'Evens to 6/5', cut: 45 })
+  assert.deepEqual(rows[rows.length - 1], { range: 'Longer than 14/1', cut: 0 })
   assert.equal(rows.length, 19)
 })
 
 // ── Several withdrawals, the cap, the start date, no price ─────────────────
 const wd = (name, frac) => ({ horse_name: name, odds_fractional: frac, odds_decimal: dec(frac) })
 
-test('several withdrawals add up, capped at 90p', () => {
-  assert.equal(RULE4_CAP_PENCE, 90)
-  assert.equal(rule4For({ date: '2026-11-14', withdrawn: [wd('Bluey', '3/1'), wd('Rocky', '10/1')] }).pence, 30)
+test('several withdrawals add up, capped at 90%', () => {
+  assert.equal(RULE4_CAP_PERCENT, 90)
+  assert.equal(rule4For({ date: '2026-11-14', withdrawn: [wd('Bluey', '3/1'), wd('Rocky', '10/1')] }).cut, 30)
   const big = rule4For({ date: '2026-11-14', withdrawn: [wd('A', '1/9'), wd('B', '1/5'), wd('C', 'evens')] })
-  assert.equal(big.pence, 90, 'capped'); assert.equal(big.items.length, 3)
-  assert.equal(rule4For({ date: '2026-11-14', withdrawn: [wd('A', '1/4'), wd('B', '1/3'), wd('C', '4/9')] }).pence, 90)
+  assert.equal(big.cut, 90, 'capped'); assert.equal(big.items.length, 3)
+  assert.equal(rule4For({ date: '2026-11-14', withdrawn: [wd('A', '1/4'), wd('B', '1/3'), wd('C', '4/9')] }).cut, 90)
 })
 
 test('before 13 Nov 2026 nothing applies; a withdrawn horse with no price gives none', () => {
   assert.equal(rule4Applies('2026-11-12'), false); assert.equal(rule4Applies('2026-11-13'), true); assert.equal(rule4Applies('2026-11-14T10:00:00Z'), true)
   const early = rule4For({ date: '2026-11-07', withdrawn: [wd('Bluey', '3/1')] })
-  assert.deepEqual({ ...early }, { applies: false, pence: 0, items: [], missing: [] })
+  assert.deepEqual({ ...early }, { applies: false, cut: 0, items: [], missing: [] })
   const none = rule4For({ date: '2026-11-14', withdrawn: [{ horse_name: 'Nopri', odds_fractional: null, odds_decimal: null }, wd('Long', '20/1')] })
-  assert.equal(none.pence, 0); assert.deepEqual(none.missing, ['Nopri']); assert.deepEqual(none.items, [])
+  assert.equal(none.cut, 0); assert.deepEqual(none.missing, ['Nopri']); assert.deepEqual(none.items, [])
 })
 
 test('the lines and the tag', () => {
   const one = rule4For({ date: '2026-11-14', withdrawn: [wd('Bluey', '3/1')] })
-  assert.equal(rule4Line(one), 'Rule 4: 25p — Bluey withdrawn at 3/1')
+  assert.equal(rule4Line(one), 'Rule 4: 25% cut — Bluey withdrawn at 3/1')
   const two = rule4For({ date: '2026-11-14', withdrawn: [wd('Bluey', '3/1'), wd('Rocky', '10/1')] })
-  assert.equal(rule4Line(two), 'Rule 4: 30p — Bluey (3/1) and Rocky (10/1) withdrawn')
+  assert.equal(rule4Line(two), 'Rule 4: 30% cut — Bluey (3/1) and Rocky (10/1) withdrawn')
   const three = rule4For({ date: '2026-11-14', withdrawn: [wd('A', '3/1'), wd('B', '10/1'), wd('C', '6/1')] })
-  assert.equal(rule4Line(three), 'Rule 4: 40p — A (3/1), B (10/1) and C (6/1) withdrawn')
+  assert.equal(rule4Line(three), 'Rule 4: 40% cut — A (3/1), B (10/1) and C (6/1) withdrawn')
   assert.equal(rule4Line(rule4For({ date: '2026-11-14', withdrawn: [wd('Long', '20/1')] })), '')
   assert.equal(rule4Line(null), '')
-  assert.equal(rule4Tag(25), 'Rule 4 −25p'); assert.equal(rule4Tag(0), '')
+  assert.equal(rule4Tag(25), 'Rule 4 −25%'); assert.equal(rule4Tag(0), '')
 })
 
 // ── The points ────────────────────────────────────────────────────────────
-test('worked examples: 5/1 winner with a 25p deduction', () => {
+test('worked examples: 5/1 winner with a 25% cut', () => {
   assert.equal(applyRule4(6, 25), 4.75)
   assert.equal(calcTokenPoints({ betType: 'win', position: 1, oddsDecimal: 6, runnerCount: 8 }).totalPoints, 120)
-  assert.equal(calcTokenPoints({ betType: 'win', position: 1, oddsDecimal: 6, runnerCount: 8, rule4Pence: 25 }).totalPoints, 95)
+  assert.equal(calcTokenPoints({ betType: 'win', position: 1, oddsDecimal: 6, runnerCount: 8, rule4Cut: 25 }).totalPoints, 95)
   assert.equal(calcTokenPoints({ betType: 'each_way', position: 1, oddsDecimal: 6, runnerCount: 8 }).totalPoints, 83)
-  const ew = calcTokenPoints({ betType: 'each_way', position: 1, oddsDecimal: 6, runnerCount: 8, rule4Pence: 25 })
+  const ew = calcTokenPoints({ betType: 'each_way', position: 1, oddsDecimal: 6, runnerCount: 8, rule4Cut: 25 })
   assert.equal(ew.totalPoints, 67)                             // (4.75 + 1.9375) x 10 = 66.875
   assert.equal(ew.winTokenPoints + ew.placeTokenPoints, ew.totalPoints)
   // a placed each-way horse: the place part uses the reduced price too (1 + 0.25 x 3.75 = 1.9375)
-  assert.equal(calcTokenPoints({ betType: 'each_way', position: 2, oddsDecimal: 6, runnerCount: 8, rule4Pence: 25 }).totalPoints, 19)
+  assert.equal(calcTokenPoints({ betType: 'each_way', position: 2, oddsDecimal: 6, runnerCount: 8, rule4Cut: 25 }).totalPoints, 19)
   // a loser scores nothing either way
-  assert.equal(calcTokenPoints({ betType: 'win', position: 5, oddsDecimal: 6, runnerCount: 8, rule4Pence: 25 }).totalPoints, 0)
-  assert.equal(calcTokenPoints({ betType: 'each_way', position: 6, oddsDecimal: 6, runnerCount: 8, rule4Pence: 25 }).totalPoints, 0)
+  assert.equal(calcTokenPoints({ betType: 'win', position: 5, oddsDecimal: 6, runnerCount: 8, rule4Cut: 25 }).totalPoints, 0)
+  assert.equal(calcTokenPoints({ betType: 'each_way', position: 6, oddsDecimal: 6, runnerCount: 8, rule4Cut: 25 }).totalPoints, 0)
 })
 
 test('with no deduction every score is exactly what it always was', () => {
@@ -121,7 +121,7 @@ test('with no deduction every score is exactly what it always was', () => {
   for (const betType of ['win', 'each_way']) for (const runnerCount of [2, 4, 5, 7, 8, 12, 16, 20]) for (const position of [1, 2, 3, 4, 5, null]) {
     for (let d = 1.05; d < 60; d = +(d + 0.13).toFixed(2)) {
       const a = calcTokenPoints({ betType, position, oddsDecimal: d, runnerCount })
-      const b = calcTokenPoints({ betType, position, oddsDecimal: d, runnerCount, rule4Pence: 0 })
+      const b = calcTokenPoints({ betType, position, oddsDecimal: d, runnerCount, rule4Cut: 0 })
       const o = old({ betType, position, oddsDecimal: d, runnerCount })
       assert.deepEqual({ ...a, betType: undefined }, { ...o, betType: undefined }, `${betType} pos ${position} @${d} n=${runnerCount}`)
       assert.deepEqual(a, b); n++
@@ -135,8 +135,8 @@ test('each-way eligibility is still judged on the original price and field: Rule
   assert.equal(canOfferEachWay(6, 8), true)
   assert.equal(isWinOnly(6), false)
   assert.equal(getPlaceTerms(8).placesPaid, 3)
-  assert.equal(calcTokenPoints({ betType: 'each_way', position: 3, oddsDecimal: 6, runnerCount: 8, rule4Pence: 90 }).totalPoints > 0, true, 'still paid a place')
-  assert.equal(calcTokenPoints({ betType: 'each_way', position: 4, oddsDecimal: 6, runnerCount: 8, rule4Pence: 90 }).totalPoints, 0, 'places paid unchanged')
+  assert.equal(calcTokenPoints({ betType: 'each_way', position: 3, oddsDecimal: 6, runnerCount: 8, rule4Cut: 90 }).totalPoints > 0, true, 'still paid a place')
+  assert.equal(calcTokenPoints({ betType: 'each_way', position: 4, oddsDecimal: 6, runnerCount: 8, rule4Cut: 90 }).totalPoints, 0, 'places paid unchanged')
 })
 
 // ── The pipeline ──────────────────────────────────────────────────────────
@@ -262,7 +262,7 @@ test('a withdrawn horse with no price: no deduction, and the scorer says so', as
     await withdraw(db, 'week', 'r1', 2)
     const r = await today.saveRaceResult('week', race(db, 'week', 'r1'), runnersOf(db, 'week', 'r1'), places(db, 'week', 'r1', [1, 3, 4]), {})
     assert.equal(pointsOf(db, 'week', 'r1', 'u2').win_token_points, 60, 'no price, no deduction')
-    assert.match(r.warn, /Rule 4: A Horse 2 was withdrawn with no price, so no deduction was taken for it/)
+    assert.match(r.warn, /Rule 4: A Horse 2 was withdrawn with no price, so no cut was taken for it/)
   } finally { done() }
 })
 
@@ -270,12 +270,27 @@ test('the plan for a withdrawal reports the deduction before anything changes', 
   const { db, done } = setup()
   try {
     const plan = await raceDay.planWithdrawal('week', runnersOf(db, 'week', 'r1').find(r => r.horse_number === 2), race(db, 'week', 'r1'), { lockIso: LOCK, now: NOW })
-    assert.equal(plan.rule4.pence, 20)                          // 7/2 = 4.50
+    assert.equal(plan.rule4.cut, 20)                          // 7/2 = 4.50
     assert.deepEqual(plan.rule4.items.map(i => i.name), ['A Horse 2'])
     assert.equal(runnersOf(db, 'week', 'r1').find(r => r.horse_number === 2).is_withdrawn, false, 'planning changes nothing')
     // a second withdrawal in the same race adds to the first (5/1 = 15p more)
     await withdraw(db, 'week', 'r1', 2)
     const plan2 = await raceDay.planWithdrawal('week', runnersOf(db, 'week', 'r1').find(r => r.horse_number === 3), race(db, 'week', 'r1'), { lockIso: LOCK, now: NOW })
-    assert.equal(plan2.rule4.pence, 35); assert.equal(plan2.rule4.items.length, 2)
+    assert.equal(plan2.rule4.cut, 35); assert.equal(plan2.rule4.items.length, 2)
   } finally { done() }
+})
+
+// ── Wording: percentages, no money ────────────────────────────────────────
+test('the example in the rules text is worked out by the scorer', () => {
+  assert.deepEqual({ ...rule4Example }, { withdrawnPrice: '3/1', cut: 25, winnerPrice: '5/1', pointsBefore: 120, pointsAfter: 95 })
+  assert.equal(RULE4_CAP_PERCENT, 90)
+})
+
+test('Evens is capitalised everywhere it is shown, and nothing mentions pence or pounds', () => {
+  const rows = rule4Table()
+  assert.ok(rows.some(r => r.range === 'Evens to 6/5'))
+  assert.ok(!rows.some(r => /evens/.test(r.range)))
+  const r4 = rule4For({ date: '2026-11-14', withdrawn: [{ horse_name: 'Bluey', odds_fractional: 'evens', odds_decimal: 2 }] })
+  assert.equal(rule4Line(r4), 'Rule 4: 45% cut — Bluey withdrawn at Evens')
+  for (const text of [rule4Line(r4), rule4Tag(45), ...rows.map(r => r.range)]) assert.ok(!/\dp\b|£|pence|pound/i.test(text), text)
 })

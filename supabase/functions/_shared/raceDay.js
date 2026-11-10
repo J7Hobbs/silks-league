@@ -235,7 +235,7 @@ export async function withdrawRunnerNow(kind, plan, { lockIso, now = Date.now() 
   let rule4 = null
   try { rule4 = await loadRule4(kind, race.id) } catch { /* the deduction is applied when scoring; this is only for the message */ }
 
-  return { moved, switched, rescored, notified, favourite, lockedNow, ...(rule4?.pence || rule4?.missing?.length ? { rule4 } : {}) }
+  return { moved, switched, rescored, notified, favourite, lockedNow, ...(rule4?.cut || rule4?.missing?.length ? { rule4 } : {}) }
 }
 
 async function sendNotice(userIds, race, notice) {

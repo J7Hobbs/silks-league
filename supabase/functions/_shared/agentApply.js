@@ -59,9 +59,9 @@ async function nonRunnerOutcome(day, ctx, item, opts) {
     const warns = []
     if (r.rescored && !r.rescored.ok) warns.push(`scores NOT recalculated: ${r.rescored.msg}`)
     if (r.notified && !r.notified.ok) warns.push(`player notice failed: ${r.notified.error}`)
-    if (r.rule4?.missing?.length) warns.push(`no price for ${r.rule4.missing.join(' and ')}, so no Rule 4 deduction`)
+    if (r.rule4?.missing?.length) warns.push(`no price for ${r.rule4.missing.join(' and ')}, so no Rule 4 cut`)
     const moved = r.moved ? `${plural(r.moved, 'pick')} moved to ${r.favourite.horse_name}` : 'no picks to move'
-    const rule4 = r.rule4?.pence ? `, Rule 4 ${r.rule4.pence}p applies` : ''
+    const rule4 = r.rule4?.cut ? `, a ${r.rule4.cut}% Rule 4 cut applies` : ''
     return { ...base, state: 'applied', text: `${named}, ${moved}${r.switched ? `, ${r.switched} each-way changed to win` : ''}${rule4}${warns.length ? ` (${warns.join('; ')})` : ''}`, reasons: [], warn: warns.length ? warns.join('; ') : null }
   } catch (err) {
     return review(base, named, [`could not apply it: ${err.message || err}`], { error: err.message || String(err) })

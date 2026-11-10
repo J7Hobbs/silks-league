@@ -300,8 +300,8 @@ export async function runRunnerAction(kind, mode, plan, lockIso) {
       if (r.lockedNow) bits.push(`race locked first (field of ${r.lockedNow.count}${r.lockedNow.converted ? `, ${r.lockedNow.converted} each-way changed to win` : ''})`)
       bits.push(r.moved ? `${plural(r.moved, 'pick')} moved to ${r.favourite.horse_name}` : 'no picks to move')
       if (r.switched) bits.push(`${r.switched} each-way changed to win`)
-      if (r.rule4?.pence) bits.push(`Rule 4 of ${r.rule4.pence}p applies to this race`)
-      if (r.rule4?.missing?.length) bits.push(`${r.rule4.missing.join(' and ')} has no price, so there is no Rule 4 deduction for it`)
+      if (r.rule4?.cut) bits.push(`a ${r.rule4.cut}% Rule 4 cut applies to this race`)
+      if (r.rule4?.missing?.length) bits.push(`${r.rule4.missing.join(' and ')} has no price, so there is no Rule 4 cut for it`)
       if (r.rescored) bits.push(r.rescored.ok ? 'scores recalculated' : `SCORES NOT RECALCULATED: ${r.rescored.msg}`)
       if (r.notified) bits.push(r.notified.ok ? `${plural(r.notified.count, 'player')} notified` : `NOTIFICATION FAILED: ${r.notified.error}`)
       return { ok: !((r.rescored && !r.rescored.ok) || (r.notified && !r.notified.ok)), text: bits.join(' · ') }

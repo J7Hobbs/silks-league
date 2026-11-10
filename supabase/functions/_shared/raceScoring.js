@@ -20,7 +20,7 @@ async function lockIfNeverLocked(kind, raceId) {
 // ── Rule 4 (see scoring.js) ──────────────────────────────────
 // The deduction for a race: its date, and the runners marked withdrawn. Reads the database, so a failure is returned to the
 // caller (scoring stops with a message) instead of quietly scoring a race without the deduction it is owed.
-// Returns the rule4For() result: { applies, pence, items, missing }.
+// Returns the rule4For() result: { applies, cut, items, missing }.
 const RULE4_RUNNERS = { week: { table: 'runners', col: 'race_id' }, festival: { table: 'festival_runners', col: 'festival_race_id' } }
 // The date of the race day a race is on (null if it cannot be found).
 export async function raceDayDate(kind, raceId) {
@@ -43,7 +43,7 @@ export async function loadRule4(kind, raceId) {
 
 // Shown to the admin when a withdrawn horse has no price: nothing can be deducted for it.
 const rule4Warn = r4 => (r4.missing.length
-  ? `Rule 4: ${r4.missing.join(' and ')} ${r4.missing.length === 1 ? 'was' : 'were'} withdrawn with no price, so no deduction was taken for ${r4.missing.length === 1 ? 'it' : 'them'}.`
+  ? `Rule 4: ${r4.missing.join(' and ')} ${r4.missing.length === 1 ? 'was' : 'were'} withdrawn with no price, so no cut was taken for ${r4.missing.length === 1 ? 'it' : 'them'}.`
   : '')
 
 // ── Shared helper: score one race from its results + picks ───
@@ -122,7 +122,7 @@ async function scoreWeekRace(raceId, raceNumber) {
       if (pick.bet_type) {
         const oddsDecimal = runner?.odds_decimal ?? p?.sp ?? 0
         const { winTokenPoints, placeTokenPoints, totalPoints } = calcTokenPoints({
-          betType: pick.bet_type, position, oddsDecimal, runnerCount: runnerCountAtLock, rule4Pence: r4.pence,
+          betType: pick.bet_type, position, oddsDecimal, runnerCount: runnerCountAtLock, rule4Cut: r4.cut,
         })
         return {
           user_id: pick.user_id, race_id: raceId, pick_id: pick.id,
@@ -260,7 +260,7 @@ async function scoreFestivalRace(race) {
     if (pick.bet_type) {
       const oddsDecimal = runner?.sp ?? p?.sp ?? 0
       const { winTokenPoints, placeTokenPoints, totalPoints } = calcTokenPoints({
-        betType: pick.bet_type, position, oddsDecimal, runnerCount: runnerCountAtLock, rule4Pence: r4.pence,
+        betType: pick.bet_type, position, oddsDecimal, runnerCount: runnerCountAtLock, rule4Cut: r4.cut,
       })
       return {
         festival_race_id: race.id, user_id: pick.user_id,

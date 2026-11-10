@@ -78,7 +78,7 @@ async function loadBonuses(userId, dayCol, dayId) {
   } catch { return [] }
 }
 
-// Rule 4 (see scoring.js) for each race of a day: { [raceId]: { pence, items, missing } }. Read from the stored prices of the
+// Rule 4 (see scoring.js) for each race of a day: { [raceId]: { cut, items, missing } }. Read from the stored prices of the
 // runners marked withdrawn, so it always matches what scoring took off. An extra: if it can't be read the page still shows.
 async function loadRule4ByRace(kind, dayId, raceIds) {
   try {

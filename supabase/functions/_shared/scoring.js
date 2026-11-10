@@ -21,15 +21,15 @@ export function canOfferEachWay(oddsDecimal, runnerCount) {
   return !isWinOnly(oddsDecimal) && getPlaceTerms(runnerCount).eachWayAvailable
 }
 
-// rule4Pence: the Rule 4 deduction (pence per £1 of winnings) for a race where a horse was withdrawn after picks opened.
-// It reduces the winnings only, never the stake, exactly like a bet slip: the price used for the points becomes
-// 1 + (price - 1) x (1 - deduction). Which bets are allowed (win only under 4/1, the places paid) is NOT judged here, so
-// it is unaffected. With no deduction (the default) every figure is exactly what it has always been.
-export function calcTokenPoints({ betType, position, oddsDecimal, runnerCount, rule4Pence = 0 }) {
-  const odds = applyRule4(oddsDecimal, rule4Pence)
-  // One rounding at the end, as always. (With a deduction the sum is first trimmed to 6 places so floating point noise
+// rule4Cut: the Rule 4 cut, as a whole percentage (25 = 25%), for a race where a horse was withdrawn after picks opened.
+// It reduces the points from the price only, never the stake part: the price used for the points becomes
+// 1 + (price - 1) x (1 - cut). Which bets are allowed (win only under 4/1, the places paid) is NOT judged here, so
+// it is unaffected. With no cut (the default) every figure is exactly what it has always been.
+export function calcTokenPoints({ betType, position, oddsDecimal, runnerCount, rule4Cut = 0 }) {
+  const odds = applyRule4(oddsDecimal, rule4Cut)
+  // One rounding at the end, as always. (With a cut the sum is first trimmed to 6 places so floating point noise
   // can never tip a .5 the wrong way.)
-  const settle = v => (rule4Pence > 0 ? Math.round(+v.toFixed(6)) : Math.round(v))
+  const settle = v => (rule4Cut > 0 ? Math.round(+v.toFixed(6)) : Math.round(v))
 
   if (betType === 'win') {
     const totalPoints = position === 1 ? settle(2 * odds * MULTIPLIER) : 0
@@ -57,9 +57,9 @@ export function calcTokenPoints({ betType, position, oddsDecimal, runnerCount, r
   throw new Error(`Unknown bet_type: ${betType}`)
 }
 
-// ══ Rule 4: deductions when a horse is withdrawn after picks open ══════════════════════════════════════════════
+// ══ Rule 4: cuts when a horse is withdrawn after picks open ══════════════════════════════════════════════
 // Like a bookmaker's Rule 4 (Tattersalls Rule 4(c)). If a runner is withdrawn after picks opened, every pick in that race has
-// its WINNINGS reduced by a deduction taken from the withdrawn horse's price (frozen when picks opened, i.e. the stored
+// its points from the price cut by a percentage taken from the withdrawn horse's price (frozen when picks opened, i.e. the stored
 // price). Nothing else about the race changes. This table is the single source of truth: scoring, Admin's confirm sheet,
 // the Picks and Results lines and the How it works screen all read it.
 //
@@ -67,86 +67,95 @@ export function calcTokenPoints({ betType, position, oddsDecimal, runnerCount, r
 // prices to 2 places (that is how prices are stored), so an in-between price such as 100/30 lands in the right band.
 const RULE4_START_DATE = '2026-11-13'            // races on or after this date only; earlier races are never re-scored
 let rule4Start = RULE4_START_DATE
-export const RULE4_CAP_PENCE = 90                // several withdrawals add up, to no more than this (Rule 4(c))
+export const RULE4_CAP_PERCENT = 90                // several withdrawals add up, to no more than this (Rule 4(c))
 
-// [shortest price of the band, longest price shown, pence]. The first band has no lower limit ("1/9 or shorter").
+// [shortest price of the band, longest price shown, cut]. The first band has no lower limit ("1/9 or shorter").
 const RULE4_BANDS = [
   ['1/9', '1/9', 90, true], ['2/17', '2/11', 85], ['1/5', '1/4', 80], ['2/7', '3/10', 75], ['1/3', '2/5', 70],
   ['4/9', '8/15', 65], ['4/7', '8/13', 60], ['4/6', '4/5', 55], ['5/6', '20/21', 50], ['evens', '6/5', 45],
   ['5/4', '6/4', 40], ['8/5', '7/4', 35], ['9/5', '9/4', 30], ['12/5', '3/1', 25], ['16/5', '4/1', 20],
   ['9/2', '11/2', 15], ['6/1', '9/1', 10], ['10/1', '14/1', 5],
 ]
+const showPrice = f => (/^(evens|evs)$/i.test(f) ? 'Evens' : f)
 const fracToDecimal = f => (f === 'evens' ? 2 : 1 + Number(f.split('/')[0]) / Number(f.split('/')[1]))
 const to2dp = x => Math.round(x * 100 + 1e-9) / 100
-const RULE4_ROWS = RULE4_BANDS.map(([from, to, pence, shortest]) => ({
-  from, to, pence, shortestOnly: !!shortest,
+const RULE4_ROWS = RULE4_BANDS.map(([from, to, cut, shortest]) => ({
+  from, to, cut, shortestOnly: !!shortest,
   fromDecimal: shortest ? 0 : to2dp(fracToDecimal(from)),
-  range: shortest ? `${from} or shorter` : from === to ? from : `${from} to ${to}`,
+  range: shortest ? `${showPrice(from)} or shorter` : from === to ? showPrice(from) : `${showPrice(from)} to ${showPrice(to)}`,
 }))
-const RULE4_LONGEST = to2dp(fracToDecimal('14/1'))   // 15.00: longer than 14/1 gets no deduction
+const RULE4_LONGEST = to2dp(fracToDecimal('14/1'))   // 15.00: longer than 14/1 gets no cut
 
 export const rule4Applies = date => !!date && String(date).slice(0, 10) >= rule4Start
 // For the tests only: move the start date (and put it back with no argument).
 export function setRule4StartDateForTests(date = RULE4_START_DATE) { rule4Start = date }
 
-// Pence per £1 of winnings for one withdrawn horse at this decimal price. 0 for no price or a price longer than 14/1.
+// The Rule 4 cut (a whole percentage) for one withdrawn horse at this decimal price. 0 for no price or a price longer than 14/1.
 export function rule4Deduction(oddsDecimal) {
   const dec = Number(oddsDecimal)
   if (!(dec > 0)) return 0
   const d = to2dp(dec)
   if (d > RULE4_LONGEST) return 0
-  let pence = 0
-  for (const row of RULE4_ROWS) if (d >= row.fromDecimal) pence = row.pence
-  return pence
+  let cut = 0
+  for (const row of RULE4_ROWS) if (d >= row.fromDecimal) cut = row.cut
+  return cut
 }
 
-// The price the points are worked out from: 1 + (price - 1) x (1 - deduction). Only the winnings are reduced, never the stake.
-export function applyRule4(oddsDecimal, pence) {
-  return pence > 0 ? 1 + (oddsDecimal - 1) * (100 - pence) / 100 : oddsDecimal
+// The price the points are worked out from: 1 + (price - 1) x (1 - cut). Only the price part is reduced, never the stake part.
+export function applyRule4(oddsDecimal, cut) {
+  return cut > 0 ? 1 + (oddsDecimal - 1) * (100 - cut) / 100 : oddsDecimal
 }
 
 // Everything about a race's Rule 4, from its date and its withdrawn runners.
 //   withdrawn  [{ horse_name, odds_fractional, odds_decimal }]   (only the withdrawn runners)
-// Returns { applies, pence, items: [{ name, fractional, decimal, pence }], missing: [name] }
-//   pence    the total deduction, capped at RULE4_CAP_PENCE
-//   items    the withdrawn horses that give a deduction
-//   missing  withdrawn horses with no price: no deduction, and Admin shows a warning
+// Returns { applies, cut, items: [{ name, fractional, decimal, cut }], missing: [name] }
+//   cut    the total cut, capped at RULE4_CAP_PERCENT
+//   items    the withdrawn horses that give a cut
+//   missing  withdrawn horses with no price: no cut, and Admin shows a warning
 export function rule4For({ date, withdrawn }) {
-  const out = { applies: rule4Applies(date), pence: 0, items: [], missing: [] }
+  const out = { applies: rule4Applies(date), cut: 0, items: [], missing: [] }
   if (!out.applies) return out
   let total = 0
   for (const r of withdrawn || []) {
     const dec = Number(r.odds_decimal)
     if (!(dec > 0)) { out.missing.push(r.horse_name || 'A runner'); continue }
-    const pence = rule4Deduction(dec)
-    if (pence > 0) {
-      total += pence
-      out.items.push({ name: r.horse_name || 'A runner', fractional: r.odds_fractional || '', decimal: dec, pence })
+    const cut = rule4Deduction(dec)
+    if (cut > 0) {
+      total += cut
+      out.items.push({ name: r.horse_name || 'A runner', fractional: r.odds_fractional || '', decimal: dec, cut })
     }
   }
-  out.pence = Math.min(RULE4_CAP_PENCE, total)
+  out.cut = Math.min(RULE4_CAP_PERCENT, total)
   return out
 }
 
-const priceOf = it => it.fractional || `${it.decimal}`
+const priceOf = it => showPrice(it.fractional) || `${it.decimal}`
 const listOf = names => (names.length <= 1 ? names[0] || '' : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`)
 
-// "Rule 4: 25p — Bluey withdrawn at 3/1"  /  "Rule 4: 35p — Bluey (3/1) and Rocky (10/1) withdrawn". '' when nothing applies.
+// "Rule 4: 25% cut — Bluey withdrawn at 3/1"  /  "Rule 4: 30% cut — Bluey (3/1) and Rocky (10/1) withdrawn". '' when nothing applies.
 export function rule4Line(r4) {
-  if (!r4 || !(r4.pence > 0)) return ''
+  if (!r4 || !(r4.cut > 0)) return ''
   const { items } = r4
-  if (items.length === 1) return `Rule 4: ${r4.pence}p — ${items[0].name} withdrawn at ${priceOf(items[0])}`
-  return `Rule 4: ${r4.pence}p — ${listOf(items.map(i => `${i.name} (${priceOf(i)})`))} withdrawn`
+  if (items.length === 1) return `Rule 4: ${r4.cut}% cut — ${items[0].name} withdrawn at ${priceOf(items[0])}`
+  return `Rule 4: ${r4.cut}% cut — ${listOf(items.map(i => `${i.name} (${priceOf(i)})`))} withdrawn`
 }
 
-// The tag next to a player's points: "Rule 4 −25p".
-export const rule4Tag = pence => (pence > 0 ? `Rule 4 \u2212${pence}p` : '')
+// The tag next to a player's points: "Rule 4 −25%".
+export const rule4Tag = cut => (cut > 0 ? `Rule 4 \u2212${cut}%` : '')
 
-// The table for the How it works screen: [{ range, pence }] from the shortest price to the longest, then "longer than 14/1".
+// The table for the How it works screen: [{ range, cut }] from the shortest price to the longest, then "longer than 14/1".
 export function rule4Table() {
-  return [...RULE4_ROWS.map(r => ({ range: r.range, pence: r.pence })), { range: 'Longer than 14/1', pence: 0 }]
+  return [...RULE4_ROWS.map(r => ({ range: r.range, cut: r.cut })), { range: 'Longer than 14/1', cut: 0 }]
 }
-export const rule4Example = Object.freeze({ price: '3/1', pence: rule4Deduction(4) })   // the worked example in the rules text
+// The worked example in the rules text, worked out here so it cannot drift: a 3/1 shot withdrawn, then a 5/1 winner backed to Win.
+const EXAMPLE_WITHDRAWN = '3/1', EXAMPLE_WINNER = '5/1'
+export const rule4Example = Object.freeze({
+  withdrawnPrice: EXAMPLE_WITHDRAWN,
+  cut: rule4Deduction(fracToDecimal(EXAMPLE_WITHDRAWN)),
+  winnerPrice: EXAMPLE_WINNER,
+  pointsBefore: calcTokenPoints({ betType: 'win', position: 1, oddsDecimal: fracToDecimal(EXAMPLE_WINNER), runnerCount: 8 }).totalPoints,
+  pointsAfter: calcTokenPoints({ betType: 'win', position: 1, oddsDecimal: fracToDecimal(EXAMPLE_WINNER), runnerCount: 8, rule4Cut: rule4Deduction(fracToDecimal(EXAMPLE_WITHDRAWN)) }).totalPoints,
+})
 
 // ── Legacy fixed-tier scoring (system in place before the token overhaul) ──
 // Unchanged from src/pages/Admin.jsx — kept here so both scoring pipelines

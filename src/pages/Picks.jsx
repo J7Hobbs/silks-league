@@ -586,7 +586,7 @@ export default function Picks() {
       worth: (() => {
         const dbl = bonusOn && bankerFor(race.id)
         const opt = type => {
-          const f = worthFigures({ betType: type, oddsDecimal: runner.odds_decimal, runnerCount: nonWithdrawn, banker: dbl && current === type, rule4Pence: rule4?.pence || 0 })
+          const f = worthFigures({ betType: type, oddsDecimal: runner.odds_decimal, runnerCount: nonWithdrawn, banker: dbl && current === type, rule4Cut: rule4?.cut || 0 })
           return f && { type, text: worthText(f), doubled: f.doubled }
         }
         const options = [opt('win'), eachWayOffered ? opt('each_way') : null].filter(Boolean)

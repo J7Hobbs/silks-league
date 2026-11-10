@@ -286,12 +286,12 @@ export function buildResultRows({ races, results, picks, runners, scores, bonuse
     const points = played ? score?.total_points ?? 0 : 0
     const raceBonuses = played ? (bonusesByRace[race.id] || []) : []
     const r4 = rule4?.[race.id]
-    const r4Pence = r4?.pence > 0 ? r4.pence : 0
+    const r4Cut = r4?.cut > 0 ? r4.cut : 0
     return {
       id: race.id,
-      // "Rule 4: 25p — Bluey withdrawn at 3/1" for the race, and "Rule 4 −25p" on a pick whose points it reduced.
-      rule4: r4Pence ? { pence: r4Pence, line: rule4Line(r4) } : null,
-      rule4Tag: r4Pence && played && points > 0 ? rule4Tag(r4Pence) : '',
+      // "Rule 4: 25% cut — Bluey withdrawn at 3/1" for the race, and "Rule 4 −25%" on a pick whose points it reduced.
+      rule4: r4Cut ? { cut: r4Cut, line: rule4Line(r4) } : null,
+      rule4Tag: r4Cut && played && points > 0 ? rule4Tag(r4Cut) : '',
       raceNo: race.race_number,
       // Bonus tags for the card: "★ ×2" on the banker race, "Lone +25", "Treble +50".
       banker: !!p?.is_banker,
