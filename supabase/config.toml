@@ -1,0 +1,8 @@
+# Settings the Supabase CLI reads when deploying Edge Functions from this folder.
+# Only what is listed here is set; every other function keeps the default (JWT verification on), as it was deployed before.
+project_id = "wfytwcwletznzyayjkrv"
+
+# agent-api is called by scheduled agents, not by a signed-in user. It refuses every request that does not carry the
+# x-agent-secret header, so the platform's own JWT check must be off or the agents could never reach it.
+[functions.agent-api]
+verify_jwt = false

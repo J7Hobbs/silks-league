@@ -4,6 +4,7 @@ import Sheet from '../../components/groups/Sheet.jsx'
 import WithdrawSheet from '../../components/admin/WithdrawSheet.jsx'
 import ResultSheet from './ResultSheet.jsx'
 import { ConfirmSheet } from './sheets.jsx'
+import { AgentReview, AgentActivity } from './AgentPanel.jsx'
 import { runnersWithoutPrice, planWithdrawal, planReinstate } from '../../lib/raceDay.js'
 import { runRunnerAction } from '../../lib/adminRaceDays.js'
 import { clockText, lockMs, ukClock, ukDateStr, weekdayShort, monthAbbr } from '../../lib/format.js'
@@ -27,6 +28,7 @@ export default function Today({ goTab }) {
   const [sheet, setSheet] = useState(null)                    // 'prices' | 'resend' | 'lock' | 'pickRace' | 'findHorse' | { result: race }
   const [runnerSheet, setRunnerSheet] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [agentVersion, setAgentVersion] = useState(0)          // bumped to reload the agent's drafts and activity
 
   const say = (type, text) => setToast({ type, text, id: Date.now() })
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 7000); return () => clearTimeout(t) }, [toast])
@@ -81,13 +83,17 @@ export default function Today({ goTab }) {
 
   if (!day) {
     return (
-      <div className="an-card an-card--plain an-empty">
-        <h2 className="an-h2">Nothing scheduled</h2>
-        <p className="an-muted">There is no race day coming up. Create a Saturday week or a festival day to see it here.</p>
-        <div className="an-row">
-          <button type="button" className="an-btn an-btn--solid" onClick={() => goTab('racedays')}>Race days</button>
-          <button type="button" className="an-btn an-btn--ghost" onClick={() => goTab('setup')}>Setup</button>
+      <div className="an-stack">
+        <AgentReview version={agentVersion} onApplied={() => { setAgentVersion(v => v + 1); load(true) }} />
+        <div className="an-card an-card--plain an-empty">
+          <h2 className="an-h2">Nothing scheduled</h2>
+          <p className="an-muted">There is no race day coming up. Create a Saturday week or a festival day to see it here.</p>
+          <div className="an-row">
+            <button type="button" className="an-btn an-btn--solid" onClick={() => goTab('racedays')}>Race days</button>
+            <button type="button" className="an-btn an-btn--ghost" onClick={() => goTab('setup')}>Setup</button>
+          </div>
         </div>
+        <AgentActivity version={agentVersion} />
       </div>
     )
   }
@@ -158,6 +164,9 @@ export default function Today({ goTab }) {
 
   return (
     <div className="an-stack">
+      {/* ── What the race-day agent has left for you ── */}
+      <AgentReview version={agentVersion} onApplied={() => { setAgentVersion(v => v + 1); load(true) }} />
+
       {/* ── The race day ── */}
       <section className={`an-card an-day${banner ? ' an-day--photo' : ''}`} aria-label="Race day">
         {banner && <div className="an-day__photo" style={{ backgroundImage: `url("${String(banner).replace(/"/g, '%22')}")`, backgroundPosition: day.festival.banner_position || 'center' }} aria-hidden="true" />}
@@ -253,6 +262,9 @@ export default function Today({ goTab }) {
           </ul>
         </section>
       )}
+
+      {/* ── Agent activity ── */}
+      <AgentActivity version={agentVersion} />
 
       {/* ── Quick buttons ── */}
       {!noRaces && (

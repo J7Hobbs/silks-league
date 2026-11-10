@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import Today from './Today.jsx'
+import DraftReview from './DraftReview.jsx'
 import RaceDays from './RaceDays.jsx'
 import Players from './Players.jsx'
 import Setup from './Setup.jsx'
@@ -22,6 +23,7 @@ export default function AdminShell() {
   const [ok, setOk] = useState(false)
   const tab = TABS.some(t => t.id === params.get('tab')) ? params.get('tab') : 'today'
   const goTab = id => setParams(id === 'today' ? {} : { tab: id }, { replace: true })
+  const draftId = tab === 'today' ? params.get('draft') : null       // a racecard from the agent, open for review
 
   // Same gate as the classic Admin: signed in, and profiles.is_admin.
   useEffect(() => {
@@ -53,7 +55,7 @@ export default function AdminShell() {
         </nav>
       </header>
       <main className="an-main" id="an-panel" role="tabpanel" aria-labelledby={`an-tab-${tab}`}>
-        {tab === 'today' ? <Today goTab={goTab} /> : tab === 'racedays' ? <RaceDays /> : tab === 'players' ? <Players /> : <Setup />}
+        {tab === 'today' ? (draftId ? <DraftReview id={draftId} onBack={() => setParams({})} /> : <Today goTab={goTab} />) : tab === 'racedays' ? <RaceDays /> : tab === 'players' ? <Players /> : <Setup />}
       </main>
     </div>
   )

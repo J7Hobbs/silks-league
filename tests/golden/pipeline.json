@@ -1,0 +1,1973 @@
+{
+ "returns": [
+  {
+   "label": "week: lock race 1",
+   "value": {
+    "count": 6,
+    "converted": 1
+   }
+  },
+  {
+   "label": "week: result 1",
+   "value": {
+    "ok": true,
+    "warn": "",
+    "notified": true,
+    "count": 6
+   }
+  },
+  {
+   "label": "week: plan withdraw",
+   "value": {
+    "blocked": null,
+    "picks": 1,
+    "fav": "B Horse 1",
+    "switchToWin": true
+   }
+  },
+  {
+   "label": "week: withdraw",
+   "value": {
+    "moved": 1,
+    "switched": 0,
+    "rescored": null,
+    "notified": {
+     "ok": true,
+     "count": 1
+    },
+    "favourite": {
+     "id": "b-1",
+     "horse_name": "B Horse 1",
+     "horse_number": 1,
+     "odds_decimal": 3,
+     "odds_fractional": "2/1",
+     "is_withdrawn": false
+    },
+    "lockedNow": {
+     "count": 4,
+     "converted": 0
+    }
+   }
+  },
+  {
+   "label": "week: result 2",
+   "value": {
+    "ok": true,
+    "warn": "",
+    "notified": true,
+    "count": 6
+   }
+  },
+  {
+   "label": "week: correct 1",
+   "value": {
+    "ok": true,
+    "warn": "",
+    "notified": false,
+    "count": 6
+   }
+  },
+  {
+   "label": "week: late withdraw",
+   "value": {
+    "moved": 1,
+    "switched": 1,
+    "rescored": {
+     "ok": true,
+     "count": 6,
+     "warn": null,
+     "bonus": {
+      "ok": true,
+      "awards": [
+       {
+        "id": "id-19",
+        "user_id": "u2",
+        "bonus_type": "banker",
+        "race_id": "r2",
+        "festival_race_id": null,
+        "points": 60,
+        "detail": {},
+        "notified_at": null
+       },
+       {
+        "id": "id-29",
+        "user_id": "u4",
+        "bonus_type": "lone_winner",
+        "race_id": "r1",
+        "festival_race_id": null,
+        "points": 25,
+        "detail": {},
+        "notified_at": null
+       }
+      ],
+      "changedRows": 1
+     }
+    },
+    "notified": {
+     "ok": true,
+     "count": 1
+    },
+    "favourite": {
+     "id": "a-1",
+     "horse_name": "A Horse 1",
+     "horse_number": 1,
+     "odds_decimal": 3,
+     "odds_fractional": "2/1",
+     "is_withdrawn": false
+    },
+    "lockedNow": null
+   }
+  },
+  {
+   "label": "week: reinstate",
+   "value": {
+    "reverted": 1,
+    "rescored": {
+     "ok": true,
+     "count": 6,
+     "warn": null,
+     "bonus": {
+      "ok": true,
+      "awards": [
+       {
+        "id": "id-19",
+        "user_id": "u2",
+        "bonus_type": "banker",
+        "race_id": "r2",
+        "festival_race_id": null,
+        "points": 60,
+        "detail": {},
+        "notified_at": null
+       },
+       {
+        "id": "id-29",
+        "user_id": "u4",
+        "bonus_type": "lone_winner",
+        "race_id": "r1",
+        "festival_race_id": null,
+        "points": 25,
+        "detail": {},
+        "notified_at": null
+       }
+      ],
+      "changedRows": 1
+     }
+    }
+   }
+  },
+  {
+   "label": "week: abandon 2",
+   "value": {
+    "ok": true,
+    "text": "Race 2 abandoned · 6 picks scored 0 · 6 players told",
+    "warn": ""
+   }
+  },
+  {
+   "label": "week: restore 2",
+   "value": {
+    "ok": true,
+    "text": "Race 2 restored. Enter its result when it is in."
+   }
+  },
+  {
+   "label": "week: recalc 1",
+   "value": {
+    "ok": true,
+    "count": 6,
+    "warn": null,
+    "bonus": {
+     "ok": true,
+     "awards": [
+      {
+       "id": "id-29",
+       "user_id": "u4",
+       "bonus_type": "lone_winner",
+       "race_id": "r1",
+       "festival_race_id": null,
+       "points": 25,
+       "detail": {},
+       "notified_at": null
+      }
+     ],
+     "changedRows": 1
+    }
+   }
+  },
+  {
+   "label": "week: result 3",
+   "value": {
+    "ok": true,
+    "warn": "Runner count for each-way eligibility was auto-captured at results-entry time (Lock Picks wasn't clicked before the deadline) — may not be perfectly deadline-accurate.",
+    "notified": true,
+    "count": 6
+   }
+  },
+  {
+   "label": "week: bonuses",
+   "value": {
+    "ok": true,
+    "awards": [
+     {
+      "id": "id-29",
+      "user_id": "u4",
+      "bonus_type": "lone_winner",
+      "race_id": "r1",
+      "festival_race_id": null,
+      "points": 25,
+      "detail": {},
+      "notified_at": null
+     },
+     {
+      "id": "id-64",
+      "user_id": "u4",
+      "bonus_type": "banker",
+      "race_id": "r3",
+      "festival_race_id": null,
+      "points": 120,
+      "detail": {},
+      "notified_at": null
+     }
+    ],
+    "changedRows": 0
+   }
+  },
+  {
+   "label": "festival: lock race 1",
+   "value": {
+    "count": 7,
+    "converted": 2
+   }
+  },
+  {
+   "label": "festival: result 1",
+   "value": {
+    "ok": true,
+    "warn": "",
+    "notified": true,
+    "count": 6
+   }
+  },
+  {
+   "label": "festival: plan withdraw",
+   "value": {
+    "blocked": null,
+    "picks": 2,
+    "fav": "FB Horse 1",
+    "switchToWin": true
+   }
+  },
+  {
+   "label": "festival: withdraw",
+   "value": {
+    "moved": 2,
+    "switched": 0,
+    "rescored": null,
+    "notified": {
+     "ok": true,
+     "count": 2
+    },
+    "favourite": {
+     "id": "fb-1",
+     "horse_name": "FB Horse 1",
+     "horse_number": 1,
+     "odds_decimal": 3,
+     "odds_fractional": "2/1",
+     "is_withdrawn": false
+    },
+    "lockedNow": {
+     "count": 5,
+     "converted": 1
+    }
+   }
+  },
+  {
+   "label": "festival: result 2",
+   "value": {
+    "ok": true,
+    "warn": "",
+    "notified": true,
+    "count": 6
+   }
+  },
+  {
+   "label": "festival: correct 1",
+   "value": {
+    "ok": true,
+    "warn": "",
+    "notified": false,
+    "count": 6
+   }
+  },
+  {
+   "label": "festival: late withdraw",
+   "value": {
+    "moved": 0,
+    "switched": 0,
+    "rescored": {
+     "ok": true,
+     "count": 6,
+     "lockAutoCaptured": false,
+     "converted": 0,
+     "bonus": {
+      "ok": true,
+      "awards": [
+       {
+        "id": "id-89",
+        "user_id": "u2",
+        "bonus_type": "banker",
+        "race_id": null,
+        "festival_race_id": "fr2",
+        "points": 60,
+        "detail": {},
+        "notified_at": null
+       },
+       {
+        "id": "id-90",
+        "user_id": "u6",
+        "bonus_type": "banker",
+        "race_id": null,
+        "festival_race_id": "fr2",
+        "points": 60,
+        "detail": {},
+        "notified_at": null
+       }
+      ],
+      "changedRows": 0
+     }
+    },
+    "notified": null,
+    "favourite": {
+     "id": "fa-1",
+     "horse_name": "FA Horse 1",
+     "horse_number": 1,
+     "odds_decimal": 3,
+     "odds_fractional": "2/1",
+     "is_withdrawn": false
+    },
+    "lockedNow": null
+   }
+  },
+  {
+   "label": "festival: reinstate",
+   "value": {
+    "reverted": 0,
+    "rescored": {
+     "ok": true,
+     "count": 6,
+     "lockAutoCaptured": false,
+     "converted": 0,
+     "bonus": {
+      "ok": true,
+      "awards": [
+       {
+        "id": "id-89",
+        "user_id": "u2",
+        "bonus_type": "banker",
+        "race_id": null,
+        "festival_race_id": "fr2",
+        "points": 60,
+        "detail": {},
+        "notified_at": null
+       },
+       {
+        "id": "id-90",
+        "user_id": "u6",
+        "bonus_type": "banker",
+        "race_id": null,
+        "festival_race_id": "fr2",
+        "points": 60,
+        "detail": {},
+        "notified_at": null
+       }
+      ],
+      "changedRows": 0
+     }
+    }
+   }
+  },
+  {
+   "label": "festival: abandon 2",
+   "value": {
+    "ok": true,
+    "text": "Race 2 abandoned · 6 picks scored 0 · 6 players told",
+    "warn": ""
+   }
+  },
+  {
+   "label": "festival: restore 2",
+   "value": {
+    "ok": true,
+    "text": "Race 2 restored. Enter its result when it is in."
+   }
+  },
+  {
+   "label": "festival: recalc 1",
+   "value": {
+    "ok": true,
+    "count": 6,
+    "lockAutoCaptured": false,
+    "converted": 0,
+    "bonus": {
+     "ok": true,
+     "awards": [],
+     "changedRows": 0
+    }
+   }
+  },
+  {
+   "label": "festival: bonuses",
+   "value": {
+    "ok": true,
+    "awards": [],
+    "changedRows": 0
+   }
+  }
+ ],
+ "snapshot": {
+  "bonus_awards": [
+   {
+    "bonus_type": "banker",
+    "detail": {},
+    "id": "id-64",
+    "points": 120,
+    "race_id": "r3",
+    "race_week_id": "w1",
+    "user_id": "u4"
+   },
+   {
+    "bonus_type": "lone_winner",
+    "detail": {},
+    "id": "id-29",
+    "points": 25,
+    "race_id": "r1",
+    "race_week_id": "w1",
+    "user_id": "u4"
+   }
+  ],
+  "festival_day_points": [
+   {
+    "day_number": 1,
+    "festival_id": "f1",
+    "id": "id-75",
+    "points": 0,
+    "user_id": "u1"
+   },
+   {
+    "day_number": 1,
+    "festival_id": "f1",
+    "id": "id-76",
+    "points": 90,
+    "user_id": "u2"
+   },
+   {
+    "day_number": 1,
+    "festival_id": "f1",
+    "id": "id-77",
+    "points": 0,
+    "user_id": "u3"
+   },
+   {
+    "day_number": 1,
+    "festival_id": "f1",
+    "id": "id-78",
+    "points": 0,
+    "user_id": "u4"
+   },
+   {
+    "day_number": 1,
+    "festival_id": "f1",
+    "id": "id-79",
+    "points": 90,
+    "user_id": "u5"
+   },
+   {
+    "day_number": 1,
+    "festival_id": "f1",
+    "id": "id-80",
+    "points": 0,
+    "user_id": "u6"
+   }
+  ],
+  "festival_days": [
+   {
+    "day_number": 1,
+    "festival_id": "f1",
+    "id": "d1",
+    "picks_deadline": "2026-11-13T12:00:00.000Z",
+    "race_date": "2026-11-13"
+   }
+  ],
+  "festival_picks": [
+   {
+    "bet_type": "each_way",
+    "festival_race_id": "fr1",
+    "id": "fpk-1-u6",
+    "is_banker": false,
+    "original_runner_id": null,
+    "runner_id": "fa-3",
+    "user_id": "u6",
+    "was_replaced": false
+   },
+   {
+    "bet_type": "each_way",
+    "festival_race_id": "fr2",
+    "id": "fpk-2-u5",
+    "is_banker": false,
+    "original_runner_id": null,
+    "runner_id": "fb-5",
+    "user_id": "u5",
+    "was_replaced": false
+   },
+   {
+    "bet_type": "win",
+    "festival_race_id": "fr1",
+    "id": "fpk-1-u1",
+    "is_banker": true,
+    "original_runner_id": null,
+    "runner_id": "fa-1",
+    "user_id": "u1",
+    "was_replaced": false
+   },
+   {
+    "bet_type": "win",
+    "festival_race_id": "fr1",
+    "id": "fpk-1-u2",
+    "is_banker": false,
+    "original_runner_id": null,
+    "runner_id": "fa-2",
+    "user_id": "u2",
+    "was_replaced": false
+   },
+   {
+    "bet_type": "win",
+    "festival_race_id": "fr1",
+    "id": "fpk-1-u3",
+    "is_banker": false,
+    "original_runner_id": null,
+    "runner_id": "fa-1",
+    "user_id": "u3",
+    "was_replaced": false
+   },
+   {
+    "bet_type": "win",
+    "festival_race_id": "fr1",
+    "id": "fpk-1-u4",
+    "is_banker": false,
+    "original_runner_id": null,
+    "runner_id": "fa-4",
+    "user_id": "u4",
+    "was_replaced": false
+   },
+   {
+    "bet_type": "win",
+    "festival_race_id": "fr1",
+    "id": "fpk-1-u5",
+    "is_banker": false,
+    "original_runner_id": null,
+    "runner_id": "fa-2",
+    "user_id": "u5",
+    "was_replaced": false
+   },
+   {
+    "bet_type": "win",
+    "festival_race_id": "fr2",
+    "id": "fpk-2-u1",
+    "is_banker": false,
+    "original_runner_id": "fb-3",
+    "replacement_reason": "Horse withdrawn — replaced with race favourite",
+    "runner_id": "fb-1",
+    "user_id": "u1",
+    "was_replaced": true
+   },
+   {
+    "bet_type": "win",
+    "festival_race_id": "fr2",
+    "id": "fpk-2-u2",
+    "is_banker": true,
+    "original_runner_id": "fb-3",
+    "replacement_reason": "Horse withdrawn — replaced with race favourite",
+    "runner_id": "fb-1",
+    "user_id": "u2",
+    "was_replaced": true
+   },
+   {
+    "bet_type": "win",
+    "festival_race_id": "fr2",
+    "id": "fpk-2-u3",
+    "is_banker": false,
+    "original_runner_id": null,
+    "runner_id": "fb-1",
+    "user_id": "u3",
+    "was_replaced": false
+   },
+   {
+    "bet_type": "win",
+    "festival_race_id": "fr2",
+    "id": "fpk-2-u4",
+    "is_banker": false,
+    "original_runner_id": null,
+    "runner_id": "fb-2",
+    "user_id": "u4",
+    "was_replaced": false
+   },
+   {
+    "bet_type": "win",
+    "festival_race_id": "fr2",
+    "id": "fpk-2-u6",
+    "is_banker": true,
+    "original_runner_id": null,
+    "runner_id": "fb-1",
+    "user_id": "u6",
+    "was_replaced": false
+   }
+  ],
+  "festival_races": [
+   {
+    "festival_day_id": "d1",
+    "id": "fr1",
+    "is_abandoned": false,
+    "race_name": "Festival Opener",
+    "race_number": 1,
+    "race_time": "13:20",
+    "runner_count_at_lock": 7,
+    "venue": "Cheltenham"
+   },
+   {
+    "festival_day_id": "d1",
+    "id": "fr2",
+    "is_abandoned": false,
+    "race_name": "Festival Second",
+    "race_number": 2,
+    "race_time": "14:00",
+    "runner_count_at_lock": 5,
+    "venue": "Cheltenham"
+   }
+  ],
+  "festival_results": [
+   {
+    "festival_race_id": "fr1",
+    "horse_name": "FA Horse 1",
+    "id": "id-93",
+    "position": 2,
+    "starting_price_display": "2/1"
+   },
+   {
+    "festival_race_id": "fr1",
+    "horse_name": "FA Horse 2",
+    "id": "id-92",
+    "position": 1,
+    "starting_price_display": "7/2"
+   },
+   {
+    "festival_race_id": "fr1",
+    "horse_name": "FA Horse 3",
+    "id": "id-94",
+    "position": 3,
+    "starting_price_display": "5/1"
+   }
+  ],
+  "festival_runners": [
+   {
+    "festival_race_id": "fr1",
+    "horse_name": "FA Horse 1",
+    "horse_number": 1,
+    "id": "fa-1",
+    "is_withdrawn": false,
+    "jockey": "Jockey 1",
+    "odds_decimal": 3,
+    "odds_fractional": "2/1",
+    "trainer": "Trainer 1"
+   },
+   {
+    "festival_race_id": "fr1",
+    "horse_name": "FA Horse 2",
+    "horse_number": 2,
+    "id": "fa-2",
+    "is_withdrawn": false,
+    "jockey": "Jockey 2",
+    "odds_decimal": 4.5,
+    "odds_fractional": "7/2",
+    "trainer": "Trainer 2"
+   },
+   {
+    "festival_race_id": "fr1",
+    "horse_name": "FA Horse 3",
+    "horse_number": 3,
+    "id": "fa-3",
+    "is_withdrawn": false,
+    "jockey": "Jockey 3",
+    "odds_decimal": 6,
+    "odds_fractional": "5/1",
+    "trainer": "Trainer 3"
+   },
+   {
+    "festival_race_id": "fr1",
+    "horse_name": "FA Horse 4",
+    "horse_number": 4,
+    "id": "fa-4",
+    "is_withdrawn": false,
+    "jockey": "Jockey 4",
+    "odds_decimal": 9,
+    "odds_fractional": "8/1",
+    "trainer": "Trainer 4"
+   },
+   {
+    "festival_race_id": "fr1",
+    "horse_name": "FA Horse 5",
+    "horse_number": 5,
+    "id": "fa-5",
+    "is_withdrawn": false,
+    "jockey": "Jockey 5",
+    "odds_decimal": 13,
+    "odds_fractional": "12/1",
+    "trainer": "Trainer 5"
+   },
+   {
+    "festival_race_id": "fr1",
+    "horse_name": "FA Horse 6",
+    "horse_number": 6,
+    "id": "fa-6",
+    "is_withdrawn": false,
+    "jockey": "Jockey 6",
+    "odds_decimal": 21,
+    "odds_fractional": "20/1",
+    "trainer": "Trainer 6"
+   },
+   {
+    "festival_race_id": "fr1",
+    "horse_name": "FA Horse 7",
+    "horse_number": 7,
+    "id": "fa-7",
+    "is_withdrawn": false,
+    "jockey": "Jockey 7",
+    "odds_decimal": 26,
+    "odds_fractional": "25/1",
+    "trainer": "Trainer 7"
+   },
+   {
+    "festival_race_id": "fr2",
+    "horse_name": "FB Horse 1",
+    "horse_number": 1,
+    "id": "fb-1",
+    "is_withdrawn": false,
+    "jockey": "Jockey 1",
+    "odds_decimal": 3,
+    "odds_fractional": "2/1",
+    "trainer": "Trainer 1"
+   },
+   {
+    "festival_race_id": "fr2",
+    "horse_name": "FB Horse 2",
+    "horse_number": 2,
+    "id": "fb-2",
+    "is_withdrawn": false,
+    "jockey": "Jockey 2",
+    "odds_decimal": 4.5,
+    "odds_fractional": "7/2",
+    "trainer": "Trainer 2"
+   },
+   {
+    "festival_race_id": "fr2",
+    "horse_name": "FB Horse 3",
+    "horse_number": 3,
+    "id": "fb-3",
+    "is_withdrawn": true,
+    "jockey": "Jockey 3",
+    "odds_decimal": 6,
+    "odds_fractional": "5/1",
+    "trainer": "Trainer 3"
+   },
+   {
+    "festival_race_id": "fr2",
+    "horse_name": "FB Horse 4",
+    "horse_number": 4,
+    "id": "fb-4",
+    "is_withdrawn": false,
+    "jockey": "Jockey 4",
+    "odds_decimal": 9,
+    "odds_fractional": "8/1",
+    "trainer": "Trainer 4"
+   },
+   {
+    "festival_race_id": "fr2",
+    "horse_name": "FB Horse 5",
+    "horse_number": 5,
+    "id": "fb-5",
+    "is_withdrawn": false,
+    "jockey": "Jockey 5",
+    "odds_decimal": 13,
+    "odds_fractional": "12/1",
+    "trainer": "Trainer 5"
+   }
+  ],
+  "festival_scores": [
+   {
+    "bet_type": "each_way",
+    "festival_race_id": "fr1",
+    "id": "id-125",
+    "place_token_points": 0,
+    "position_achieved": 3,
+    "total_points": 0,
+    "user_id": "u6",
+    "win_token_points": 0
+   },
+   {
+    "bet_type": "each_way",
+    "festival_race_id": "fr2",
+    "id": "id-117",
+    "place_token_points": 0,
+    "position_achieved": null,
+    "total_points": 0,
+    "user_id": "u5",
+    "win_token_points": 0
+   },
+   {
+    "bet_type": "win",
+    "festival_race_id": "fr1",
+    "id": "id-120",
+    "place_token_points": 0,
+    "position_achieved": 2,
+    "total_points": 0,
+    "user_id": "u1",
+    "win_token_points": 0
+   },
+   {
+    "bet_type": "win",
+    "festival_race_id": "fr1",
+    "id": "id-121",
+    "place_token_points": 0,
+    "position_achieved": 1,
+    "total_points": 90,
+    "user_id": "u2",
+    "win_token_points": 90
+   },
+   {
+    "bet_type": "win",
+    "festival_race_id": "fr1",
+    "id": "id-122",
+    "place_token_points": 0,
+    "position_achieved": 2,
+    "total_points": 0,
+    "user_id": "u3",
+    "win_token_points": 0
+   },
+   {
+    "bet_type": "win",
+    "festival_race_id": "fr1",
+    "id": "id-123",
+    "place_token_points": 0,
+    "position_achieved": null,
+    "total_points": 0,
+    "user_id": "u4",
+    "win_token_points": 0
+   },
+   {
+    "bet_type": "win",
+    "festival_race_id": "fr1",
+    "id": "id-124",
+    "place_token_points": 0,
+    "position_achieved": 1,
+    "total_points": 90,
+    "user_id": "u5",
+    "win_token_points": 90
+   },
+   {
+    "bet_type": "win",
+    "festival_race_id": "fr2",
+    "id": "id-113",
+    "place_token_points": 0,
+    "position_achieved": null,
+    "total_points": 0,
+    "user_id": "u1",
+    "win_token_points": 0
+   },
+   {
+    "bet_type": "win",
+    "festival_race_id": "fr2",
+    "id": "id-114",
+    "place_token_points": 0,
+    "position_achieved": null,
+    "total_points": 0,
+    "user_id": "u2",
+    "win_token_points": 0
+   },
+   {
+    "bet_type": "win",
+    "festival_race_id": "fr2",
+    "id": "id-115",
+    "place_token_points": 0,
+    "position_achieved": null,
+    "total_points": 0,
+    "user_id": "u3",
+    "win_token_points": 0
+   },
+   {
+    "bet_type": "win",
+    "festival_race_id": "fr2",
+    "id": "id-116",
+    "place_token_points": 0,
+    "position_achieved": null,
+    "total_points": 0,
+    "user_id": "u4",
+    "win_token_points": 0
+   },
+   {
+    "bet_type": "win",
+    "festival_race_id": "fr2",
+    "id": "id-118",
+    "place_token_points": 0,
+    "position_achieved": null,
+    "total_points": 0,
+    "user_id": "u6",
+    "win_token_points": 0
+   }
+  ],
+  "festivals": [
+   {
+    "display_name": "Cheltenham",
+    "id": "f1",
+    "name": "Cheltenham Festival",
+    "venue": "Cheltenham"
+   }
+  ],
+  "picks": [
+   {
+    "bet_type": "each_way",
+    "id": "pk-1-u3",
+    "is_banker": false,
+    "original_runner_id": null,
+    "race_id": "r1",
+    "runner_id": "a-3",
+    "user_id": "u3",
+    "was_replaced": false
+   },
+   {
+    "bet_type": "each_way",
+    "id": "pk-3-u1",
+    "is_banker": false,
+    "original_runner_id": null,
+    "race_id": "r3",
+    "runner_id": "c-4",
+    "user_id": "u1",
+    "was_replaced": false
+   },
+   {
+    "bet_type": "each_way",
+    "id": "pk-3-u3",
+    "is_banker": false,
+    "original_runner_id": null,
+    "race_id": "r3",
+    "runner_id": "c-7",
+    "user_id": "u3",
+    "was_replaced": false
+   },
+   {
+    "bet_type": "each_way",
+    "id": "pk-3-u4",
+    "is_banker": true,
+    "original_runner_id": null,
+    "race_id": "r3",
+    "runner_id": "c-4",
+    "user_id": "u4",
+    "was_replaced": false
+   },
+   {
+    "bet_type": "each_way",
+    "id": "pk-3-u6",
+    "is_banker": false,
+    "original_runner_id": null,
+    "race_id": "r3",
+    "runner_id": "c-8",
+    "user_id": "u6",
+    "was_replaced": false
+   },
+   {
+    "bet_type": "win",
+    "id": "pk-1-u1",
+    "is_banker": true,
+    "original_runner_id": null,
+    "race_id": "r1",
+    "runner_id": "a-1",
+    "user_id": "u1",
+    "was_replaced": false
+   },
+   {
+    "bet_type": "win",
+    "id": "pk-1-u2",
+    "is_banker": false,
+    "original_runner_id": null,
+    "race_id": "r1",
+    "runner_id": "a-1",
+    "user_id": "u2",
+    "was_replaced": false
+   },
+   {
+    "bet_type": "win",
+    "id": "pk-1-u4",
+    "is_banker": false,
+    "original_runner_id": null,
+    "race_id": "r1",
+    "runner_id": "a-2",
+    "user_id": "u4",
+    "was_replaced": false
+   },
+   {
+    "bet_type": "win",
+    "id": "pk-1-u5",
+    "is_banker": true,
+    "original_runner_id": null,
+    "race_id": "r1",
+    "replacement_reason": null,
+    "runner_id": "a-5",
+    "user_id": "u5",
+    "was_replaced": false
+   },
+   {
+    "bet_type": "win",
+    "id": "pk-1-u6",
+    "is_banker": false,
+    "original_runner_id": null,
+    "race_id": "r1",
+    "runner_id": "a-6",
+    "user_id": "u6",
+    "was_replaced": false
+   },
+   {
+    "bet_type": "win",
+    "id": "pk-2-u1",
+    "is_banker": false,
+    "original_runner_id": null,
+    "race_id": "r2",
+    "runner_id": "b-2",
+    "user_id": "u1",
+    "was_replaced": false
+   },
+   {
+    "bet_type": "win",
+    "id": "pk-2-u2",
+    "is_banker": true,
+    "original_runner_id": null,
+    "race_id": "r2",
+    "runner_id": "b-1",
+    "user_id": "u2",
+    "was_replaced": false
+   },
+   {
+    "bet_type": "win",
+    "id": "pk-2-u3",
+    "is_banker": false,
+    "original_runner_id": null,
+    "race_id": "r2",
+    "runner_id": "b-4",
+    "user_id": "u3",
+    "was_replaced": false
+   },
+   {
+    "bet_type": "win",
+    "id": "pk-2-u4",
+    "is_banker": false,
+    "original_runner_id": "b-3",
+    "race_id": "r2",
+    "replacement_reason": "Horse withdrawn — replaced with race favourite",
+    "runner_id": "b-1",
+    "user_id": "u4",
+    "was_replaced": true
+   },
+   {
+    "bet_type": "win",
+    "id": "pk-2-u5",
+    "is_banker": false,
+    "original_runner_id": null,
+    "race_id": "r2",
+    "runner_id": "b-1",
+    "user_id": "u5",
+    "was_replaced": false
+   },
+   {
+    "bet_type": "win",
+    "id": "pk-2-u6",
+    "is_banker": false,
+    "original_runner_id": null,
+    "race_id": "r2",
+    "runner_id": "b-2",
+    "user_id": "u6",
+    "was_replaced": false
+   },
+   {
+    "bet_type": "win",
+    "id": "pk-3-u2",
+    "is_banker": false,
+    "original_runner_id": null,
+    "race_id": "r3",
+    "runner_id": "c-4",
+    "user_id": "u2",
+    "was_replaced": false
+   },
+   {
+    "bet_type": "win",
+    "id": "pk-3-u5",
+    "is_banker": false,
+    "original_runner_id": null,
+    "race_id": "r3",
+    "runner_id": "c-2",
+    "user_id": "u5",
+    "was_replaced": false
+   }
+  ],
+  "profiles": [
+   {
+    "full_name": "Player u1",
+    "id": "u1",
+    "is_admin": true,
+    "username": "player_u1"
+   },
+   {
+    "full_name": "Player u2",
+    "id": "u2",
+    "is_admin": false,
+    "username": "player_u2"
+   },
+   {
+    "full_name": "Player u3",
+    "id": "u3",
+    "is_admin": false,
+    "username": "player_u3"
+   },
+   {
+    "full_name": "Player u4",
+    "id": "u4",
+    "is_admin": false,
+    "username": "player_u4"
+   },
+   {
+    "full_name": "Player u5",
+    "id": "u5",
+    "is_admin": false,
+    "username": "player_u5"
+   },
+   {
+    "full_name": "Player u6",
+    "id": "u6",
+    "is_admin": false,
+    "username": "player_u6"
+   }
+  ],
+  "race_weeks": [
+   {
+    "festival_day_id": null,
+    "id": "w0",
+    "picks_deadline": "2026-11-07T12:50:00.000Z",
+    "saturday_date": "2026-11-07",
+    "season_id": "s1",
+    "status": "completed",
+    "week_number": 11
+   },
+   {
+    "festival_day_id": null,
+    "id": "w1",
+    "picks_deadline": "2026-11-14T12:50:00.000Z",
+    "saturday_date": "2026-11-14",
+    "season_id": "s1",
+    "status": "open",
+    "week_number": 12
+   }
+  ],
+  "races": [
+   {
+    "id": "r1",
+    "is_abandoned": false,
+    "race_name": "Opener",
+    "race_number": 1,
+    "race_time": "13:20",
+    "race_week_id": "w1",
+    "runner_count_at_lock": 6,
+    "venue": "Cheltenham"
+   },
+   {
+    "id": "r2",
+    "is_abandoned": false,
+    "race_name": "Middle",
+    "race_number": 2,
+    "race_time": "13:55",
+    "race_week_id": "w1",
+    "runner_count_at_lock": 4,
+    "venue": "Cheltenham"
+   },
+   {
+    "id": "r3",
+    "is_abandoned": false,
+    "race_name": "Closer",
+    "race_number": 3,
+    "race_time": "14:30",
+    "race_week_id": "w1",
+    "runner_count_at_lock": 8,
+    "venue": "Cheltenham"
+   }
+  ],
+  "reminder_log": [
+   {
+    "festival_day_id": "d1",
+    "id": "id-91",
+    "kind": "end_of_day",
+    "recipient_count": 6
+   }
+  ],
+  "results": [
+   {
+    "horse_name": "A Horse 1",
+    "id": "id-21",
+    "position": 2,
+    "race_id": "r1",
+    "starting_price_decimal": 3,
+    "starting_price_display": "2/1"
+   },
+   {
+    "horse_name": "A Horse 2",
+    "id": "id-20",
+    "position": 1,
+    "race_id": "r1",
+    "starting_price_decimal": 4.5,
+    "starting_price_display": "7/2"
+   },
+   {
+    "horse_name": "A Horse 3",
+    "id": "id-22",
+    "position": 3,
+    "race_id": "r1",
+    "starting_price_decimal": 6,
+    "starting_price_display": "5/1"
+   },
+   {
+    "horse_name": "C Horse 1",
+    "id": "id-57",
+    "position": 4,
+    "race_id": "r3",
+    "starting_price_decimal": 3,
+    "starting_price_display": "2/1"
+   },
+   {
+    "horse_name": "C Horse 2",
+    "id": "id-55",
+    "position": 2,
+    "race_id": "r3",
+    "starting_price_decimal": 4.5,
+    "starting_price_display": "7/2"
+   },
+   {
+    "horse_name": "C Horse 4",
+    "id": "id-54",
+    "position": 1,
+    "race_id": "r3",
+    "starting_price_decimal": 9,
+    "starting_price_display": "8/1"
+   },
+   {
+    "horse_name": "C Horse 7",
+    "id": "id-56",
+    "position": 3,
+    "race_id": "r3",
+    "starting_price_decimal": 26,
+    "starting_price_display": "25/1"
+   }
+  ],
+  "runners": [
+   {
+    "horse_name": "A Horse 1",
+    "horse_number": 1,
+    "id": "a-1",
+    "is_withdrawn": false,
+    "jockey": "Jockey 1",
+    "odds_decimal": 3,
+    "odds_fractional": "2/1",
+    "race_id": "r1",
+    "trainer": "Trainer 1"
+   },
+   {
+    "horse_name": "A Horse 2",
+    "horse_number": 2,
+    "id": "a-2",
+    "is_withdrawn": false,
+    "jockey": "Jockey 2",
+    "odds_decimal": 4.5,
+    "odds_fractional": "7/2",
+    "race_id": "r1",
+    "trainer": "Trainer 2"
+   },
+   {
+    "horse_name": "A Horse 3",
+    "horse_number": 3,
+    "id": "a-3",
+    "is_withdrawn": false,
+    "jockey": "Jockey 3",
+    "odds_decimal": 6,
+    "odds_fractional": "5/1",
+    "race_id": "r1",
+    "trainer": "Trainer 3"
+   },
+   {
+    "horse_name": "A Horse 4",
+    "horse_number": 4,
+    "id": "a-4",
+    "is_withdrawn": false,
+    "jockey": "Jockey 4",
+    "odds_decimal": 9,
+    "odds_fractional": "8/1",
+    "race_id": "r1",
+    "trainer": "Trainer 4"
+   },
+   {
+    "horse_name": "A Horse 5",
+    "horse_number": 5,
+    "id": "a-5",
+    "is_withdrawn": false,
+    "jockey": "Jockey 5",
+    "odds_decimal": 13,
+    "odds_fractional": "12/1",
+    "race_id": "r1",
+    "trainer": "Trainer 5"
+   },
+   {
+    "horse_name": "A Horse 6",
+    "horse_number": 6,
+    "id": "a-6",
+    "is_withdrawn": false,
+    "jockey": "Jockey 6",
+    "odds_decimal": 21,
+    "odds_fractional": "20/1",
+    "race_id": "r1",
+    "trainer": "Trainer 6"
+   },
+   {
+    "horse_name": "B Horse 1",
+    "horse_number": 1,
+    "id": "b-1",
+    "is_withdrawn": false,
+    "jockey": "Jockey 1",
+    "odds_decimal": 3,
+    "odds_fractional": "2/1",
+    "race_id": "r2",
+    "trainer": "Trainer 1"
+   },
+   {
+    "horse_name": "B Horse 2",
+    "horse_number": 2,
+    "id": "b-2",
+    "is_withdrawn": false,
+    "jockey": "Jockey 2",
+    "odds_decimal": 4.5,
+    "odds_fractional": "7/2",
+    "race_id": "r2",
+    "trainer": "Trainer 2"
+   },
+   {
+    "horse_name": "B Horse 3",
+    "horse_number": 3,
+    "id": "b-3",
+    "is_withdrawn": true,
+    "jockey": "Jockey 3",
+    "odds_decimal": 6,
+    "odds_fractional": "5/1",
+    "race_id": "r2",
+    "trainer": "Trainer 3"
+   },
+   {
+    "horse_name": "B Horse 4",
+    "horse_number": 4,
+    "id": "b-4",
+    "is_withdrawn": false,
+    "jockey": "Jockey 4",
+    "odds_decimal": 9,
+    "odds_fractional": "8/1",
+    "race_id": "r2",
+    "trainer": "Trainer 4"
+   },
+   {
+    "horse_name": "C Horse 1",
+    "horse_number": 1,
+    "id": "c-1",
+    "is_withdrawn": false,
+    "jockey": "Jockey 1",
+    "odds_decimal": 3,
+    "odds_fractional": "2/1",
+    "race_id": "r3",
+    "trainer": "Trainer 1"
+   },
+   {
+    "horse_name": "C Horse 2",
+    "horse_number": 2,
+    "id": "c-2",
+    "is_withdrawn": false,
+    "jockey": "Jockey 2",
+    "odds_decimal": 4.5,
+    "odds_fractional": "7/2",
+    "race_id": "r3",
+    "trainer": "Trainer 2"
+   },
+   {
+    "horse_name": "C Horse 3",
+    "horse_number": 3,
+    "id": "c-3",
+    "is_withdrawn": false,
+    "jockey": "Jockey 3",
+    "odds_decimal": 6,
+    "odds_fractional": "5/1",
+    "race_id": "r3",
+    "trainer": "Trainer 3"
+   },
+   {
+    "horse_name": "C Horse 4",
+    "horse_number": 4,
+    "id": "c-4",
+    "is_withdrawn": false,
+    "jockey": "Jockey 4",
+    "odds_decimal": 9,
+    "odds_fractional": "8/1",
+    "race_id": "r3",
+    "trainer": "Trainer 4"
+   },
+   {
+    "horse_name": "C Horse 5",
+    "horse_number": 5,
+    "id": "c-5",
+    "is_withdrawn": false,
+    "jockey": "Jockey 5",
+    "odds_decimal": 13,
+    "odds_fractional": "12/1",
+    "race_id": "r3",
+    "trainer": "Trainer 5"
+   },
+   {
+    "horse_name": "C Horse 6",
+    "horse_number": 6,
+    "id": "c-6",
+    "is_withdrawn": false,
+    "jockey": "Jockey 6",
+    "odds_decimal": 21,
+    "odds_fractional": "20/1",
+    "race_id": "r3",
+    "trainer": "Trainer 6"
+   },
+   {
+    "horse_name": "C Horse 7",
+    "horse_number": 7,
+    "id": "c-7",
+    "is_withdrawn": false,
+    "jockey": "Jockey 7",
+    "odds_decimal": 26,
+    "odds_fractional": "25/1",
+    "race_id": "r3",
+    "trainer": "Trainer 7"
+   },
+   {
+    "horse_name": "C Horse 8",
+    "horse_number": 8,
+    "id": "c-8",
+    "is_withdrawn": false,
+    "jockey": "Jockey 8",
+    "odds_decimal": 34,
+    "odds_fractional": "33/1",
+    "race_id": "r3",
+    "trainer": "Trainer 8"
+   }
+  ],
+  "scores": [
+   {
+    "bet_type": "each_way",
+    "id": "id-50",
+    "pick_id": "pk-1-u3",
+    "place_token_points": 0,
+    "position_achieved": 3,
+    "race_id": "r1",
+    "total_points": 0,
+    "user_id": "u3",
+    "win_token_points": 0
+   },
+   {
+    "bet_type": "each_way",
+    "id": "id-58",
+    "pick_id": "pk-3-u1",
+    "place_token_points": 30,
+    "position_achieved": 1,
+    "race_id": "r3",
+    "total_points": 120,
+    "user_id": "u1",
+    "win_token_points": 90
+   },
+   {
+    "bet_type": "each_way",
+    "id": "id-60",
+    "pick_id": "pk-3-u3",
+    "place_token_points": 51,
+    "position_achieved": 3,
+    "race_id": "r3",
+    "total_points": 51,
+    "user_id": "u3",
+    "win_token_points": 0
+   },
+   {
+    "bet_type": "each_way",
+    "id": "id-61",
+    "pick_id": "pk-3-u4",
+    "place_token_points": 30,
+    "position_achieved": 1,
+    "race_id": "r3",
+    "total_points": 240,
+    "user_id": "u4",
+    "win_token_points": 90
+   },
+   {
+    "bet_type": "each_way",
+    "id": "id-63",
+    "pick_id": "pk-3-u6",
+    "place_token_points": 0,
+    "position_achieved": null,
+    "race_id": "r3",
+    "total_points": 0,
+    "user_id": "u6",
+    "win_token_points": 0
+   },
+   {
+    "bet_type": "win",
+    "id": "id-48",
+    "pick_id": "pk-1-u1",
+    "place_token_points": 0,
+    "position_achieved": 2,
+    "race_id": "r1",
+    "total_points": 0,
+    "user_id": "u1",
+    "win_token_points": 0
+   },
+   {
+    "bet_type": "win",
+    "id": "id-49",
+    "pick_id": "pk-1-u2",
+    "place_token_points": 0,
+    "position_achieved": 2,
+    "race_id": "r1",
+    "total_points": 0,
+    "user_id": "u2",
+    "win_token_points": 0
+   },
+   {
+    "bet_type": "win",
+    "id": "id-51",
+    "pick_id": "pk-1-u4",
+    "place_token_points": 0,
+    "position_achieved": 1,
+    "race_id": "r1",
+    "total_points": 115,
+    "user_id": "u4",
+    "win_token_points": 90
+   },
+   {
+    "bet_type": "win",
+    "id": "id-52",
+    "pick_id": "pk-1-u5",
+    "place_token_points": 0,
+    "position_achieved": null,
+    "race_id": "r1",
+    "total_points": 0,
+    "user_id": "u5",
+    "win_token_points": 0
+   },
+   {
+    "bet_type": "win",
+    "id": "id-53",
+    "pick_id": "pk-1-u6",
+    "place_token_points": 0,
+    "position_achieved": null,
+    "race_id": "r1",
+    "total_points": 0,
+    "user_id": "u6",
+    "win_token_points": 0
+   },
+   {
+    "bet_type": "win",
+    "id": "id-59",
+    "pick_id": "pk-3-u2",
+    "place_token_points": 0,
+    "position_achieved": 1,
+    "race_id": "r3",
+    "total_points": 180,
+    "user_id": "u2",
+    "win_token_points": 180
+   },
+   {
+    "bet_type": "win",
+    "id": "id-62",
+    "pick_id": "pk-3-u5",
+    "place_token_points": 0,
+    "position_achieved": 2,
+    "race_id": "r3",
+    "total_points": 0,
+    "user_id": "u5",
+    "win_token_points": 0
+   }
+  ]
+ },
+ "pushes": [
+  {
+   "name": "send-notification",
+   "body": {
+    "userIds": [
+     "u1"
+    ],
+    "title": "Result's in",
+    "body": "Race 1 is in. How did A Horse 1 get on?",
+    "url": "https://silks-league.vercel.app/results"
+   }
+  },
+  {
+   "name": "send-notification",
+   "body": {
+    "userIds": [
+     "u2"
+    ],
+    "title": "Result's in",
+    "body": "Result's in from Cheltenham. See where A Horse 1 finished",
+    "url": "https://silks-league.vercel.app/results"
+   }
+  },
+  {
+   "name": "send-notification",
+   "body": {
+    "userIds": [
+     "u3"
+    ],
+    "title": "Result's in",
+    "body": "Result's in from Cheltenham. See where A Horse 3 finished",
+    "url": "https://silks-league.vercel.app/results"
+   }
+  },
+  {
+   "name": "send-notification",
+   "body": {
+    "userIds": [
+     "u4"
+    ],
+    "title": "Result's in",
+    "body": "Result's in from Cheltenham. See where A Horse 2 finished",
+    "url": "https://silks-league.vercel.app/results"
+   }
+  },
+  {
+   "name": "send-notification",
+   "body": {
+    "userIds": [
+     "u5"
+    ],
+    "title": "Result's in",
+    "body": "They've crossed the line in the 13:20. Did A Horse 5 deliver?",
+    "url": "https://silks-league.vercel.app/results"
+   }
+  },
+  {
+   "name": "send-notification",
+   "body": {
+    "userIds": [
+     "u6"
+    ],
+    "title": "Result's in",
+    "body": "Race 1 is official. Check how your pick did",
+    "url": "https://silks-league.vercel.app/results"
+   }
+  },
+  {
+   "name": "send-notification",
+   "body": {
+    "userIds": [
+     "u4"
+    ],
+    "title": "Non-runner in Race 2",
+    "body": "Your Race 2 horse is a non-runner. You've been moved to the favourite.",
+    "url": "https://silks-league.vercel.app/picks"
+   }
+  },
+  {
+   "name": "send-notification",
+   "body": {
+    "userIds": [
+     "u1",
+     "u2"
+    ],
+    "title": "Result's in",
+    "body": "Race 2 is official. Check how your pick did",
+    "url": "https://silks-league.vercel.app/results"
+   }
+  },
+  {
+   "name": "send-notification",
+   "body": {
+    "userIds": [
+     "u3"
+    ],
+    "title": "Result's in",
+    "body": "Race 2 is in. How did B Horse 4 get on?",
+    "url": "https://silks-league.vercel.app/results"
+   }
+  },
+  {
+   "name": "send-notification",
+   "body": {
+    "userIds": [
+     "u4"
+    ],
+    "title": "Result's in",
+    "body": "They've crossed the line in the 13:55. Did B Horse 1 deliver?",
+    "url": "https://silks-league.vercel.app/results"
+   }
+  },
+  {
+   "name": "send-notification",
+   "body": {
+    "userIds": [
+     "u5"
+    ],
+    "title": "Result's in",
+    "body": "Race 2 is in. How did B Horse 1 get on?",
+    "url": "https://silks-league.vercel.app/results"
+   }
+  },
+  {
+   "name": "send-notification",
+   "body": {
+    "userIds": [
+     "u6"
+    ],
+    "title": "Result's in",
+    "body": "Race 2 is in. How did B Horse 2 get on?",
+    "url": "https://silks-league.vercel.app/results"
+   }
+  },
+  {
+   "name": "send-notification",
+   "body": {
+    "userIds": [
+     "u5"
+    ],
+    "title": "Non-runner in Race 1",
+    "body": "Your Race 1 horse is a non-runner. You've been moved to the favourite.",
+    "url": "https://silks-league.vercel.app/picks"
+   }
+  },
+  {
+   "name": "send-notification",
+   "body": {
+    "userIds": [
+     "u1",
+     "u2",
+     "u3",
+     "u4",
+     "u5",
+     "u6"
+    ],
+    "title": "Race abandoned",
+    "body": "Race 2 at Cheltenham has been abandoned, so it scores 0 for everyone",
+    "url": "https://silks-league.vercel.app/picks"
+   }
+  },
+  {
+   "name": "send-notification",
+   "body": {
+    "userIds": [
+     "u1",
+     "u2"
+    ],
+    "title": "Result's in",
+    "body": "Race 3 is official. Check how your pick did",
+    "url": "https://silks-league.vercel.app/results"
+   }
+  },
+  {
+   "name": "send-notification",
+   "body": {
+    "userIds": [
+     "u3"
+    ],
+    "title": "Result's in",
+    "body": "Race 3 is in. How did C Horse 7 get on?",
+    "url": "https://silks-league.vercel.app/results"
+   }
+  },
+  {
+   "name": "send-notification",
+   "body": {
+    "userIds": [
+     "u4"
+    ],
+    "title": "Result's in",
+    "body": "They've crossed the line in the 14:30. Did C Horse 4 deliver?",
+    "url": "https://silks-league.vercel.app/results"
+   }
+  },
+  {
+   "name": "send-notification",
+   "body": {
+    "userIds": [
+     "u5"
+    ],
+    "title": "Result's in",
+    "body": "Race 3 is in. How did C Horse 2 get on?",
+    "url": "https://silks-league.vercel.app/results"
+   }
+  },
+  {
+   "name": "send-notification",
+   "body": {
+    "userIds": [
+     "u6"
+    ],
+    "title": "Result's in",
+    "body": "Race 3 is in. How did C Horse 8 get on?",
+    "url": "https://silks-league.vercel.app/results"
+   }
+  },
+  {
+   "name": "send-notification",
+   "body": {
+    "userIds": [
+     "u1",
+     "u3",
+     "u4"
+    ],
+    "title": "Result's in",
+    "body": "Race 1 is official. Check how your pick did",
+    "url": "https://silks-league.vercel.app/results/festival/f1"
+   }
+  },
+  {
+   "name": "send-notification",
+   "body": {
+    "userIds": [
+     "u2"
+    ],
+    "title": "Result's in",
+    "body": "Race 1 is in. How did FA Horse 2 get on?",
+    "url": "https://silks-league.vercel.app/results/festival/f1"
+   }
+  },
+  {
+   "name": "send-notification",
+   "body": {
+    "userIds": [
+     "u5"
+    ],
+    "title": "Result's in",
+    "body": "Result's in from Cheltenham. See where FA Horse 2 finished",
+    "url": "https://silks-league.vercel.app/results/festival/f1"
+   }
+  },
+  {
+   "name": "send-notification",
+   "body": {
+    "userIds": [
+     "u6"
+    ],
+    "title": "Result's in",
+    "body": "Result's in from Cheltenham. See where FA Horse 3 finished",
+    "url": "https://silks-league.vercel.app/results/festival/f1"
+   }
+  },
+  {
+   "name": "send-notification",
+   "body": {
+    "userIds": [
+     "u1",
+     "u2"
+    ],
+    "title": "Non-runner in Race 2",
+    "body": "Your Race 2 horse is a non-runner. You've been moved to the favourite.",
+    "url": "https://silks-league.vercel.app/picks"
+   }
+  },
+  {
+   "name": "send-notification",
+   "body": {
+    "userIds": [
+     "u1",
+     "u3"
+    ],
+    "title": "Result's in",
+    "body": "Result's in from Cheltenham. See where FB Horse 1 finished",
+    "url": "https://silks-league.vercel.app/results/festival/f1"
+   }
+  },
+  {
+   "name": "send-notification",
+   "body": {
+    "userIds": [
+     "u2"
+    ],
+    "title": "Result's in",
+    "body": "Race 2 is official. Check how your pick did",
+    "url": "https://silks-league.vercel.app/results/festival/f1"
+   }
+  },
+  {
+   "name": "send-notification",
+   "body": {
+    "userIds": [
+     "u4"
+    ],
+    "title": "Result's in",
+    "body": "Result's in from Cheltenham. See where FB Horse 2 finished",
+    "url": "https://silks-league.vercel.app/results/festival/f1"
+   }
+  },
+  {
+   "name": "send-notification",
+   "body": {
+    "userIds": [
+     "u5"
+    ],
+    "title": "Result's in",
+    "body": "Race 2 is in. How did FB Horse 5 get on?",
+    "url": "https://silks-league.vercel.app/results/festival/f1"
+   }
+  },
+  {
+   "name": "send-notification",
+   "body": {
+    "userIds": [
+     "u6"
+    ],
+    "title": "Result's in",
+    "body": "Race 2 is in. How did FB Horse 1 get on?",
+    "url": "https://silks-league.vercel.app/results/festival/f1"
+   }
+  },
+  {
+   "name": "send-notification",
+   "body": {
+    "userIds": [
+     "u1",
+     "u2",
+     "u3",
+     "u4",
+     "u5",
+     "u6"
+    ],
+    "title": "Final results",
+    "body": "Racing's done for the day. See who's top of the pile",
+    "url": "https://silks-league.vercel.app/results/festival/f1"
+   }
+  },
+  {
+   "name": "send-notification",
+   "body": {
+    "userIds": [
+     "u1",
+     "u2",
+     "u3",
+     "u4",
+     "u5",
+     "u6"
+    ],
+    "title": "Race abandoned",
+    "body": "Race 2 at Cheltenham has been abandoned, so it scores 0 for everyone",
+    "url": "https://silks-league.vercel.app/picks"
+   }
+  }
+ ]
+}

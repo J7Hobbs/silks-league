@@ -4,6 +4,7 @@ import WithdrawSheet from '../../components/admin/WithdrawSheet.jsx'
 import ResultSheet from './ResultSheet.jsx'
 import { ConfirmSheet } from './sheets.jsx'
 import { RaceSheet, RunnerSheet, DeclarationsSheet } from './RaceSheets.jsx'
+import ReplaceRaceSheet from './ReplaceRaceSheet.jsx'
 import {
   updateRace, deleteRace, saveRunner, removeRunner, runRunnerAction, planWithdrawal, planReinstate, applyDeclarations, abandonRace, restoreRace,
 } from '../../lib/adminRaceDays.js'
@@ -31,9 +32,10 @@ export default function RacePage({ day, race, detail, onBack, onChanged }) {
     return out
   }, [detail, race.id])
   const totalPicks = Object.values(picksOn).reduce((a, b) => a + b, 0)
+  const pickers = new Set(detail.picks.filter(p => p.race_id === race.id).map(p => p.user_id)).size
   const winner = results.find(r => r.position === 1)
 
-  const [sheet, setSheet] = useState(null)         // 'result' | 'decl' | 'edit' | 'abandon' | 'restore' | 'delete' | 'newRunner' | { runner }
+  const [sheet, setSheet] = useState(null)         // 'result' | 'decl' | 'edit' | 'replace' | 'abandon' | 'restore' | 'delete' | 'newRunner' | { runner }
   const [withdraw, setWithdraw] = useState(null)   // { mode, plan }
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -102,6 +104,10 @@ export default function RacePage({ day, race, detail, onBack, onChanged }) {
         {!race.is_abandoned && <button type="button" className="an-btn an-btn--solid" onClick={() => setSheet('result')} disabled={!rules.ran}>{hasResult ? 'Correct result' : 'Enter result'}</button>}
         {!race.is_abandoned && <button type="button" className="an-btn an-btn--ghost" onClick={() => { setError(''); setSheet('decl') }}>Final declarations</button>}
         <button type="button" className="an-btn an-btn--ghost" onClick={() => { setError(''); setSheet('edit') }}>Edit race</button>
+        {!race.is_abandoned && !hasResult && (
+          <button type="button" className="an-btn an-btn--ghost" onClick={() => { setError(''); setSheet('replace') }} disabled={locked}
+            title={locked ? 'Picks have locked, so a race cannot be replaced. Use Abandon race.' : undefined}>Replace race</button>
+        )}
         {race.is_abandoned
           ? <button type="button" className="an-btn an-btn--ghost" onClick={() => setSheet('restore')}>Restore race</button>
           : <button type="button" className="an-btn an-btn--ghost an-btn--danger" onClick={() => setSheet('abandon')}>Abandon race</button>}
@@ -137,6 +143,7 @@ export default function RacePage({ day, race, detail, onBack, onChanged }) {
           onSaved={({ ok, text, warn }) => { close(); onChanged(warn ? `${text} · ${warn}` : text, ok && !warn) }} />
       )}
       {sheet === 'decl' && <DeclarationsSheet race={race} runners={runners} picks={picksOn} locked={locked} busy={busy} error={error} onApply={onApply} onClose={close} />}
+      {sheet === 'replace' && <ReplaceRaceSheet day={day} race={race} picks={totalPicks} players={pickers} onClose={close} onDone={(text, ok) => { close(); onChanged(text, ok) }} />}
       {sheet === 'edit' && <RaceSheet kind={day.kind} race={race} busy={busy} error={error} onSave={onEdit} onClose={close} />}
       {sheet === 'newRunner' && <RunnerSheet kind={day.kind} busy={busy} error={error} onSave={f => onSaveRunner(null, f)} onClose={close} />}
       {sheet?.runner && (

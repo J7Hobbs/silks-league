@@ -8,7 +8,7 @@ import { clockText } from '../../lib/format.js'
 
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
 
-function Field({ id, label, children, hint }) {
+export function Field({ id, label, children, hint }) {
   return (
     <div className="an-field">
       <label className="an-field__label" htmlFor={id}>{label}</label>
@@ -100,7 +100,7 @@ export function RaceSheet({ kind, race, busy, error, onSave, onClose }) {
 }
 
 // ── Add or edit a runner, with the silk colour picker ──────────────────
-function Swatches({ label, value, onChange }) {
+export function Swatches({ label, value, onChange }) {
   return (
     <div className="an-field">
       <span className="an-field__label">{label}</span>
@@ -142,6 +142,7 @@ export function RunnerSheet({ kind, runner, busy, error, onSave, onWithdraw, onR
       </div>
       <Swatches label="Silk colour" value={f.colour} onChange={v => set('colour', v)} />
       <Swatches label="Markings colour" value={f.colour2} onChange={v => set('colour2', v)} />
+      {f.owner_id && <p className="an-muted">Owner: {f.owner_name || f.owner_id}. These silks are remembered for all of their runners.</p>}
       <Error_>{error}</Error_>
       <div className="rd-actions rd-actions--stack">
         <button type="button" className="gr-btn gr-btn--solid" onClick={() => onSave(f)} disabled={busy}>{busy ? 'Saving…' : runner ? 'Save runner' : 'Add runner'}</button>

@@ -105,6 +105,17 @@ export function pickNewBanker({ raceNumber, lockText }) {
   return { title: 'Pick a new banker', body: `Your banker was on Race ${raceNumber}, which has been abandoned. Pick a new banker before ${lockText}.` }
 }
 
+// ── A race swapped for a different one before picks lock (players who had picked in it) ───────────────
+//   lockText  from lockLabel()
+export function raceReplaced({ raceNumber, lockText }) {
+  return { title: 'Race replaced', body: `Race ${raceNumber} has been replaced. Pick again before ${lockText || 'picks lock'}.` }
+}
+
+// ── The race-day agent: sent to admins only, never to players ────────────
+// "Silks League agent: Race 3 result entered". `text` is the sentence also shown in Admin's Agent activity.
+export const AGENT_TITLE = 'Silks League agent'
+export const agentAlert = text => ({ title: AGENT_TITLE, body: text })
+
 // ════════════════════════════════════════════════════════════════════════
 //  Rotation (no wording below this line)
 // ════════════════════════════════════════════════════════════════════════

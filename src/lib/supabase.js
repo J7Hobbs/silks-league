@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { setClient } from '../../supabase/functions/_shared/db.js'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -12,3 +13,6 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     detectSessionInUrl: true,         // handle magic-link / OAuth redirects
   },
 })
+
+// The shared pipeline code (supabase/functions/_shared) talks to whichever client is set here.
+setClient(supabase)
