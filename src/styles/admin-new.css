@@ -358,3 +358,13 @@ select.an-input { appearance: auto; }
 .ag-tab { height: 40px; padding: 0 6px; border-radius: 99px; border: 1px solid var(--border); background: var(--surface-deep); font-family: var(--font-body); font-size: 13px; font-weight: 600; color: var(--text-muted); cursor: pointer; }
 .ag-tab--on { background: var(--gold); border-color: var(--gold); color: #0a1a08; }
 .ag-tab:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+/* Agent: who gets the agent's own alerts */
+.ag-alerts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding-top: 4px; border-top: 1px solid var(--border); }
+.ag-alerts__label { font-size: 13px; color: var(--text-muted); }
+.ag-alerts__list { display: flex; flex-wrap: wrap; gap: 8px; }
+.ag-alerts .an-muted, .ag-alerts .an-rs__error { flex-basis: 100%; margin: 0; }
+.ag-alert { min-height: 44px; padding: 0 14px; border-radius: 99px; border: 1px solid var(--border); background: var(--surface-deep); color: var(--text-muted); font: inherit; font-size: 14px; cursor: pointer; }
+.ag-alert--on { border-color: var(--gold); background: var(--gold-tint); color: var(--gold); }
+.ag-alert:disabled { opacity: 0.6; cursor: default; }
+.ag-alert:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }

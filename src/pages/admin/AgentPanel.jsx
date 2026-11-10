@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { approveDraft, rejectDraft, racecardSummary } from '../../lib/agentRacecard.js'
-import { AUTO_KEY, writeAutoApply } from '../../lib/agentData.js'
+import { AUTO_KEY, ALERT_KEY, writeAutoApply, writeAlertAdmins } from '../../lib/agentData.js'
 import { ConfirmSheet } from './sheets.jsx'
 import { dateText, plural } from '../../lib/adminFmt.js'
 import { ukDateStr } from '../../lib/format.js'
@@ -64,6 +64,7 @@ export function AutoModeCard({ onChanged }) {
         </button>
       </div>
       {problem && <p className="an-muted" role="status">{problem}</p>}
+      <AlertAdmins onChanged={onChanged} />
       {ask && (
         <ConfirmSheet title={on ? 'Turn automatic mode off?' : 'Turn automatic mode on?'} busy={busy} confirm={on ? 'Turn off' : 'Turn on'} onConfirm={change} onClose={() => setAsk(false)}>
           {on
@@ -74,6 +75,61 @@ export function AutoModeCard({ onChanged }) {
         </ConfirmSheet>
       )}
     </section>
+  )
+}
+
+// ── "Alerts go to": which admins get the agent's own pushes ("Silks League agent: …") ──
+// A tick per admin, saved as soon as it is tapped (app_settings.agent_alert_admins) and logged. Player pushes are not affected.
+function AlertAdmins({ onChanged }) {
+  const [admins, setAdmins] = useState(null)          // [{ id, name }]
+  const [ids, setIds] = useState(null)                // the saved list; null = no setting yet
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let live = true
+    ;(async () => {
+      const [a, s] = await Promise.all([
+        supabase.from('profiles').select('id, username, full_name').eq('is_admin', true).order('username'),
+        supabase.from('app_settings').select('value').eq('key', ALERT_KEY).maybeSingle(),
+      ])
+      if (!live) return
+      setAdmins((a.data || []).map(p => ({ id: p.id, name: p.username || p.full_name || 'Admin' })))
+      setIds(!s.error && s.data && Array.isArray(s.data.value) ? s.data.value.map(String) : null)
+    })()
+    return () => { live = false }
+  }, [])
+
+  async function toggle(admin) {
+    if (ids === null || busy) return
+    setBusy(true); setError('')
+    const next = ids.includes(admin.id) ? ids.filter(x => x !== admin.id) : [...ids, admin.id]
+    const uid = (await supabase.auth.getUser()).data?.user?.id || null
+    const me = admins.find(x => x.id === uid)
+    const r = await writeAlertAdmins(next, { userId: uid, by: me?.name || 'an admin', names: admins.filter(x => next.includes(x.id)).map(x => x.name) })
+    setBusy(false)
+    if (!r.ok) { setError(r.error); return }
+    setIds(r.ids); onChanged?.()
+  }
+
+  if (!admins?.length) return null
+  return (
+    <div className="ag-alerts">
+      <span className="ag-alerts__label" id="ag-alerts-label">Alerts go to</span>
+      <div className="ag-alerts__list" role="group" aria-labelledby="ag-alerts-label">
+        {admins.map(a => {
+          const on = ids === null ? false : ids.includes(a.id)
+          return (
+            <button key={a.id} type="button" role="checkbox" aria-checked={on} className={`ag-alert${on ? ' ag-alert--on' : ''}`} onClick={() => toggle(a)} disabled={ids === null || busy}>
+              {a.name}{on ? ' ✓' : ''}
+            </button>
+          )
+        })}
+      </div>
+      {ids === null && <p className="an-muted" role="status">Not set up yet, so every admin gets them. Has the agent alerts migration been run?</p>}
+      {ids !== null && ids.length === 0 && <p className="an-muted" role="status">Nobody gets agent alerts.</p>}
+      {error && <p className="an-rs__error" role="alert">{error}</p>}
+    </div>
   )
 }
 

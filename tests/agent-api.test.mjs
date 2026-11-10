@@ -7,7 +7,7 @@ import { freezeClock } from './helpers/clock.js'
 import { seed } from './scenarios/pipeline.js'
 import { setClient } from '../supabase/functions/_shared/db.js'
 import { handleAgentRequest } from '../supabase/functions/_shared/agentApi.js'
-import { storeDraft, readAutoApply, writeAutoApply, logAgent } from '../supabase/functions/_shared/agentData.js'
+import { storeDraft, readAutoApply, writeAutoApply, logAgent, notifyAdmins, writeAlertAdmins } from '../supabase/functions/_shared/agentData.js'
 import { sendPush, buildNotification, withDirectPush, ONESIGNAL_APP_ID } from '../supabase/functions/_shared/sendPush.js'
 import { approveRacecard, approveDraft, rejectDraft, replaceRace } from '../supabase/functions/_shared/agentRacecard.js'
 import { loadDay } from '../supabase/functions/_shared/adminRaceDays.js'
@@ -651,5 +651,63 @@ test('a push that fails is logged as "Push failed: ..." and never breaks the req
     set(f2)
     await call(card())
     assert.ok(db.tables.agent_log.some(l => l.ok === false && /Push failed: ONESIGNAL_REST_API_KEY is not set/.test(l.summary)))
+  } finally { done() }
+})
+
+// ── Which admins get the agent's alerts (app_settings.agent_alert_admins) ──
+const twoAdmins = db => { db.tables.profiles.find(p => p.id === 'u2').is_admin = true }   // u1 and u2 are admins; u3 is a player
+const alertTo = db => adminPushes(db).map(p => p.body.userIds)
+
+test('alerts go only to the chosen admins who are still admins; player pushes are unaffected', async () => {
+  const { db, call, done } = setup({ extra: { app_settings: [{ key: 'agent_alert_admins', value: ['u1', 'u3', 'gone-user'] }] } })
+  try {
+    twoAdmins(db)                                                  // u3 is listed but is not an admin, 'gone-user' does not exist
+    assert.deepEqual(await notifyAdmins('Something to check'), { ok: true, sent: 1 })
+    assert.deepEqual(alertTo(db), [['u1']])
+    // an automatic result: the admin alert goes to u1 only, the result teasers still go to the players
+    await call({ action: 'submit_results', run_id: 'al1', date: '2026-11-14', results: [result()] }, { auto: true })
+    assert.ok(alertTo(db).every(ids => ids.length === 1 && ids[0] === 'u1'))
+    assert.equal(playerPushes(db).filter(p => p.body.title === "Result's in").length, 6)
+  } finally { done() }
+})
+
+test('no list means every admin; an empty list means nobody, and that is not a failure', async () => {
+  const none = setup()                                             // no app_settings row at all
+  try {
+    twoAdmins(none.db)
+    assert.deepEqual(await notifyAdmins('Hello'), { ok: true, sent: 2 })
+    assert.deepEqual(alertTo(none.db), [['u1', 'u2']])
+  } finally { none.done() }
+  const empty = setup({ extra: { app_settings: [{ key: 'agent_alert_admins', value: [] }] } })
+  try {
+    twoAdmins(empty.db)
+    assert.deepEqual(await notifyAdmins('Hello'), { ok: true, sent: 0 })
+    assert.equal(adminPushes(empty.db).length, 0)
+    const r = await empty.call(card())                             // the request itself still succeeds, the draft is saved
+    assert.equal(r.status, 200); assert.equal(empty.db.tables.agent_drafts.length, 1)
+    assert.equal(adminPushes(empty.db).length, 0)
+  } finally { empty.done() }
+})
+
+test('Admin changes who gets alerts: saved, logged, and the next alert follows it', async () => {
+  const { db, done } = setup({ extra: { app_settings: [{ key: 'agent_alert_admins', value: ['u1'] }] } })
+  try {
+    twoAdmins(db)
+    const r = await writeAlertAdmins(['u1', 'u2', 'u2'], { userId: 'u1', by: 'Jack', names: ['Jack', 'Ollie'] })
+    assert.deepEqual(r, { ok: true, ids: ['u1', 'u2'] })
+    assert.deepEqual(db.tables.app_settings[0].value, ['u1', 'u2'])
+    const log = db.tables.agent_log.find(l => l.action === 'alert_admins')
+    assert.equal(log.actor, 'admin'); assert.equal(log.summary, 'Agent alerts now go to Jack, Ollie (changed by Jack)')
+    await notifyAdmins('x'); assert.deepEqual(alertTo(db), [['u1', 'u2']])
+    await writeAlertAdmins([], { userId: 'u1', by: 'Jack', names: [] })
+    assert.ok(db.tables.agent_log.some(l => l.summary === 'Agent alerts now go to nobody (changed by Jack)'))
+  } finally { done() }
+})
+
+test('a missing alerts row is reported when Admin tries to change it', async () => {
+  const { done } = setup()
+  try {
+    const r = await writeAlertAdmins(['u1'], { userId: 'u1', by: 'Jack', names: ['Jack'] })
+    assert.equal(r.ok, false); assert.match(r.error, /migration/)
   } finally { done() }
 })

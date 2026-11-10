@@ -199,10 +199,45 @@ export async function writeAutoApply(on, { userId = null, by = 'an admin' } = {}
   return { ok: true, on: !!on }
 }
 
-// A push to every admin and nobody else: "Silks League agent: Race 3 result entered". Never throws.
+// ── Who gets the agent's admin alerts (app_settings.agent_alert_admins: a list of user ids) ──
+export const ALERT_KEY = 'agent_alert_admins'
+
+// The ids the alerts go to, or null when there is no list (row or table missing, or it cannot be read): then they go to every
+// admin, as they did before the setting existed.
+export async function readAlertAdmins() {
+  try {
+    const { data, error } = await supabase.from('app_settings').select('value').eq('key', ALERT_KEY).maybeSingle()
+    if (error) {
+      if (error.code === '42P01' || error.code === 'PGRST205') return null
+      throw error
+    }
+    return data && Array.isArray(data.value) ? data.value.map(String) : null
+  } catch (err) {
+    console.error('[agent] could not read who gets agent alerts, sending to every admin:', err)
+    return null
+  }
+}
+
+// Admin changes the list. `names` (what the log shows) and `by` are the admins' usernames.
+export async function writeAlertAdmins(ids, { userId = null, by = 'an admin', names = [] } = {}) {
+  const list = [...new Set((ids || []).map(String))]
+  const { data, error } = await supabase.from('app_settings')
+    .update({ value: list, updated_at: new Date().toISOString(), updated_by: userId })
+    .eq('key', ALERT_KEY).select('key')
+  if (error) return { ok: false, error: error.message }
+  if (!(data || []).length) return { ok: false, error: 'The setting row is missing. Has the agent alerts migration been run?' }
+  await logAgent({ actor: 'admin', action: 'alert_admins', summary: `Agent alerts now go to ${names.length ? names.join(', ') : 'nobody'} (changed by ${by})`, detail: { user_ids: list } })
+  return { ok: true, ids: list }
+}
+
+// A push to the admins chosen for agent alerts and nobody else: "Silks League agent: Race 3 result entered". Only the ids in
+// app_settings.agent_alert_admins who are still is_admin; no list means every admin; an empty list means nobody, and that is
+// not a failure. Never throws.
 export async function notifyAdmins(text, { url = `${APP_ORIGIN}/admin` } = {}) {
   try {
-    const admins = must(await supabase.from('profiles').select('id').eq('is_admin', true)).map(p => p.id)
+    const all = must(await supabase.from('profiles').select('id').eq('is_admin', true)).map(p => p.id)
+    const chosen = await readAlertAdmins()
+    const admins = chosen ? all.filter(id => chosen.includes(String(id))) : all
     if (!admins.length) return { ok: true, sent: 0 }
     const { error } = await supabase.functions.invoke('send-notification', { body: { userIds: admins, ...agentAlert(text), url } })
     if (error) throw error
