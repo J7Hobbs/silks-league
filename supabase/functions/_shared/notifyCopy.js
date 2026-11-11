@@ -92,6 +92,14 @@ export const END_OF_DAY = [
   { needs: [], text: () => 'Final results are in. Time to check the table' },
 ]
 
+// ── 6b. Festival final (the last race of a festival's last day) ───────────
+// Sent INSTEAD of the end-of-day message on that day, to everyone who made picks in the festival. Opens the Final page.
+// `venue` is the festival's venue; without one the line drops the "from ...".
+export const FESTIVAL_FINAL_TITLE = END_OF_DAY_TITLE
+export function festivalFinal({ venue }) {
+  return { title: FESTIVAL_FINAL_TITLE, body: venue ? `Final table's in from ${venue}. See where you finished` : "Final table's in. See where you finished" }
+}
+
 // ── 7. Group joins (everyone already in the group) ───────────────────────
 export function groupJoined({ username, groupName }) {
   return { title: 'New group member', body: `${username} just joined ${groupName}` }

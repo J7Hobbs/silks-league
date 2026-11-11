@@ -1,5 +1,6 @@
 import { ordinal, formatCountdown, deadlineMs, ukDateStr } from './format.js'
 import { saturdayCard } from './saturdayCard.js'
+import { finalPath } from './finalTable.js'
 
 // Turns the loaded Home data into the competition cards to show, in order.
 // Pure: pass in `nowMs` so the countdowns tick without re-querying.
@@ -37,9 +38,12 @@ function festivalCard(fest, nowMs) {
       { label: 'Your picks', value: `${fest.picked}/${fest.total}` },
       { label: 'Position', value: rankText(fest.rank) },
     ],
-    button: live
-      ? { label: pickLabel(fest.picked, fest.total), action: { to: '/picks', state: { festivalTab: f.id } } }
-      : { label: 'View results', outline: true, action: { to: `/results/festival/${f.id}` } },
+    // Once the festival's last race is in, the card goes to its Final page (this card is only ever the latest festival).
+    button: fest.final
+      ? { label: 'Final table', outline: true, action: { to: finalPath(f.id) } }
+      : live
+        ? { label: pickLabel(fest.picked, fest.total), action: { to: '/picks', state: { festivalTab: f.id } } }
+        : { label: 'View results', outline: true, action: { to: `/results/festival/${f.id}` } },
   }
 }
 

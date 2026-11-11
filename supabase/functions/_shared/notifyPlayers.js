@@ -6,7 +6,7 @@ import { supabase } from './db.js'
 import { ukDateStr } from './format.js'
 import { DAY } from './dayBonuses.js'
 import { KINDS } from './raceDay.js'
-import { APP_ORIGIN, RESULT_TEASER_TITLE, END_OF_DAY_TITLE, resultTeaserFor, endOfDayFor, clockOf } from './notifyCopy.js'
+import { APP_ORIGIN, RESULT_TEASER_TITLE, END_OF_DAY_TITLE, resultTeaserFor, endOfDayFor, festivalFinal, clockOf } from './notifyCopy.js'
 
 const must = ({ data, error }) => { if (error) throw error; return data || [] }
 
@@ -79,6 +79,17 @@ export async function sendResultTeasers(kind, race, { festivalId = null } = {}) 
   }
 }
 
+// If this festival day is the LAST day of its festival: { festivalId, dayIds, venue }, else null. That day's end-of-day message is
+// replaced by the festival-final one (the same claim in reminder_log, so it still goes once and never as well as the other).
+async function festivalFinalOf(dayId) {
+  const day = (await supabase.from('festival_days').select('festival_id, day_number').eq('id', dayId).maybeSingle()).data
+  if (!day) return null
+  const days = must(await supabase.from('festival_days').select('id, day_number').eq('festival_id', day.festival_id))
+  if (days.some(d => d.day_number > day.day_number)) return null
+  const fest = (await supabase.from('festivals').select('venue').eq('id', day.festival_id).maybeSingle()).data
+  return { festivalId: day.festival_id, dayIds: days.map(d => d.id), venue: String(fest?.venue || '').trim() }
+}
+
 // ── When a race day's last race has a result (or is abandoned): one message to everyone who picked ────────────
 // Once per race day. The row in reminder_log is claimed first (it is unique per race day and kind), so two admins saving
 // at once cannot both send, and it is released again if the send fails. A race day more than a day old is left alone,
@@ -101,7 +112,12 @@ export async function sendEndOfDay(kind, dayId, { festivalId = null, nowMs = Dat
     const yesterday = ukDateStr(nowMs - 86400000)
     if (date && date < yesterday) return { ok: true, sent: 0, skipped: 'old race day' }
 
-    const picks = await allRows((a, b) => supabase.from(c.picks).select('user_id').in(c.raceCol, races.map(r => r.id)).range(a, b))
+    // The last day of a festival tells everyone who picked anywhere in the festival that the final table is in.
+    const final = dk === 'festival' ? await festivalFinalOf(id) : null
+    const pickRaceIds = final
+      ? must(await supabase.from(c.races).select('id').in(c.raceDayCol, final.dayIds)).map(r => r.id)
+      : races.map(r => r.id)
+    const picks = await allRows((a, b) => supabase.from(c.picks).select('user_id').in(c.raceCol, pickRaceIds).range(a, b))
     const userIds = [...new Set(picks.map(p => p.user_id))]
     if (!userIds.length) return { ok: true, sent: 0, skipped: 'nobody picked' }
 
@@ -113,14 +129,16 @@ export async function sendEndOfDay(kind, dayId, { festivalId = null, nowMs = Dat
     }
 
     const venues = [...new Set(races.map(r => String(r.venue || '').trim()).filter(Boolean))]
-    const body = endOfDayFor({ seed: `${dk}:${id}`, details: { venue: venues.length === 1 ? venues[0] : '' } })
+    const message = final
+      ? festivalFinal({ venue: final.venue || (venues.length === 1 ? venues[0] : '') })
+      : { title: END_OF_DAY_TITLE, body: endOfDayFor({ seed: `${dk}:${id}`, details: { venue: venues.length === 1 ? venues[0] : '' } }) }
     try {
-      await push(userIds, { title: END_OF_DAY_TITLE, body }, await resultsUrl(dk, id, festivalId))
+      await push(userIds, message, final ? `${APP_ORIGIN}/festival/${final.festivalId}/final` : await resultsUrl(dk, id, festivalId))
     } catch (err) {
       await supabase.from('reminder_log').delete().eq(logCol, id).eq('kind', 'end_of_day')
       throw err
     }
-    return { ok: true, sent: userIds.length }
+    return { ok: true, sent: userIds.length, ...(final ? { final: true } : {}) }
   } catch (err) {
     console.error('[Admin] end-of-day notification failed:', err)
     return { ok: false, sent: 0, error: err.message || String(err) }

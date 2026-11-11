@@ -9,6 +9,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useCompetition } from '../context/competition.js'
 import { loadFestival, fetchFestivalRows } from '../lib/leagueData.js'
 import { useLeagueUser } from '../components/league/useLeagueUser.js'
+import { setLbScope } from '../lib/lbScope.js'
 import BackLink from '../components/league/BackLink.jsx'
 import TableBody from '../components/league/TableBody.jsx'
 import PicksModalHost from '../components/league/PicksModalHost.jsx'
@@ -25,6 +26,8 @@ export default function LeagueFestival() {
   const user = useLeagueUser()
   const [data, setData] = useState(undefined)   // undefined = loading, null = not found
   const [picksModal, setPicksModal] = useState(null)
+
+  useEffect(() => { setLbScope({ kind: 'everyone' }) }, [])   // the table last looked at, for the Final page
 
   useEffect(() => {
     if (!user) return

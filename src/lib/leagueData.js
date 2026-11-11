@@ -263,7 +263,8 @@ export async function fetchFestivalRows(fest, memberIds, myUserId) {
     days: daysData, raceDay, dayPts: dayPtsMap, scoreRows: scoresData, entries, names,
   })
 
-  return { rows, festDays: daysData, table }
+  // scoredIds: everyone with at least one score row, i.e. at least one pick that has been scored (the Final page counts only them).
+  return { rows, festDays: daysData, table, scoredIds: [...new Set(scoresData.map(s => s.user_id))] }
 }
 
 // ── My groups ─────────────────────────────────────────────────

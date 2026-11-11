@@ -14,6 +14,7 @@ import {
 import { loadCurrentFestival } from '../lib/festivalData.js'
 import { seasonMonth, winnersLine, weekRowsForGroup } from '../lib/leagueView.js'
 import { useLeagueUser } from '../components/league/useLeagueUser.js'
+import { setLbScope } from '../lib/lbScope.js'
 import BackLink from '../components/league/BackLink.jsx'
 import ViewToggle from '../components/league/ViewToggle.jsx'
 import TableBody from '../components/league/TableBody.jsx'
@@ -34,6 +35,9 @@ export default function LeagueGroup() {
   const [tab, setTab] = useState('saturday')    // 'saturday' | 'festival'
   const [view, setView] = useState('season')    // 'week' | 'season' (Saturday League)
   const [picksModal, setPicksModal] = useState(null)
+
+  // Remember this group as the Leaderboard table last looked at (the festival Final page opens on it).
+  useEffect(() => { if (data) setLbScope({ kind: 'group', id: groupId }) }, [data, groupId])
 
   useEffect(() => {
     if (!user) return

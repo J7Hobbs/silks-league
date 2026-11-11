@@ -9,6 +9,7 @@ import { useState, useEffect } from 'react'
 import { loadSaturdayLeague } from '../lib/leagueData.js'
 import { seasonMonth, winnersLine, weekRowsForAll } from '../lib/leagueView.js'
 import { useLeagueUser } from '../components/league/useLeagueUser.js'
+import { setLbScope } from '../lib/lbScope.js'
 import BackLink from '../components/league/BackLink.jsx'
 import ViewToggle from '../components/league/ViewToggle.jsx'
 import TableBody from '../components/league/TableBody.jsx'
@@ -26,6 +27,8 @@ export default function LeagueSaturday() {
   const [data, setData] = useState(undefined)   // undefined = loading, null = no active season
   const [view, setView] = useState('season')
   const [picksModal, setPicksModal] = useState(null)
+
+  useEffect(() => { setLbScope({ kind: 'everyone' }) }, [])   // the table last looked at, for the Final page
 
   useEffect(() => {
     if (!user) return

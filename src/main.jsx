@@ -16,6 +16,7 @@ import LeagueSaturday from './pages/LeagueSaturday.jsx'
 import LeagueFestival from './pages/LeagueFestival.jsx'
 import LeagueGroup    from './pages/LeagueGroup.jsx'
 import LeaguePastFestival from './pages/LeaguePastFestival.jsx'
+import FestivalFinal from './pages/FestivalFinal.jsx'
 import LeaguePastSeason   from './pages/LeaguePastSeason.jsx'
 import Races          from './pages/Races.jsx'
 import Results        from './pages/Results.jsx'
@@ -54,6 +55,7 @@ createRoot(document.getElementById('root')).render(
             <Route path="/league/festival/:festivalId" element={<LeagueFestival />} />
             <Route path="/league/group/:groupId"       element={<LeagueGroup />}    />
             <Route path="/league/past/festival/:festivalId" element={<LeaguePastFestival />} />
+            <Route path="/festival/:festivalId/final" element={<FestivalFinal />} />
             <Route path="/league/past/season/:seasonId"     element={<LeaguePastSeason />}   />
             <Route path="/bonus-points" element={<BonusPoints />} />
             <Route path="/results"   element={<Results />}   />

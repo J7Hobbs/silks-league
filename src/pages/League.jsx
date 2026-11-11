@@ -12,6 +12,8 @@ import { Clock } from 'lucide-react'
 import { ukDateStr } from '../lib/format.js'
 import { loadSaturdayLeague, loadMyGroups, fetchFestivalRows } from '../lib/leagueData.js'
 import { loadCurrentFestival } from '../lib/festivalData.js'
+import { festivalFinalStatus } from '../lib/festivalFinal.js'
+import { finalSummary } from '../lib/finalTable.js'
 import { loadMembers, loadStandings } from '../lib/groupStandings.js'
 import { satHubSub, festHubSub, previewRows, allZero } from '../lib/leagueView.js'
 import { useLeagueUser } from '../components/league/useLeagueUser.js'
@@ -20,9 +22,11 @@ import { TableKey } from '../components/league/LeagueTable.jsx'
 import GroupsList from '../components/league/GroupsList.jsx'
 import PicksModalHost from '../components/league/PicksModalHost.jsx'
 import PastSheet from '../components/league/PastSheet.jsx'
+import FinalCard from '../components/league/FinalCard.jsx'
 import { LeagueHubSkeleton } from '../components/Skeletons.jsx'
 import '../styles/picks.css'
 import '../styles/league.css'
+import '../styles/final.css'
 
 // The "Past" button: finished festivals and earlier seasons (PastSheet).
 const SHOW_PAST = true
@@ -64,7 +68,9 @@ export default function League() {
 
         // The festival card and each group's position are extras: if one can't be read the rest still shows.
         const [fest, standings] = await Promise.all([
-          hub ? fetchFestivalRows(hub.festival, null, user.id).then(r => ({ ...hub, ...r })).catch(() => null) : null,
+          // `final` is true once the festival's last race is in; if it can't be read the card is simply left out.
+          hub ? Promise.all([fetchFestivalRows(hub.festival, null, user.id), festivalFinalStatus(hub.festival.id).catch(() => null)])
+            .then(([r, st]) => ({ ...hub, ...r, final: !!st?.final })).catch(() => null) : null,
           groups.length
             ? loadMembers(groups.map(g => g.id)).then(m => loadStandings(user.id, m)).catch(() => null)
             : null,
@@ -129,6 +135,8 @@ export default function League() {
             </button>
           )}
         </div>
+
+        {fest?.final && <FinalCard festivalId={fest.festival.id} name={festName} summary={finalSummary(fest.rows, fest.scoredIds, user.id)} />}
 
         <PreviewCard
           title="Saturday League"

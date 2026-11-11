@@ -2,6 +2,7 @@ import { supabase } from './supabase'
 import { seasonTable, festivalRank } from './standings'
 import { localDateStr, ukDateStr, daysBetween, deadlineMs } from './format'
 import { loadUpcomingFestivals, pickNextFestival, loadCurrentFestival } from './festivalData.js'
+import { festivalFinalStatus } from './festivalFinal.js'
 import { weekRaces } from './weekSource.js'
 
 // Everything the Home page needs, in one read-only load. A failing part is
@@ -160,13 +161,15 @@ async function loadFestival(userId, today, nowMs) {
   const dayRaces = racesByDay[day.id] || []
   const raceIds = dayRaces.map(r => r.id)
 
-  const [{ data: picks }, rank, { data: linkedWeek }] = await Promise.all([
+  const [{ data: picks }, rank, { data: linkedWeek }, finalStatus] = await Promise.all([
     raceIds.length
       ? supabase.from('festival_picks').select('festival_race_id').eq('user_id', userId).in('festival_race_id', raceIds)
       : Promise.resolve({ data: [] }),
     festivalRank(userId, festival.id),
     // Is this day also a week of the Saturday League? (race_weeks.festival_day_id)
     supabase.from('race_weeks').select('id').eq('festival_day_id', day.id).maybeSingle(),
+    // Is the festival over (its last race is in)? Then the card links to its Final page. Left as not over if it can't be read.
+    festivalFinalStatus(festival.id).catch(() => null),
   ])
 
   return {
@@ -179,6 +182,7 @@ async function loadFestival(userId, today, nowMs) {
     deadline: day.picks_deadline || `${day.race_date}T12:00:00`,
     rank,
     alsoSaturday: !!linkedWeek,
+    final: !!finalStatus?.final,
     venue: festival.venue || dayRaces[0]?.venue || null,
   }
 }

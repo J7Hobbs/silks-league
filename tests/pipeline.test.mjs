@@ -34,7 +34,14 @@ test('shared pipeline gives the same scores, bonuses, picks and pushes as the co
     const golden = JSON.parse(fs.readFileSync(new URL('./golden/pipeline.json', import.meta.url), 'utf8'))
     assert.deepEqual(out.returns, golden.returns, 'return values differ')
     assert.deepEqual(out.snapshot, golden.snapshot, 'database rows differ')
-    assert.deepEqual(JSON.parse(JSON.stringify(out.pushes)), golden.pushes, 'pushes differ')
+    // The one intended difference from the old code: this festival has a single day, which is its LAST day, so the end-of-day
+    // push there is now the festival-final one (same title, same recipients, same single send; new line and the Final page).
+    const expected = JSON.parse(JSON.stringify(golden.pushes))
+    const eod = expected.filter(p => p.body.body === "Racing's done for the day. See who's top of the pile")
+    assert.equal(eod.length, 1)
+    eod[0].body.body = "Final table's in from Cheltenham. See where you finished"
+    eod[0].body.url = 'https://silks-league.vercel.app/festival/f1/final'
+    assert.deepEqual(JSON.parse(JSON.stringify(out.pushes)), expected, 'pushes differ')
     assert.ok(out.snapshot.scores.length > 0 && out.snapshot.bonus_awards.length > 0, 'the scenario should have scored and awarded bonuses')
   } finally { setRule4StartDateForTests(); unfreeze() }
 })
