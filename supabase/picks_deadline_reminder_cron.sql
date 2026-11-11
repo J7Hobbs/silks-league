@@ -16,8 +16,11 @@
 --    bottom left) -> API Keys -> the "Legacy anon, service_role API keys" tab ->
 --    service_role -> Reveal -> Copy. It is a long string starting "eyJ".
 --  Use that legacy service_role key, not the anon key and not an "sb_secret_" key:
---  the function checks the key it receives against the one it runs with.
+--  the gateway checks it (JWT verification stays on) and the function checks x-cron-secret.
 --  Never share it or commit it to the repo: it can read and change everything.
+--  ALSO replace YOUR_CRON_SECRET with the value of the CRON_SECRET secret (at least 16 characters; set it first with
+--    npx supabase@latest secrets set CRON_SECRET=<long random string> --project-ref wfytwcwletznzyayjkrv).
+--    The function checks that header itself; the legacy JWT in Authorization only gets the request past the gateway.
 -- ════════════════════════════════════════════════════════════════
 
 -- 1. Enable required extensions (safe to re-run if already enabled).
@@ -41,7 +44,8 @@ SELECT cron.schedule(
     url     := 'https://wfytwcwletznzyayjkrv.supabase.co/functions/v1/picks-deadline-reminder',
     headers := jsonb_build_object(
       'Content-Type', 'application/json',
-      'Authorization', 'Bearer YOUR_SERVICE_ROLE_KEY'
+      'Authorization', 'Bearer YOUR_SERVICE_ROLE_KEY',
+      'x-cron-secret', 'YOUR_CRON_SECRET'
     ),
     body    := '{}'::jsonb
   );

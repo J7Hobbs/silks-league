@@ -12,13 +12,14 @@
 // sending, so two overlapping runs can never both send, and it is removed again if the send fails so the next run retries.
 // The wording is in ../_shared/notifyCopy.js and the who/when rules in ../_shared/reminderPlan.js.
 //
-// SECURITY: deploy this with JWT verification ON (the default) and it also checks, here, that the caller sent the
-// project's service-role key. Nobody else can trigger it.
+// SECURITY: deploy this with JWT verification ON (the default) and it also checks, here, that the caller sent the x-cron-secret
+// header matching the CRON_SECRET secret (or the runtime's service-role key as Authorization). Nobody else can trigger it.
 
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { APP_ORIGIN, picksClosing, lastCall, describeDay, lockLabel } from '../_shared/notifyCopy.js'
 import { sendPush } from '../_shared/sendPush.js'
 import { dueKinds, planClosing, planLastCall, bankersApply } from '../_shared/reminderPlan.js'
+import { isCronAuthorised } from '../_shared/cronAuth.js'
 
 // deno-lint-ignore no-explicit-any
 type Admin = any
@@ -107,8 +108,8 @@ Deno.serve(async req => {
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
-  // Only the scheduler (which sends the service-role key) may run this.
-  if (req.headers.get('Authorization') !== `Bearer ${serviceKey}`) return json({ error: 'Unauthorized' }, 401)
+  // Only the scheduler may run this: x-cron-secret equal to CRON_SECRET (or, as before, the runtime's service-role key).
+  if (!isCronAuthorised(req.headers, { cronSecret: Deno.env.get('CRON_SECRET'), serviceKey })) return json({ error: 'Unauthorized' }, 401)
 
   const admin = createClient(supabaseUrl, serviceKey)
   const now = Date.now()

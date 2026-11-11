@@ -12,8 +12,8 @@
 // Each alert is sent once (agent_watchdog_log) and written to Agent activity. All the rules are in ../_shared/agentWatchdog.js.
 // Nothing here changes a race, result, pick or score.
 //
-// SECURITY: deploy with JWT verification ON (the default). It also checks that the caller sent the project's service-role key,
-// exactly like picks-deadline-reminder, so nobody else can run it.
+// SECURITY: deploy with JWT verification ON (the default). It also checks, here, that the caller sent the x-cron-secret header
+// matching the CRON_SECRET secret (or the runtime's service-role key as Authorization), so nobody else can run it.
 //
 // POST body (optional): { "dry_run": true } returns what it WOULD send, without recording or pushing anything.
 
@@ -22,6 +22,7 @@ import { setClient } from '../_shared/db.js'
 import { logAgent } from '../_shared/agentData.js'
 import { withDirectPush } from '../_shared/sendPush.js'
 import { runWatchdog } from '../_shared/agentWatchdog.js'
+import { isCronAuthorised } from '../_shared/cronAuth.js'
 
 const json = (data: unknown, status = 200) =>
   new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } })
@@ -42,8 +43,8 @@ setClient(withDirectPush(
 ))
 
 Deno.serve(async req => {
-  // Only the scheduler (which sends the service-role key) may run this.
-  if (req.headers.get('Authorization') !== `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`) return json({ error: 'Unauthorized' }, 401)
+  // Only the scheduler may run this: x-cron-secret equal to CRON_SECRET (or, as before, the runtime's service-role key).
+  if (!isCronAuthorised(req.headers, { cronSecret: Deno.env.get('CRON_SECRET'), serviceKey: Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') })) return json({ error: 'Unauthorized' }, 401)
 
   let dryRun = false
   try { dryRun = (await req.json())?.dry_run === true } catch { /* no body */ }
