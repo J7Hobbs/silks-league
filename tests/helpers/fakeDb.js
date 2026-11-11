@@ -11,6 +11,7 @@ export const UNIQUE = {
   reminder_log: [{ cols: ['race_week_id', 'festival_day_id', 'kind'], nullsDistinct: false }],
   agent_drafts: [{ cols: ['kind', 'run_id'], when: r => r.run_id != null }],
   owner_silks: [{ cols: ['owner_id'] }],
+  agent_watchdog_log: [{ cols: ['alert_key'] }],
   festival_day_points: [{ cols: ['festival_id', 'user_id', 'day_number'] }],
 }
 

@@ -28,6 +28,7 @@ import RaceHeader from '../components/picks/RaceHeader.jsx'
 import RunnerRow from '../components/picks/RunnerRow.jsx'
 import JoinCard from '../components/picks/JoinCard.jsx'
 import EmptyState from '../components/picks/EmptyState.jsx'
+import { pickSaveMessage, bankerFailMessage } from '../lib/pickErrors.js'
 import { PicksSkeleton, RunnerRowsSkeleton } from '../components/Skeletons.jsx'
 import '../styles/picks.css'
 
@@ -377,7 +378,7 @@ export default function Picks() {
       bankerErr = (await supabase.rpc('set_banker', { p_kind: 'week', p_race_id: raceId, p_on: wantBanker })).error
     }
     setSaving(null)
-    if (error) { showToast('Failed to save — ' + error.message, 'error'); return }
+    if (error) { showToast(pickSaveMessage(error), 'error'); return }
     const bankerNow = bankerErr ? savedBanker : wantBanker
     setUserPicks(prev => {
       const next = { ...prev, [raceId]: { ...(existing || {}), user_id: user.id, race_id: raceId, runner_id: runnerId, bet_type: effectiveBetType, is_banker: bankerNow } }
@@ -385,7 +386,7 @@ export default function Picks() {
       return next
     })
     setBankerDraft(prev => { const n = { ...prev }; delete n[raceId]; return n })
-    if (bankerErr) showToast(`Pick saved, but the banker was not changed: ${bankerErr.message}`, 'error')
+    if (bankerErr) showToast(bankerFailMessage(bankerErr), 'error')
     closePanel(raceId)
     window.dispatchEvent(new Event(PICKS_CHANGED))
     const picksNow = { ...Object.fromEntries(Object.entries(userPicks).map(([id, p]) => [id, p.runner_id])), [raceId]: runnerId }
@@ -430,7 +431,7 @@ export default function Picks() {
       // Put the selection back to the last saved pick (or none).
       setFestSelected(prev => ({ ...prev, [raceId]: festPicks[raceId] }))
       setFestBetType(prev => ({ ...prev, [raceId]: festSavedBet.current[raceId] || 'win' }))
-      showToast('Failed to save — ' + error.message, 'error')
+      showToast(pickSaveMessage(error), 'error')
       closePanel(raceId)
       return
     }
@@ -441,7 +442,7 @@ export default function Picks() {
       ? { ...Object.fromEntries(Object.keys(prev).map(k => [k, false])), [raceId]: true }
       : { ...prev, [raceId]: false }))
     setBankerDraft(prev => { const n = { ...prev }; delete n[raceId]; return n })
-    if (bankerErr) showToast(`Pick saved, but the banker was not changed: ${bankerErr.message}`, 'error')
+    if (bankerErr) showToast(bankerFailMessage(bankerErr), 'error')
     festSavedBet.current = { ...festSavedBet.current, [raceId]: effectiveBetType }
     closePanel(raceId)
     window.dispatchEvent(new Event(PICKS_CHANGED))

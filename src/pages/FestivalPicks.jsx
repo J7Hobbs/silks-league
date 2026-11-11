@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { pickSaveMessage } from '../lib/pickErrors.js'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import TopNav from '../components/TopNav.jsx'
@@ -32,6 +33,7 @@ export default function FestivalPicks() {
   const [results,    setResults]    = useState({})  // { raceId: [...] }
   const [saving,     setSaving]     = useState({})  // { raceId: bool }
   const [loading,    setLoading]    = useState(true)
+  const [notice,     setNotice]     = useState('')       // a save the server refused, e.g. "Picks are locked"
 
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data: { user } }) => {
@@ -148,13 +150,19 @@ export default function FestivalPicks() {
     if (deadline && new Date() > new Date(deadline)) return  // deadline passed
 
     setSaving(p => ({ ...p, [raceId]: true }))
-    await supabase.from('festival_picks').upsert({
+    setNotice('')
+    const { error } = await supabase.from('festival_picks').upsert({
       festival_race_id: raceId,
       user_id: user.id,
       runner_id: runnerId,
       bet_type: 'win',
       picked_at: new Date().toISOString(),
     }, { onConflict: 'festival_race_id,user_id' })
+    if (error) {
+      setNotice(pickSaveMessage(error))
+      setSaving(p => ({ ...p, [raceId]: false }))
+      return
+    }
     setPicks(p => ({ ...p, [raceId]: runnerId }))
     setBetTypeMap(p => ({ ...p, [raceId]: 'win' }))
     setSaving(p => ({ ...p, [raceId]: false }))
@@ -162,8 +170,14 @@ export default function FestivalPicks() {
 
   async function changeBetType(raceId, type) {
     if (!user || dayDeadlinePassed) return
+    const before = betType[raceId]
     setBetTypeMap(p => ({ ...p, [raceId]: type }))
-    await supabase.from('festival_picks').update({ bet_type: type }).eq('festival_race_id', raceId).eq('user_id', user.id)
+    setNotice('')
+    const { error } = await supabase.from('festival_picks').update({ bet_type: type }).eq('festival_race_id', raceId).eq('user_id', user.id)
+    if (error) {
+      setBetTypeMap(p => ({ ...p, [raceId]: before || 'win' }))
+      setNotice(pickSaveMessage(error))
+    }
   }
 
   const isDeadlinePassed = (day) => {
@@ -215,6 +229,8 @@ export default function FestivalPicks() {
           <button style={{ ...st.backBtn, marginLeft: 'auto', color: '#c9a84c' }} onClick={() => navigate('/festival-leaderboard')}>Leaderboard →</button>
         </div>
       </nav>
+
+      {notice && <div role="alert" style={{ background: '#3a1410', color: '#ffb4a8', padding: '0.6rem 1.25rem', fontSize: '0.85rem', textAlign: 'center' }}>{notice}</div>}
 
       {/* Festival header */}
       <div style={{ background: festival.banner_colour || '#1a6b3a', padding: '1rem 1.25rem' }}>

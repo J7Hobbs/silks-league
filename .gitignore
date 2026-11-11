@@ -28,3 +28,6 @@ supabase/.temp
 *.sln
 *.sw?
 
+
+# Local-only audit output (policy names etc.)
+docs/*.local.*
