@@ -35,7 +35,7 @@ export async function loadUpcomingFestivals(nowMs = Date.now()) {
   const list = data || []
   const ids = list.slice(0, 2).map(f => f.id)
   const { data: days } = ids.length
-    ? await supabase.from('festival_days').select('id, festival_id, day_number, race_date').in('festival_id', ids).order('day_number')
+    ? await supabase.from('festival_days').select('id, festival_id, day_number, race_date, picks_deadline').in('festival_id', ids).order('day_number')
     : { data: [] }
   return { list, days: days || [], today }
 }

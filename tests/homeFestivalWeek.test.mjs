@@ -6,7 +6,7 @@ import assert from 'node:assert/strict'
 import { register } from 'node:module'
 
 register('./helpers/viteResolve.mjs', import.meta.url)
-const { buildCards, pickWeekFestival } = await import('../src/lib/homeCards.js')
+const { buildCards, pickWeekFestival, soonCountdown } = await import('../src/lib/homeCards.js')
 const { pickNextFestival } = await import('../src/lib/festivalData.js')
 
 const at = (date, time = '09:00:00') => Date.parse(`${date}T${time}Z`)
@@ -23,7 +23,7 @@ const race = (w) => [{ id: `${w.id}-r1`, race_week_id: w.id, race_number: 1, rac
 const runner = (w) => [{ id: `${w.id}-h1`, race_id: `${w.id}-r1`, horse_name: 'Horse', horse_number: 1, odds_decimal: 5, odds_fractional: '4/1', is_withdrawn: false }]
 
 // Last Saturday's result is showing (7 Nov), and the next week (14 Nov) is announced with no races yet, linked to Cheltenham Day 2.
-function lastWeekWithLinkedNext(linkedDay = { dayNumber: 2, festivalId: 'f1', festivalName: 'Cheltenham' }) {
+function lastWeekWithLinkedNext(linkedDay = { dayNumber: 2, festivalId: 'f1', festivalName: 'Cheltenham Festival', venue: 'Cheltenham' }) {
   const last = week('2026-11-07')
   return {
     state: 'lastWeek', week: last, deadline: last.picks_deadline, season: SEASON, seasonRank: null, userId: 'me', table: TABLE,
@@ -57,13 +57,13 @@ test('TODAY (Wed 11 Nov, racecard not in): the festival is the top main card, in
   assert.equal(fest.title, 'Cheltenham Festival')
   assert.match(fest.line, /Racecard out soon/)
   assert.match(fest.line, /Saturday League/, 'says it also counts for the Saturday League')
-  assert.deepEqual(fest.tiles[0], { label: 'Day 1 in', value: '1d 15h', accent: true })
+  assert.deepEqual(fest.tiles[0], { label: 'Day 1 in', value: '2 days', accent: true }, 'Wed 09:00 to Fri 13:00 UK')
   assert.equal(fest.button.outline, true)
   assert.equal(out.liveCount, 0, 'not counted as live until picks are open')
   // The Saturday card keeps the November table but no longer talks about its own racecard or picks opening.
   assert.equal(sat.table.title, 'NOVEMBER TABLE')
-  assert.equal(sat.headline, 'Saturday 14 Nov')
-  assert.match(sat.sub, /^is Cheltenham Day 2\. Your Day 2 picks count for the Saturday League$/)
+  assert.equal(sat.headline, 'Cheltenham Day 2')
+  assert.equal(sat.sub, 'Sat 14 Nov · your picks count for the Saturday League')
   assert.equal(sat.eyebrow.text, 'FESTIVAL DAY')
   assert.doesNotMatch(text(sat), /racecard out soon|race day announced|picks open/)
   assert.equal(sat.notify, undefined, 'no "get notified when picks open" button')
@@ -83,7 +83,7 @@ test('the same from Monday (last week\'s result still showing) through Thursday'
 
 test('when the Saturday itself is announced and linked (no last-week card), same result', () => {
   const now = at('2026-11-11')
-  const saturday = announced('2026-11-14', 'd2', { dayNumber: 2, festivalId: 'f1', festivalName: 'Cheltenham' })
+  const saturday = announced('2026-11-14', 'd2', { dayNumber: 2, festivalId: 'f1', festivalName: 'Cheltenham Festival', venue: 'Cheltenham' })
   const out = buildCards({ festival: null, festivalSoon: pickWeekFestival(upcoming(), saturday, now), saturday }, now)
   assert.deepEqual(kinds(out), ['festival', 'saturday'])
   assert.equal(out.cards[1].eyebrow.text, 'FESTIVAL DAY')
@@ -98,7 +98,7 @@ test('the festival is removed from "Coming up" while it is a main card (the next
 
 test('AFTER PICKS OPEN: the normal festival card (open), on top; no duplicate "soon" card', () => {
   const now = at('2026-11-12')
-  for (const saturday of [null, announced('2026-11-14', 'd2', { dayNumber: 2, festivalId: 'f1', festivalName: 'Cheltenham' })]) {
+  for (const saturday of [null, announced('2026-11-14', 'd2', { dayNumber: 2, festivalId: 'f1', festivalName: 'Cheltenham Festival', venue: 'Cheltenham' })]) {
     const out = buildCards({ festival: festivalCardData(), festivalSoon: null, saturday }, now)
     assert.equal(out.cards[0].kind, 'festival')
     assert.equal(out.cards[0].state, 'open')
@@ -110,7 +110,7 @@ test('DURING RACING (Fri 13 and Sat 14 Nov): the running festival card stays on 
   for (const day of ['2026-11-13', '2026-11-14']) {
     const out = buildCards({
       festival: festivalCardData({ state: 'closed', dayNumber: day.endsWith('13') ? 1 : 2 }),
-      saturday: announced('2026-11-14', 'd2', { dayNumber: 2, festivalId: 'f1', festivalName: 'Cheltenham' }),
+      saturday: announced('2026-11-14', 'd2', { dayNumber: 2, festivalId: 'f1', festivalName: 'Cheltenham Festival', venue: 'Cheltenham' }),
     }, at(day, '15:00:00'))
     assert.deepEqual(kinds(out), ['festival', 'saturday'], day)
     assert.equal(out.cards[0].phase, 'running')
@@ -147,4 +147,16 @@ test('with no Saturday week to look at, the next Saturday on the calendar decide
   const returns = { state: 'returns', season: SEASON, seasonPos: null, table: null, userId: 'me' }
   assert.ok(pickWeekFestival(upcoming(), returns, at('2026-11-11')))
   assert.equal(pickWeekFestival(upcoming([LATER]), null, at('2026-11-11')), null)
+})
+
+test('the countdown to Day 1: "N days" from a day out, then "Xh Ym"; it uses Day 1\'s picks deadline, else 13:00 UK', () => {
+  assert.equal(soonCountdown(52 * 3600e3), '2 days')
+  assert.equal(soonCountdown(24 * 3600e3), '1 day')
+  assert.equal(soonCountdown(23 * 3600e3 + 59 * 60e3), '23h 59m')
+  assert.equal(soonCountdown(5 * 3600e3 + 20 * 60e3), '5h 20m')
+  assert.equal(soonCountdown(7 * 60e3), '0h 7m')
+  const soon = (days, now) => buildCards({ festival: null, festivalSoon: { festival: CHELT, days, linkedDayId: null }, saturday: null }, now).cards[0].tiles[0].value
+  const d = over => [{ ...DAYS[0], ...over }]
+  assert.equal(soon(d({}), at('2026-11-12', '20:00:00')), '17h 0m', 'no deadline stored: 13:00 on Day 1')
+  assert.equal(soon(d({ picks_deadline: '2026-11-13T11:30:00Z' }), at('2026-11-12', '20:00:00')), '15h 30m', 'its picks deadline when it has one')
 })

@@ -7,7 +7,7 @@ import { calcTokenPoints } from './scoring.js'
 import { buildRaceRows, summarise } from './resultsView.js'
 import {
   ordinal, monthLong, clockText, ukClock, ukDateStr, ukWallToMs, formatLockCountdown, deadlineMs,
-  daysBetween, weekdayLong, monthAbbr, wednesdayAfter,
+  daysBetween, weekdayLong, weekdayShort, monthAbbr, wednesdayAfter,
 } from './format.js'
 
 const MAX_TABLE_ROWS = 3
@@ -127,7 +127,7 @@ function linkedCard(sat, week, nowMs, base) {
   const dayOfMonth = String(Number(week.saturday_date.slice(8, 10)))
   const month = monthAbbr(week.saturday_date)
   const info = sat.linkedDay
-  const dayName = info?.festivalName ? `${info.festivalName} Day ${info.dayNumber}` : null
+  const place = info?.venue || info?.festivalName
   return {
     ...base,
     competition: info?.festivalId ? { type: 'festival', id: info.festivalId } : base.competition,
@@ -137,11 +137,8 @@ function linkedCard(sat, week, nowMs, base) {
     soft: true,
     faint: false,
     eyebrow: { kind: 'gold', text: 'FESTIVAL DAY', short: 'FESTIVAL' },
-    // The headline is one line that can't wrap (it shrinks, then cuts off), so it stays the date and the rest reads on from it below.
-    headline: `${weekdayLong(week.saturday_date)} ${dayOfMonth} ${month}`,
-    sub: info
-      ? `is ${dayName || `Festival Day ${info.dayNumber}`}. Your Day ${info.dayNumber} picks count for the Saturday League`
-      : 'is a festival day. Your festival picks count for the Saturday League',
+    headline: place ? `${place} Day ${info.dayNumber}` : 'Festival day',
+    sub: `${weekdayShort(week.saturday_date)} ${dayOfMonth} ${month} · your picks count for the Saturday League`,
     big: { text: days <= 0 ? 'Today' : days === 1 ? 'Tomorrow' : `${days} days` },
     label: 'to go',
     ring: { segments: Array.from({ length: FALLBACK_SEGMENTS }, () => 'dim'), centre: dayOfMonth, centreLabel: month },

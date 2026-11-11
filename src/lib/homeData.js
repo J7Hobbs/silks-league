@@ -55,8 +55,8 @@ async function linkedDayInfo(dayId) {
   try {
     const { data: day } = await supabase.from('festival_days').select('id, day_number, festival_id').eq('id', dayId).maybeSingle()
     if (!day) return null
-    const { data: f } = await supabase.from('festivals').select('id, name, display_name').eq('id', day.festival_id).maybeSingle()
-    return { dayNumber: day.day_number, festivalId: day.festival_id, festivalName: f ? (f.display_name || f.name) : null }
+    const { data: f } = await supabase.from('festivals').select('id, name, display_name, venue').eq('id', day.festival_id).maybeSingle()
+    return { dayNumber: day.day_number, festivalId: day.festival_id, festivalName: f ? (f.display_name || f.name) : null, venue: f?.venue || null }
   } catch { return null }
 }
 

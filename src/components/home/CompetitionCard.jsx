@@ -1,4 +1,5 @@
 import FallbackBanner from '../FallbackBanner.jsx'
+import { photoPosition } from '../../lib/photoPosition.js'
 
 // Used when a festival has no banner_url set, so it keeps the current photo.
 const FALLBACK_POSITION = 'center 80%'
@@ -46,8 +47,8 @@ export default function CompetitionCard({ card, isTop, onAction }) {
       {isFestival && (
         <div className="cc-media">
           {hasPhoto
-            ? <img className="cc-media__img" src={card.image.url} alt="" style={{ objectPosition: card.image.position || DEFAULT_POSITION }} />
-            : <FallbackBanner className="cc-media__img" style={{ objectPosition: FALLBACK_POSITION }} />}
+            ? <img className="cc-media__img" src={card.image.url} alt="" style={{ objectPosition: photoPosition(card.image.position, DEFAULT_POSITION) }} />
+            : <FallbackBanner className="cc-media__img" style={{ objectPosition: photoPosition(FALLBACK_POSITION) }} />}
           <div className="cc-media__shade" />
           <TopRow card={card} over />
         </div>

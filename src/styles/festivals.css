@@ -168,6 +168,11 @@
 .fr-sub { font-size: 12px; color: var(--text-muted); }
 .fr-when { flex: none; align-self: flex-start; padding-top: 2px; font-size: 12px; color: var(--text-muted); white-space: nowrap; }
 
+/* The row as a link (Home's "Coming up"), and the calendar link under it. */
+.fr--link { color: var(--text); text-decoration: none; }
+.fr--link:focus-visible, .cu-foot:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.cu-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 4px; text-decoration: none; color: var(--text); }
+
 /* Next year: dates only */
 .fx-group--next { opacity: 0.6; }
 .fn {

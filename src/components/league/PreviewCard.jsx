@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { photoPosition } from '../../lib/photoPosition.js'
 import EchoRings from '../home/EchoRings.jsx'
 import FallbackBanner from '../FallbackBanner.jsx'
 import LeagueTable from './LeagueTable.jsx'
@@ -21,8 +22,8 @@ export default function PreviewCard({ title, sub, live, festival, columns, rows,
       {festival ? (
         <>
           {hasPhoto
-            ? <img className="lh-card__img" src={banner.url} alt="" style={{ objectPosition: banner.position || DEFAULT_POSITION }} />
-            : <FallbackBanner className="lh-card__img" style={{ objectPosition: FALLBACK_POSITION }} />}
+            ? <img className="lh-card__img" src={banner.url} alt="" style={{ objectPosition: photoPosition(banner.position, DEFAULT_POSITION) }} />
+            : <FallbackBanner className="lh-card__img" style={{ objectPosition: photoPosition(FALLBACK_POSITION) }} />}
           <div className="lh-card__fade" aria-hidden="true" />
         </>
       ) : (

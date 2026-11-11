@@ -1,5 +1,6 @@
 // The Setup tab: seasons and festivals. Pure functions over rows already read from Supabase.
 import { ukDateStr } from './format.js'
+import { parsePhotoPosition } from './photoPosition.js'
 
 export const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
@@ -158,6 +159,10 @@ export function parseBannerPosition(value) {
   if (m) return { y: clamp100(m[1]), saved: true, odd: false }
   const words = { top: 0, 'center top': 0, 'center 0%': 0, center: 50, 'center center': 50, bottom: 100, 'center bottom': 100 }
   if (text in words) return { y: words[text], saved: true, odd: false }
+  // Other spellings the browser reads the same way ("50% 20%", "center 35%" with odd spacing): if the photo is centred across,
+  // only the height matters. A value that also moves it sideways ("35% center") can't be shown on the slider.
+  const p = parsePhotoPosition(text)
+  if (p && p.x === 50) return { y: clamp100(p.y), saved: true, odd: false }
   return { y: DEFAULT_BANNER_Y, saved: true, odd: true }
 }
 

@@ -1,6 +1,5 @@
 import { useState } from 'react'
-
-const DEFAULT_POSITION = 'center 35%'
+import { photoPosition } from '../../lib/photoPosition.js'
 
 // A festival's banner photo, or a block with the venue's first letter when there is no
 // photo (or it fails to load). Fills its parent; the parent sets the size.
@@ -15,7 +14,7 @@ export default function FestivalPhoto({ url, position, venue, name }) {
       className="fp fp--img"
       src={url}
       alt=""
-      style={{ objectPosition: position || DEFAULT_POSITION }}
+      style={{ objectPosition: photoPosition(position) }}
       onError={() => setFailed(true)}
     />
   )

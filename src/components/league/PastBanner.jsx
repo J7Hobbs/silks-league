@@ -1,4 +1,5 @@
 import EchoRings from '../home/EchoRings.jsx'
+import { photoPosition } from '../../lib/photoPosition.js'
 import FallbackBanner from '../FallbackBanner.jsx'
 
 // Same defaults as the festival card on Home.
@@ -16,8 +17,8 @@ export default function PastBanner({ festival, eyebrow, title, line, muted = fal
       {festival ? (
         <>
           {hasPhoto
-            ? <img className="lp-banner__img" src={banner.url} alt="" style={{ objectPosition: banner.position || DEFAULT_POSITION }} />
-            : <FallbackBanner className="lp-banner__img" style={{ objectPosition: FALLBACK_POSITION }} />}
+            ? <img className="lp-banner__img" src={banner.url} alt="" style={{ objectPosition: photoPosition(banner.position, DEFAULT_POSITION) }} />
+            : <FallbackBanner className="lp-banner__img" style={{ objectPosition: photoPosition(FALLBACK_POSITION) }} />}
           <div className="lp-banner__fade" aria-hidden="true" />
         </>
       ) : (

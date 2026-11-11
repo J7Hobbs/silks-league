@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { photoPosition } from '../../lib/photoPosition.js'
 import Sheet from '../../components/groups/Sheet.jsx'
 import WithdrawSheet from '../../components/admin/WithdrawSheet.jsx'
 import ResultSheet from './ResultSheet.jsx'
@@ -170,7 +171,7 @@ export default function Today({ goTab }) {
 
       {/* ── The race day ── */}
       <section className={`an-card an-day${banner ? ' an-day--photo' : ''}`} aria-label="Race day">
-        {banner && <div className="an-day__photo" style={{ backgroundImage: `url("${String(banner).replace(/"/g, '%22')}")`, backgroundPosition: day.festival.banner_position || 'center' }} aria-hidden="true" />}
+        {banner && <div className="an-day__photo" style={{ backgroundImage: `url("${String(banner).replace(/"/g, '%22')}")`, backgroundPosition: photoPosition(day.festival.banner_position, 'center') }} aria-hidden="true" />}
         <div className="an-day__body">
           <div className="an-eyebrow">{earlier ? 'Results outstanding' : racing ? 'Racing now' : 'Next race day'} · {dateText(day.date)}</div>
           <h2 className="an-day__title">{day.title.replace(' · ', '\u00a0· ')}</h2>

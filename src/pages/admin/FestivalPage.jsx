@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { photoPosition } from '../../lib/photoPosition.js'
 import { Link } from 'react-router-dom'
 import { ConfirmSheet, FormSheet, TypeToConfirmSheet } from './sheets.jsx'
 import BannerPosition from './BannerPosition.jsx'
@@ -111,7 +112,7 @@ export default function FestivalPage({ festivalId, go, say }) {
       <button type="button" className="an-back" onClick={back}>‹ Festivals</button>
 
       <section className={`an-card an-day an-fest${photo ? ' an-day--photo' : ''}`} aria-label="Festival">
-        {photo && <div className="an-day__photo" style={{ backgroundImage: `url("${String(photo).replace(/"/g, '%22')}")`, backgroundPosition: festival.banner_position || 'center' }} aria-hidden="true" />}
+        {photo && <div className="an-day__photo" style={{ backgroundImage: `url("${String(photo).replace(/"/g, '%22')}")`, backgroundPosition: photoPosition(festival.banner_position, 'center') }} aria-hidden="true" />}
         <div className="an-day__body">
           <div className="an-eyebrow">{festival.start_date ? `${dateText(festival.start_date)}${festival.end_date && festival.end_date !== festival.start_date ? ` – ${dateText(festival.end_date)}` : ''}` : 'No dates'}</div>
           <h2 className="an-day__title">{title}</h2>

@@ -106,11 +106,22 @@ export function pickWeekFestival(up, sat, nowMs) {
   return null
 }
 
+// "2 days" from a day out, then "5h 20m" (like the Saturday card's day count, then the hours and minutes left).
+export function soonCountdown(ms) {
+  const mins = Math.max(0, Math.floor(ms / 60000))
+  const d = Math.floor(mins / 1440)
+  if (d >= 1) return `${d} ${d === 1 ? 'day' : 'days'}`
+  return `${Math.floor(mins / 60)}h ${mins % 60}m`
+}
+
 // The festival's card before its racecard is in: same card, "racecard out soon", counting down to Day 1.
 function festivalSoonCard(soon, nowMs) {
   const f = soon.festival
   const dayOne = soon.days.find(d => d.day_number === 1) || soon.days[0]
-  const startMs = ukWallToMs(dayOne?.race_date || f.start_date, '00:00')
+  // Counting to Day 1: its picks deadline if there is one, else 13:00 UK on the day. (The first race time isn't known yet: with
+  // a racecard in, this card is the normal open one.)
+  const dayDate = dayOne?.race_date || f.start_date
+  const startMs = dayOne?.picks_deadline ? deadlineMs(dayOne.picks_deadline, dayDate) : ukWallToMs(dayDate, '13:00')
   const total = soon.days.length || dayCount(f)
   const linked = soon.days.some(d => d.id === soon.linkedDayId)
   return {
@@ -126,7 +137,7 @@ function festivalSoonCard(soon, nowMs) {
     line: linked ? "Racecard out soon · also counts for your Saturday League" : "Racecard out soon · picks open once it's in",
     image: { url: f.banner_url || null, position: f.banner_position || null },
     tiles: [
-      { label: 'Day 1 in', value: formatCountdown(startMs - nowMs), accent: true },
+      { label: 'Day 1 in', value: soonCountdown(startMs - nowMs), accent: true },
       { label: 'Racecard', value: 'Out soon' },
       { label: 'Days', value: String(total) },
     ],
