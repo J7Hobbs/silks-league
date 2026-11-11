@@ -45,7 +45,7 @@ async function findAnnouncedWeek(weeks, today, exceptId) {
   if (!next) return null
   // A week linked to a festival day has that day's races (weekSource.js).
   const races = await weekRaces([next])
-  return races.length ? null : { id: next.id, saturday_date: next.saturday_date }
+  return races.length ? null : { id: next.id, saturday_date: next.saturday_date, festival_day_id: next.festival_day_id || null }
 }
 
 async function loadSaturday(userId, today, nowMs) {
@@ -182,6 +182,7 @@ async function loadFestival(userId, today, nowMs) {
     deadline: day.picks_deadline || `${day.race_date}T12:00:00`,
     rank,
     alsoSaturday: !!linkedWeek,
+    dayIds: dayList.map(d => d.id),   // read by the card order (homeCards.js): is the Saturday League's week linked to this festival?
     final: !!finalStatus?.final,
     venue: festival.venue || dayRaces[0]?.venue || null,
   }

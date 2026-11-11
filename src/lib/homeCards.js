@@ -2,6 +2,10 @@ import { ordinal, formatCountdown, deadlineMs, ukDateStr } from './format.js'
 import { saturdayCard } from './saturdayCard.js'
 import { finalPath } from './finalTable.js'
 
+const DAY_MS = 86400000
+const dateMs = d => Date.parse(`${d}T00:00:00Z`)
+const dateStr = ms => new Date(ms).toISOString().slice(0, 10)
+
 // Turns the loaded Home data into the competition cards to show, in order.
 // Pure: pass in `nowMs` so the countdowns tick without re-querying.
 
@@ -55,6 +59,31 @@ function sortOrder(card) {
   return 1
 }
 
+// The Saturday the Saturday League is heading for: the open or race-day week, an announced week, or (while last week's result
+// is showing) the week after it. Null when there isn't one yet.
+function nextSaturday(sat) {
+  if (!sat) return null
+  if (sat.state === 'lastWeek') return sat.nextWeek || null
+  if (sat.state === 'open' || sat.state === 'closed' || sat.state === 'announced') return sat.week || null
+  return null
+}
+
+// A festival week: a festival whose racing days fall in the same Monday-to-Sunday week as that Saturday (its Saturday is linked
+// to one of the festival's days, or the festival runs over that weekend, or simply races earlier that week). The festival card
+// stays on top for that whole week, from the moment it is on Home until the festival finishes.
+export function festivalWeek(data) {
+  const f = data.festival?.festival
+  const week = nextSaturday(data.saturday)
+  if (!f || !week?.saturday_date) return false
+  if (week.festival_day_id && (data.festival.dayIds || []).includes(week.festival_day_id)) return true
+  const sat = dateMs(week.saturday_date)
+  const monday = sat - ((new Date(sat).getUTCDay() + 6) % 7) * DAY_MS
+  const sunday = monday + 6 * DAY_MS
+  const start = f.start_date
+  const end = f.end_date || f.start_date
+  return start <= dateStr(sunday) && end >= dateStr(monday)
+}
+
 export function buildCards(data, nowMs) {
   const cards = []
   if (data.festival) cards.push(festivalCard(data.festival, nowMs))
@@ -67,10 +96,10 @@ export function buildCards(data, nowMs) {
     return (a.kind === 'festival' ? 0 : 1) - (b.kind === 'festival' ? 0 : 1)
   })
 
-  // A running festival stays on top; once it has finished, the Saturday League card goes first.
+  // A festival week keeps the festival on top. See festivalWeek().
   const fest = cards.find(c => c.kind === 'festival')
-  if (fest?.phase === 'running') cards.sort((a, b) => (b === fest) - (a === fest))
-  else if (fest?.phase === 'finished') cards.sort((a, b) => (a === fest) - (b === fest))
+  if (fest?.phase === 'finished') cards.sort((a, b) => (a === fest) - (b === fest))   // finished: Saturday League first
+  else if (fest?.phase === 'running' || festivalWeek(data)) cards.sort((a, b) => (b === fest) - (a === fest))
 
   return { cards, liveCount: cards.filter(c => c.state !== 'returns' && c.state !== 'announced').length }
 }
