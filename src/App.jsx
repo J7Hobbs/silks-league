@@ -6,6 +6,9 @@ import { loadNextFestival, festivalTeaser } from './lib/landingData.js'
 import PhoneMock from './components/landing/PhoneMock.jsx'
 import FestivalTeaser from './components/landing/FestivalTeaser.jsx'
 import HowItWorksModal from './components/HowItWorksModal.jsx'
+import { dismissSplash } from './lib/splash.js'
+import { prefetchPages } from './lib/lazyPage.js'
+import { load } from './lib/pageLoaders.js'
 import './styles/landing.css'
 
 // The public page at "/". Signed-in players are sent straight to the app; everyone else
@@ -20,6 +23,9 @@ const STEPS = [
   { title: 'Score on the result', desc: 'Winners and placed horses score, and bigger prices score bigger.' },
   { title: 'Beat your mates', desc: 'Start a private group, share the code, and fight it out on your own table.' },
 ]
+
+// Where a visitor goes from here: fetched in idle time once the landing page is showing.
+const NEXT_PAGES = [load.Auth, load.Join, load.Welcome, load.SetPassword]
 
 // How long to wait for the saved session before showing the page anyway (slow or offline).
 const SESSION_WAIT_MS = 3000
@@ -46,6 +52,14 @@ export default function App() {
     currentUser().then(finish, () => finish(null))
     return () => { done = true; clearTimeout(wait) }
   }, [navigate])
+
+  // The landing page is the first page for a visitor who isn't signed in: the app-start splash can come down now. (A signed-in
+  // player is sent on to their page, which takes the splash down when it has drawn.)
+  useEffect(() => {
+    if (!ready) return
+    dismissSplash()
+    prefetchPages(NEXT_PAGES)
+  }, [ready])
 
   // Only visitors who stay need the festival card.
   useEffect(() => {

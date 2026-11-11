@@ -1,5 +1,5 @@
 import EchoRings from '../home/EchoRings.jsx'
-import fallbackBanner from '../../assets/ebor-banner.jpg'
+import FallbackBanner from '../FallbackBanner.jsx'
 import { ordinal } from '../../lib/format.js'
 import BonusSummary from './BonusSummary.jsx'
 
@@ -19,12 +19,9 @@ export default function ResultsHero({ festival, label, points, standing, line, b
     <section className={`rs-hero${festival ? ' rs-hero--fest' : ''}`} aria-label={label}>
       {festival ? (
         <>
-          <img
-            className="rs-hero__img"
-            src={hasPhoto ? banner.url : fallbackBanner}
-            alt=""
-            style={{ objectPosition: hasPhoto ? (banner.position || DEFAULT_POSITION) : FALLBACK_POSITION }}
-          />
+          {hasPhoto
+            ? <img className="rs-hero__img" src={banner.url} alt="" style={{ objectPosition: banner.position || DEFAULT_POSITION }} />
+            : <FallbackBanner className="rs-hero__img" style={{ objectPosition: FALLBACK_POSITION }} />}
           <div className="rs-hero__fade" aria-hidden="true" />
         </>
       ) : (

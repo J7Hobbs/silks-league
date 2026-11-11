@@ -22,8 +22,83 @@
     <!-- Favicon: SVG, with a PNG fallback -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
+
+    <!-- Fonts: the same four families the app already used (it loaded them from index.css via @import). Linking them here lets the
+         browser start the download as soon as the page opens. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Archivo:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap" />
+
+    <!-- App-start splash: drawn by this file alone, so it is the very first thing on screen (no white flash, no plain spinner).
+         It is taken down when the first page has drawn (src/lib/splash.js). The wordmark font is a 1 KB self-hosted subset of
+         Archivo ExtraBold (SIL Open Font License) so the splash has no font jump. -->
+    <link rel="preload" href="/fonts/archivo-800-splash.woff2" as="font" type="font/woff2" crossorigin />
+    <style>
+      @font-face {
+        font-family: 'SL Splash';
+        font-style: normal;
+        font-weight: 800;
+        font-display: block;
+        src: url('/fonts/archivo-800-splash.woff2') format('woff2');
+      }
+      html, body { background: #0a1a08; }
+      #boot-splash {
+        position: fixed; inset: 0; z-index: 2147483000;
+        display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 26px;
+        background: #0a1a08;
+        transition: opacity 0.2s ease-out;
+      }
+      #boot-splash.is-leaving { opacity: 0; pointer-events: none; }
+      #boot-splash .bs-word {
+        display: flex; flex-direction: column; align-items: center; gap: 4px;
+        font-family: 'SL Splash', 'Archivo', system-ui, -apple-system, sans-serif;
+        font-weight: 800; font-size: 38px; line-height: 1; letter-spacing: 0.02em; text-align: center;
+      }
+      #boot-splash .bs-word span {
+        color: var(--c);
+        background: linear-gradient(100deg, transparent 38%, rgba(255, 255, 255, 0.55) 50%, transparent 62%) 130% 0 / 250% 100% no-repeat,
+                    linear-gradient(var(--c), var(--c));
+        -webkit-background-clip: text; background-clip: text;
+        -webkit-text-fill-color: transparent;
+        animation: bs-sweep 2.4s ease-in-out infinite;
+      }
+      #boot-splash .bs-a { --c: #c9a84c; }
+      #boot-splash .bs-b { --c: #f2efe4; animation-delay: 0.12s; }
+      #boot-splash .bs-line { position: relative; width: 120px; height: 3px; border-radius: 3px; overflow: hidden; background: rgba(201, 168, 76, 0.18); }
+      #boot-splash .bs-line i { position: absolute; top: 0; bottom: 0; left: 0; width: 42%; border-radius: 3px; background: #c9a84c; animation: bs-run 1.5s ease-in-out infinite; }
+      @keyframes bs-sweep { 0% { background-position: 130% 0, 0 0; } 55%, 100% { background-position: -30% 0, 0 0; } }
+      @keyframes bs-run { 0% { transform: translateX(-100%); } 100% { transform: translateX(240%); } }
+      @media (prefers-reduced-motion: reduce) {
+        #boot-splash { transition: none; }
+        #boot-splash .bs-word span { animation: none; background: none; -webkit-text-fill-color: currentColor; color: var(--c); }
+        #boot-splash .bs-line i { animation: none; left: 29%; }
+      }
+    </style>
   </head>
   <body>
+    <div id="boot-splash" role="status" aria-label="Loading Silks League">
+      <div class="bs-word"><span class="bs-a">SILKS</span><span class="bs-b">LEAGUE</span></div>
+      <div class="bs-line"><i></i></div>
+    </div>
+    <script>
+      // Takes the splash down (called by the app once the first page has drawn). Safe to call twice. If nothing calls it
+      // (a failed start), it goes anyway after 12 seconds so nobody is stuck behind it.
+      (function () {
+        var done = false
+        function off() {
+          if (done) return
+          done = true
+          var el = document.getElementById('boot-splash')
+          if (!el) return
+          var still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+          if (still) { el.remove(); return }
+          el.classList.add('is-leaving')
+          setTimeout(function () { el.remove() }, 260)
+        }
+        window.__dismissSplash = off
+        setTimeout(off, 12000)
+      })()
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
 

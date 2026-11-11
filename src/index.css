@@ -4,7 +4,7 @@
    Fonts: Bebas Neue · DM Sans (older pages) · Archivo (headings) · Inter (body) — see styles/tokens.css
    ============================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Archivo:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap');
+/* Fonts are linked from index.html (preconnect + stylesheet), not imported here. */
 
 /* ── CSS Variables ── */
 :root {

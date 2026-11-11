@@ -1,4 +1,4 @@
-import fallbackBanner from '../../assets/ebor-banner.jpg'
+import FallbackBanner from '../FallbackBanner.jsx'
 
 // Used when a festival has no banner_url set, so it keeps the current photo.
 const FALLBACK_POSITION = 'center 80%'
@@ -45,12 +45,9 @@ export default function CompetitionCard({ card, isTop, onAction }) {
     <article className={`cc${isTop ? ' cc--top' : ''}`} aria-label={card.title}>
       {isFestival && (
         <div className="cc-media">
-          <img
-            className="cc-media__img"
-            src={hasPhoto ? card.image.url : fallbackBanner}
-            alt=""
-            style={{ objectPosition: hasPhoto ? (card.image.position || DEFAULT_POSITION) : FALLBACK_POSITION }}
-          />
+          {hasPhoto
+            ? <img className="cc-media__img" src={card.image.url} alt="" style={{ objectPosition: card.image.position || DEFAULT_POSITION }} />
+            : <FallbackBanner className="cc-media__img" style={{ objectPosition: FALLBACK_POSITION }} />}
           <div className="cc-media__shade" />
           <TopRow card={card} over />
         </div>

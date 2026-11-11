@@ -1,0 +1,26 @@
+// Every lazily loaded page, in one place so the router (main.jsx), the landing page and the idle prefetcher share the same
+// import() calls (the browser then fetches each file once).
+export const load = {
+  Auth:                () => import('../pages/Auth.jsx'),
+  SetPassword:         () => import('../pages/SetPassword.jsx'),
+  Welcome:             () => import('../pages/Welcome.jsx'),
+  Join:                () => import('../pages/Join.jsx'),
+  Admin:               () => import('../pages/Admin.jsx'),
+  AdminShell:          () => import('../pages/admin/AdminShell.jsx'),
+  LeagueSaturday:      () => import('../pages/LeagueSaturday.jsx'),
+  LeagueFestival:      () => import('../pages/LeagueFestival.jsx'),
+  LeagueGroup:         () => import('../pages/LeagueGroup.jsx'),
+  LeaguePastFestival:  () => import('../pages/LeaguePastFestival.jsx'),
+  LeaguePastSeason:    () => import('../pages/LeaguePastSeason.jsx'),
+  FestivalFinal:       () => import('../pages/FestivalFinal.jsx'),
+  BonusPoints:         () => import('../pages/BonusPoints.jsx'),
+  Festivals:           () => import('../pages/Festivals.jsx'),
+  Races:               () => import('../pages/Races.jsx'),
+  Profile:             () => import('../pages/Profile.jsx'),
+  Groups:              () => import('../pages/Groups.jsx'),
+  PlayerPicks:         () => import('../pages/PlayerPicks.jsx'),
+  Account:             () => import('../pages/Account.jsx'),
+  FestivalPicks:       () => import('../pages/FestivalPicks.jsx'),
+  FestivalLeaderboard: () => import('../pages/FestivalLeaderboard.jsx'),
+  RaceDay:             () => import('../pages/RaceDay.jsx'),
+}

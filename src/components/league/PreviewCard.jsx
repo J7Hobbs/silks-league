@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import EchoRings from '../home/EchoRings.jsx'
-import fallbackBanner from '../../assets/ebor-banner.jpg'
+import FallbackBanner from '../FallbackBanner.jsx'
 import LeagueTable from './LeagueTable.jsx'
 
 // Same defaults as the festival card on Home.
@@ -20,12 +20,9 @@ export default function PreviewCard({ title, sub, live, festival, columns, rows,
     <section className={`lh-card${festival ? ' lh-card--fest' : ''}`} aria-label={title}>
       {festival ? (
         <>
-          <img
-            className="lh-card__img"
-            src={hasPhoto ? banner.url : fallbackBanner}
-            alt=""
-            style={{ objectPosition: hasPhoto ? (banner.position || DEFAULT_POSITION) : FALLBACK_POSITION }}
-          />
+          {hasPhoto
+            ? <img className="lh-card__img" src={banner.url} alt="" style={{ objectPosition: banner.position || DEFAULT_POSITION }} />
+            : <FallbackBanner className="lh-card__img" style={{ objectPosition: FALLBACK_POSITION }} />}
           <div className="lh-card__fade" aria-hidden="true" />
         </>
       ) : (

@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import TopNav from '../components/TopNav.jsx'
 import BottomNav from '../components/BottomNav.jsx'
 import '../styles/home.css'
+import '../styles/admin-raceday.css'   // this page's tag and step styling is defined here (it was always loaded with the whole app before pages were split)
 
 const STEPS = [
   { title: 'Set up your day', text: "Choose the meeting you're heading to and invite your group with a code." },

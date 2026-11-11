@@ -1,5 +1,5 @@
 import EchoRings from '../home/EchoRings.jsx'
-import fallbackBanner from '../../assets/ebor-banner.jpg'
+import FallbackBanner from '../FallbackBanner.jsx'
 
 // Same defaults as the festival card on Home.
 const FALLBACK_POSITION = 'center 80%'
@@ -15,12 +15,9 @@ export default function PastBanner({ festival, eyebrow, title, line, muted = fal
     <section className={`lp-banner${festival ? ' lp-banner--fest' : ''}`} aria-label={title}>
       {festival ? (
         <>
-          <img
-            className="lp-banner__img"
-            src={hasPhoto ? banner.url : fallbackBanner}
-            alt=""
-            style={{ objectPosition: hasPhoto ? (banner.position || DEFAULT_POSITION) : FALLBACK_POSITION }}
-          />
+          {hasPhoto
+            ? <img className="lp-banner__img" src={banner.url} alt="" style={{ objectPosition: banner.position || DEFAULT_POSITION }} />
+            : <FallbackBanner className="lp-banner__img" style={{ objectPosition: FALLBACK_POSITION }} />}
           <div className="lp-banner__fade" aria-hidden="true" />
         </>
       ) : (
