@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { weekRaces, weekScores, weekPicks } from './weekSource.js'
+import { orderIds } from './ranking.js'
 
 // Read-only ranking helpers for the Home page. Ties break the same way the
 // League page does: points, then number of winning picks, then name.
@@ -37,15 +38,8 @@ function tally(rows, totals, wins) {
   }
 }
 
-// Player ids best first: points, then number of winning picks, then name.
-export function orderIds(totals, wins, names) {
-  const ids = Object.keys(totals)
-  ids.sort((a, b) =>
-    totals[b] - totals[a] ||
-    (wins[b] || 0) - (wins[a] || 0) ||
-    (names[a] || '').localeCompare(names[b] || ''))
-  return ids
-}
+// Player ids best first: points, then number of winning picks, then name. The one ranking rule lives in ranking.js.
+export { orderIds }
 
 // { rank, total, points } for userId, or null when they are not in `totals`.
 export function rankOf(totals, wins, names, userId) {

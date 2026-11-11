@@ -1,6 +1,7 @@
 // The festival wrap-up ("Final" page): places, scopes and the figures on it. Pure: plain rows in, plain rows out, no database
 // and nothing festival-specific except finalPath, so a monthly season wrap-up can reuse the builders.
 import { ordinal } from '../../supabase/functions/_shared/format.js'
+import { rankRows } from './ranking.js'
 
 export const finalPath = festivalId => `/festival/${festivalId}/final`
 
@@ -14,18 +15,10 @@ export function lastDayDone(races, resultRaceIds) {
 }
 
 // ── Places ─────────────────────────────────────────────────────────────────────────────────────────────────────
-// Players with the same points share a place (1, 2, 2, 4). Rows are listed best first, and inside a tie in the order
-// the Leaderboard uses (winning picks, then name). `rows`: [{ id, name, points, wins }].
-// -> [{ id, name, points, wins, place, tied, label }]  label is "4th", or "=4th" for a tie.
-export function placeRows(rows) {
-  const sorted = [...rows].sort((a, b) =>
-    b.points - a.points || (b.wins || 0) - (a.wins || 0) || (a.name || '').localeCompare(b.name || ''))
-  return sorted.map(r => {
-    const better = sorted.filter(o => o.points > r.points).length
-    const same = sorted.filter(o => o.points === r.points).length
-    return { ...r, place: better + 1, tied: same > 1, label: `${same > 1 ? '=' : ''}${ordinal(better + 1)}` }
-  })
-}
+// The same ranking as the Leaderboard (ranking.js: points, then winning picks, then name), so both screens always agree. A place is
+// shared ("=4th") only when players are still level after the winning-picks tie-break. `rows`: [{ id, name, points, wins }].
+// -> [{ id, name, points, wins, place, tied, label, mark }]  label "4th" / "=4th", mark "4" / "=4"
+export const placeRows = rankRows
 
 // ── Scopes ─────────────────────────────────────────────────────────────────────────────────────────────────────
 // Everyone, plus each of the player's groups that has at least two entrants. `entrants` are the players on the table

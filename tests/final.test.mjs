@@ -5,6 +5,7 @@ import { createFakeDb } from './helpers/fakeDb.js'
 import { setClient } from '../supabase/functions/_shared/db.js'
 import { sendEndOfDay } from '../supabase/functions/_shared/notifyPlayers.js'
 import { festivalFinal } from '../supabase/functions/_shared/notifyCopy.js'
+import { orderIds } from '../src/lib/ranking.js'
 import {
   lastDayDone, placeRows, scopesFor, rowsInScope, openScope, finalView, meetingPositions, myFigures, finalSummary, finalPath,
 } from '../src/lib/finalTable.js'
@@ -28,10 +29,23 @@ test('ties share a place: 1, 2, 2, 4 and "=" on the tied labels', () => {
   assert.deepEqual(rows.map(r => r.tied), [false, true, true, false, false])
 })
 
-test('inside a tie the order is winning picks, then name (the Leaderboard order), but the place is shared', () => {
+test('level on points but not on winning picks is NOT a tie: the Leaderboard tie-break decides, so there is one champion', () => {
   const rows = placeRows([E('x', 50, 1, 'Zed'), E('y', 50, 3, 'Amy'), E('z', 50, 3, 'Bea')])
   assert.deepEqual(rows.map(r => r.id), ['y', 'z', 'x'])
-  assert.ok(rows.every(r => r.label === '=1st'))
+  assert.deepEqual(rows.map(r => r.label), ['=1st', '=1st', '3rd'], 'y and z are level on points and winning picks; x is behind them')
+  const one = placeRows([E('p', 260, 4, 'Jack'), E('q', 260, 3, 'Ben')])
+  assert.deepEqual(one.map(r => `${r.id}:${r.label}`), ['p:1st', 'q:2nd'])
+})
+
+test('the Final order is always the Leaderboard order (one shared ranking function)', () => {
+  let seed = 7
+  const rnd = n => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed % n }
+  for (let run = 0; run < 200; run++) {
+    const rows = Array.from({ length: 2 + rnd(10) }, (_, i) => E(`p${i}`, rnd(6) * 10, rnd(3), ['Zed', 'Amy', 'Bea', 'Cal'][rnd(4)]))
+    const totals = {}, wins = {}, names = {}
+    rows.forEach(r => { totals[r.id] = r.points; wins[r.id] = r.wins; names[r.id] = r.name })
+    assert.deepEqual(placeRows(rows).map(r => r.id), orderIds(totals, wins, names))
+  }
 })
 
 test('a tie for 4th is shown "=4th"', () => {

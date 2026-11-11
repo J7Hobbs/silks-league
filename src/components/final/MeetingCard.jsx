@@ -21,15 +21,14 @@ export default function MeetingCard({ title = 'Your meeting', positions, figures
         </div>
         <div className="fn-tile">
           <span className="fn-tile__k">Winners</span>
-          <span className="fn-tile__v">{figures.winners} <small>of {figures.picked}</small></span>
+          <span className="fn-tile__v">{figures.winners} of {figures.picked}</span>
         </div>
         <div className="fn-tile">
           <span className="fn-tile__k">Best pick</span>
           {best ? (
             <>
-              <span className="fn-tile__v fn-tile__v--txt">{best.horse}</span>
-              <span className="fn-tile__s">{[best.price, best.outcome].filter(Boolean).join(' · ')}</span>
-              <span className="fn-tile__s">Day {best.dayNumber} · {best.points} pts</span>
+              <span className="fn-tile__v fn-tile__v--txt">{[best.horse, best.price].filter(Boolean).join(' ')}</span>
+              <span className="fn-tile__s">{best.outcome} &middot; Day {best.dayNumber} &middot; {best.points} pts</span>
             </>
           ) : <span className="fn-tile__v">–</span>}
         </div>
