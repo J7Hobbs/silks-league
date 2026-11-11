@@ -120,6 +120,41 @@ function backSoonCard(sat, base) {
   }
 }
 
+// This Saturday is a day of a festival (race_weeks.festival_day_id). Its picks are the festival's, so the card says that instead of
+// "race day announced / racecard out soon", and its button goes to the festival picks.
+function linkedCard(sat, week, nowMs, base) {
+  const days = daysBetween(ukDateStr(nowMs), week.saturday_date)
+  const dayOfMonth = String(Number(week.saturday_date.slice(8, 10)))
+  const month = monthAbbr(week.saturday_date)
+  const info = sat.linkedDay
+  const dayName = info?.festivalName ? `${info.festivalName} Day ${info.dayNumber}` : null
+  return {
+    ...base,
+    competition: info?.festivalId ? { type: 'festival', id: info.festivalId } : base.competition,
+    state: 'announced',
+    phase: 'announced',
+    gold: false,
+    soft: true,
+    faint: false,
+    eyebrow: { kind: 'gold', text: 'FESTIVAL DAY', short: 'FESTIVAL' },
+    // The headline is one line that can't wrap (it shrinks, then cuts off), so it stays the date and the rest reads on from it below.
+    headline: `${weekdayLong(week.saturday_date)} ${dayOfMonth} ${month}`,
+    sub: info
+      ? `is ${dayName || `Festival Day ${info.dayNumber}`}. Your Day ${info.dayNumber} picks count for the Saturday League`
+      : 'is a festival day. Your festival picks count for the Saturday League',
+    big: { text: days <= 0 ? 'Today' : days === 1 ? 'Tomorrow' : `${days} days` },
+    label: 'to go',
+    ring: { segments: Array.from({ length: FALLBACK_SEGMENTS }, () => 'dim'), centre: dayOfMonth, centreLabel: month },
+    spotlight: null,
+    table: tableView(sat.table, sat.season, sat.userId, false),
+    button: {
+      label: 'Go to festival picks',
+      outline: true,
+      action: info?.festivalId ? { to: '/picks', state: { festivalTab: info.festivalId } } : { to: '/picks' },
+    },
+  }
+}
+
 // "Race day announced": the next week exists but its racecard isn't in yet.
 function announcedCard(sat, week, nowMs, base) {
   const days = daysBetween(ukDateStr(nowMs), week.saturday_date)
@@ -151,6 +186,7 @@ export function saturdayCard(sat, nowMs) {
   const announcedWeek = sat.state === 'announced' ? sat.week
     : sat.state === 'lastWeek' && sat.nextWeek && ukDateStr(nowMs) >= wednesdayAfter(sat.week.saturday_date) ? sat.nextWeek
     : null
+  if (announcedWeek?.festival_day_id) return linkedCard(sat, announcedWeek, nowMs, base)
   if (announcedWeek) return announcedCard(sat, announcedWeek, nowMs, base)
 
   const phase = satPhase(sat, nowMs)

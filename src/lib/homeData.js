@@ -4,6 +4,7 @@ import { localDateStr, ukDateStr, daysBetween, deadlineMs } from './format'
 import { loadUpcomingFestivals, pickNextFestival, loadCurrentFestival } from './festivalData.js'
 import { festivalFinalStatus } from './festivalFinal.js'
 import { weekRaces } from './weekSource.js'
+import { pickWeekFestival } from './homeCards.js'
 
 // Everything the Home page needs, in one read-only load. A failing part is
 // logged and left empty so the rest of the page still renders.
@@ -46,6 +47,17 @@ async function findAnnouncedWeek(weeks, today, exceptId) {
   // A week linked to a festival day has that day's races (weekSource.js).
   const races = await weekRaces([next])
   return races.length ? null : { id: next.id, saturday_date: next.saturday_date, festival_day_id: next.festival_day_id || null }
+}
+
+// The festival day a race week is linked to: which festival and which day, for the card's wording. Null if it can't be read.
+async function linkedDayInfo(dayId) {
+  if (!dayId) return null
+  try {
+    const { data: day } = await supabase.from('festival_days').select('id, day_number, festival_id').eq('id', dayId).maybeSingle()
+    if (!day) return null
+    const { data: f } = await supabase.from('festivals').select('id, name, display_name').eq('id', day.festival_id).maybeSingle()
+    return { dayNumber: day.day_number, festivalId: day.festival_id, festivalName: f ? (f.display_name || f.name) : null }
+  } catch { return null }
 }
 
 async function loadSaturday(userId, today, nowMs) {
@@ -105,6 +117,7 @@ async function loadSaturday(userId, today, nowMs) {
         state: 'lastWeek',
         week: last,
         nextWeek,
+        linkedDay: await linkedDayInfo(nextWeek?.festival_day_id),
         deadline: last.picks_deadline || `${last.saturday_date}T12:00:00`,
         season: seasonInfo,
         seasonRank: detail.table?.rank || null,
@@ -117,7 +130,7 @@ async function loadSaturday(userId, today, nowMs) {
     season ? seasonTable(userId, season.id) : Promise.resolve(null),
     findAnnouncedWeek(all, today, null),
   ])
-  if (announced) return { state: 'announced', week: announced, season: seasonInfo, table }
+  if (announced) return { state: 'announced', week: announced, linkedDay: await linkedDayInfo(announced.festival_day_id), season: seasonInfo, table }
   return { state: 'returns', season: seasonInfo, seasonPos: table?.rank || null, table }
 }
 
@@ -206,10 +219,14 @@ export async function loadHomeData(user) {
     safe('upcoming', () => loadUpcomingFestivals(nowMs), null),
   ])
 
+  // A festival racing in the Saturday League's week is a card from the start of that week, even before its racecard is in.
+  const festivalSoon = festival ? null : pickWeekFestival(upcoming, saturday, nowMs)
+
   return {
     profile,
     saturday,
     festival,
-    nextFestival: pickNextFestival(upcoming, festival?.festival.id),
+    festivalSoon,
+    nextFestival: pickNextFestival(upcoming, (festival || festivalSoon)?.festival.id),
   }
 }
