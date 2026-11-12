@@ -1,7 +1,8 @@
-import { ordinal, formatCountdown, deadlineMs, ukDateStr, ukWallToMs } from './format.js'
-import { daysLabel, dayCount } from './festivalView.js'
+import { ukDateStr } from './format.js'
 import { saturdayCard } from './saturdayCard.js'
-import { finalPath } from './finalTable.js'
+import { festivalCard, festivalSoonCard } from './festivalCard.js'
+
+export { soonCountdown } from './festivalCard.js'
 
 const DAY_MS = 86400000
 const dateMs = d => Date.parse(`${d}T00:00:00Z`)
@@ -9,48 +10,6 @@ const dateStr = ms => new Date(ms).toISOString().slice(0, 10)
 
 // Turns the loaded Home data into the competition cards to show, in order.
 // Pure: pass in `nowMs` so the countdowns tick without re-querying.
-
-function pickLabel(picked, total) {
-  if (total > 0 && picked >= total) return 'Picks done ✓ – edit'
-  if (picked > 0) return 'Finish your picks'
-  return "Make today's picks"
-}
-
-const rankText = r => (r ? ordinal(r.rank) : '—')
-
-function festivalCard(fest, nowMs) {
-  const f = fest.festival
-  const dl = deadlineMs(fest.deadline)
-  const live = fest.state === 'open' && dl > nowMs
-  // running: today is within its dates; finished: its last day has passed (the 7 days it stays on Home)
-  const today = ukDateStr(nowMs)
-  const phase = today > (f.end_date || f.start_date) ? 'finished' : today >= f.start_date ? 'running' : 'upcoming'
-  const place = [fest.venue, `Day ${fest.dayNumber} of ${fest.totalDays}`].filter(Boolean).join(' · ')
-  return {
-    key: `festival-${f.id}`,
-    kind: 'festival',
-    phase,
-    state: live ? 'open' : 'closed',
-    tag: 'FESTIVAL',
-    competition: { type: 'festival', id: f.id },
-    deadlineMs: dl,
-    context: place,
-    title: f.display_name || f.name,
-    line: fest.alsoSaturday ? 'Also counts for your Saturday League' : null,
-    image: { url: f.banner_url || null, position: f.banner_position || null },
-    tiles: [
-      { label: 'Closes in', value: formatCountdown(dl - nowMs), accent: live },
-      { label: 'Your picks', value: `${fest.picked}/${fest.total}` },
-      { label: 'Position', value: rankText(fest.rank) },
-    ],
-    // Once the festival's last race is in, the card goes to its Final page (this card is only ever the latest festival).
-    button: fest.final
-      ? { label: 'Final table', outline: true, action: { to: finalPath(f.id) } }
-      : live
-        ? { label: pickLabel(fest.picked, fest.total), action: { to: '/picks', state: { festivalTab: f.id } } }
-        : { label: 'View results', outline: true, action: { to: `/results/festival/${f.id}` } },
-  }
-}
 
 // Open cards first (soonest deadline, festival first on a tie), then cards whose
 // picks aren't open (festival first), then "returns soon".
@@ -104,45 +63,6 @@ export function pickWeekFestival(up, sat, nowMs) {
     }
   }
   return null
-}
-
-// "2 days" from a day out, then "5h 20m" (like the Saturday card's day count, then the hours and minutes left).
-export function soonCountdown(ms) {
-  const mins = Math.max(0, Math.floor(ms / 60000))
-  const d = Math.floor(mins / 1440)
-  if (d >= 1) return `${d} ${d === 1 ? 'day' : 'days'}`
-  return `${Math.floor(mins / 60)}h ${mins % 60}m`
-}
-
-// The festival's card before its racecard is in: same card, "racecard out soon", counting down to Day 1.
-function festivalSoonCard(soon, nowMs) {
-  const f = soon.festival
-  const dayOne = soon.days.find(d => d.day_number === 1) || soon.days[0]
-  // Counting to Day 1: its picks deadline if there is one, else 13:00 UK on the day. (The first race time isn't known yet: with
-  // a racecard in, this card is the normal open one.)
-  const dayDate = dayOne?.race_date || f.start_date
-  const startMs = dayOne?.picks_deadline ? deadlineMs(dayOne.picks_deadline, dayDate) : ukWallToMs(dayDate, '13:00')
-  const total = soon.days.length || dayCount(f)
-  const linked = soon.days.some(d => d.id === soon.linkedDayId)
-  return {
-    key: `festival-${f.id}`,
-    kind: 'festival',
-    phase: 'upcoming',
-    state: 'announced',   // not live yet: not counted in "Live now", and the button stays the quiet outline
-    tag: 'FESTIVAL',
-    competition: { type: 'festival', id: f.id },
-    deadlineMs: startMs,
-    context: [f.venue, daysLabel(total)].filter(Boolean).join(' · '),
-    title: f.display_name || f.name,
-    line: linked ? "Racecard out soon · also counts for your Saturday League" : "Racecard out soon · picks open once it's in",
-    image: { url: f.banner_url || null, position: f.banner_position || null },
-    tiles: [
-      { label: 'Day 1 in', value: soonCountdown(startMs - nowMs), accent: true },
-      { label: 'Racecard', value: 'Out soon' },
-      { label: 'Days', value: String(total) },
-    ],
-    button: { label: 'Festival details', outline: true, action: { to: '/festivals' } },
-  }
 }
 
 export function buildCards(data, nowMs) {

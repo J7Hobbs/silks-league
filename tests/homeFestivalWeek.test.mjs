@@ -55,9 +55,10 @@ test('TODAY (Wed 11 Nov, racecard not in): the festival is the top main card, in
   const [fest, sat] = out.cards
   assert.equal(fest.tag, 'FESTIVAL')
   assert.equal(fest.title, 'Cheltenham Festival')
-  assert.match(fest.line, /Racecard out soon/)
-  assert.match(fest.line, /Saturday League/, 'says it also counts for the Saturday League')
-  assert.deepEqual(fest.tiles[0], { label: 'Day 1 in', value: '2 days', accent: true }, 'Wed 09:00 to Fri 13:00 UK')
+  assert.equal(fest.pill.text, 'Racecard out soon')
+  assert.equal(fest.figure.sub, 'Racecard out soon')
+  assert.match(fest.note, /Saturday League/, 'says it also counts for the Saturday League')
+  assert.equal(fest.figure.value, '2 days', 'Wed 09:00 to Fri 13:00 UK')
   assert.equal(fest.button.outline, true)
   assert.equal(out.liveCount, 0, 'not counted as live until picks are open')
   // The Saturday card keeps the November table but no longer talks about its own racecard or picks opening.
@@ -155,7 +156,7 @@ test('the countdown to Day 1: "N days" from a day out, then "Xh Ym"; it uses Day
   assert.equal(soonCountdown(23 * 3600e3 + 59 * 60e3), '23h 59m')
   assert.equal(soonCountdown(5 * 3600e3 + 20 * 60e3), '5h 20m')
   assert.equal(soonCountdown(7 * 60e3), '0h 7m')
-  const soon = (days, now) => buildCards({ festival: null, festivalSoon: { festival: CHELT, days, linkedDayId: null }, saturday: null }, now).cards[0].tiles[0].value
+  const soon = (days, now) => buildCards({ festival: null, festivalSoon: { festival: CHELT, days, linkedDayId: null }, saturday: null }, now).cards[0].figure.value
   const d = over => [{ ...DAYS[0], ...over }]
   assert.equal(soon(d({}), at('2026-11-12', '20:00:00')), '17h 0m', 'no deadline stored: 13:00 on Day 1')
   assert.equal(soon(d({ picks_deadline: '2026-11-13T11:30:00Z' }), at('2026-11-12', '20:00:00')), '15h 30m', 'its picks deadline when it has one')

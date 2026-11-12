@@ -80,9 +80,9 @@ export default function Dashboard() {
     data.profile?.username || 'there'
 
   // Setting the competition first means Picks / Leaderboard / Results can read it.
-  function openCard(card) {
+  function openCard(card, action = card.button.action) {
     setCompetition(card.competition.type, card.competition.id)
-    const { to, state } = card.button.action
+    const { to, state } = action
     navigate(to, state ? { state } : undefined)
   }
 

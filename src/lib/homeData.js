@@ -23,6 +23,7 @@ function groupBy(rows, key) {
 // returns  nothing recent: "returns soon" with the position in the active season
 // The card itself (homeCards.js) works out what to show from this, as the clock moves on.
 const RACE_COLS = ['race_number', 'race_time', 'venue', 'race_name']   // race columns read for a week (weekRaces)
+const FESTIVAL_RUNNER_COLS = 'id, horse_name, silk_colour, silk_colour_secondary, silk_pattern, is_withdrawn'
 const RUNNER_COLS = 'id, race_id, horse_name, horse_number, silk_colour, silk_colour_secondary, silk_pattern, odds_fractional, odds_decimal, is_withdrawn'
 
 // A race week's races, the player's picks and scores, the results and the season table.
@@ -163,7 +164,7 @@ async function loadFestival(userId, today, nowMs) {
   if (!dayList.length) return null
 
   const { data: races } = await supabase.from('festival_races')
-    .select('id, festival_day_id, race_number, venue').in('festival_day_id', dayList.map(d => d.id)).order('race_number')
+    .select('id, festival_day_id, race_number, race_time, venue, is_abandoned').in('festival_day_id', dayList.map(d => d.id)).order('race_number')
   const racesByDay = groupBy(races || [], 'festival_day_id')
 
   const openDay = dayList.find(d => (racesByDay[d.id] || []).length > 0 && deadlineMs(d.picks_deadline, d.race_date) > nowMs)
@@ -173,17 +174,35 @@ async function loadFestival(userId, today, nowMs) {
   const day = openDay || dayList.find(d => d.race_date === today) || dayList[dayList.length - 1]
   const dayRaces = racesByDay[day.id] || []
   const raceIds = dayRaces.map(r => r.id)
+  const allRaceIds = (races || []).map(r => r.id)
 
-  const [{ data: picks }, rank, { data: linkedWeek }, finalStatus] = await Promise.all([
-    raceIds.length
-      ? supabase.from('festival_picks').select('festival_race_id').eq('user_id', userId).in('festival_race_id', raceIds)
-      : Promise.resolve({ data: [] }),
+  // The card shows every day (picks and points per day), so picks, results and scores are read for the whole festival.
+  const resultsP = allRaceIds.length
+    ? supabase.from('festival_results').select('festival_race_id').in('festival_race_id', allRaceIds).then(r => r.data || [])
+    : Promise.resolve([])
+  const picksP = allRaceIds.length
+    ? supabase.from('festival_picks').select('festival_race_id, runner_id, is_banker').eq('user_id', userId).in('festival_race_id', allRaceIds).then(r => r.data || [])
+    : Promise.resolve([])
+  const [results, picks, scores, runnerRows, rankRaw, { data: linkedWeek }, finalStatus] = await Promise.all([
+    resultsP,
+    picksP,
+    allRaceIds.length
+      ? supabase.from('festival_scores').select('festival_race_id, total_points, position_achieved').eq('user_id', userId).in('festival_race_id', allRaceIds).then(r => r.data || [])
+      : Promise.resolve([]),
+    // The silks of today's picks.
+    picksP.then(rows => {
+      const ids = [...new Set(rows.filter(p => raceIds.includes(p.festival_race_id) && p.runner_id).map(p => p.runner_id))]
+      return ids.length ? supabase.from('festival_runners').select(FESTIVAL_RUNNER_COLS).in('id', ids).then(r => r.data || []) : []
+    }),
     festivalRank(userId, festival.id),
     // Is this day also a week of the Saturday League? (race_weeks.festival_day_id)
     supabase.from('race_weeks').select('id').eq('festival_day_id', day.id).maybeSingle(),
     // Is the festival over (its last race is in)? Then the card links to its Final page. Left as not over if it can't be read.
     festivalFinalStatus(festival.id).catch(() => null),
   ])
+  // Position in the festival only means something once a result is in (before that everyone is level on 0).
+  const resultsIn = results.length > 0
+  const rank = resultsIn ? rankRaw : null
 
   return {
     state: openDay ? 'open' : 'closed',
@@ -191,11 +210,22 @@ async function loadFestival(userId, today, nowMs) {
     dayNumber: day.day_number,
     totalDays: dayList.length,
     total: raceIds.length,
-    picked: new Set((picks || []).map(p => p.festival_race_id)).size,
+    picked: new Set(picks.filter(p => raceIds.includes(p.festival_race_id)).map(p => p.festival_race_id)).size,
     deadline: day.picks_deadline || `${day.race_date}T12:00:00`,
     rank,
+    resultsIn,
     alsoSaturday: !!linkedWeek,
     dayIds: dayList.map(d => d.id),   // read by the card order (homeCards.js): is the Saturday League's week linked to this festival?
+    // For the card (festivalCard.js): every day with its races, the day shown, and the player's picks, results and scores.
+    focusDayId: day.id,
+    days: dayList.map(d => ({
+      id: d.id, number: d.day_number, date: d.race_date, deadline: d.picks_deadline,
+      races: (racesByDay[d.id] || []).map(r => ({ id: r.id, number: r.race_number, time: r.race_time, abandoned: !!r.is_abandoned })),
+    })),
+    picks: picks.filter(p => p.runner_id).map(p => ({ raceId: p.festival_race_id, runnerId: p.runner_id, banker: !!p.is_banker })),
+    results: [...new Set(results.map(r => r.festival_race_id))],
+    scores: scores.map(s => ({ raceId: s.festival_race_id, points: s.total_points, position: s.position_achieved })),
+    runners: Object.fromEntries(runnerRows.map(r => [r.id, r])),
     final: !!finalStatus?.final,
     venue: festival.venue || dayRaces[0]?.venue || null,
   }
