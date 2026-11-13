@@ -288,3 +288,26 @@ test('"Picks done ✓ – edit" is the wording when the open day really is today
   const c = card(fest({ picks: [1, 2, 3, 4, 5, 6].map(i => pick(1, i)) }), at('2026-11-13', '08:00'))
   assert.equal(c.button.label, 'Picks done ✓ – edit')
 })
+
+test('every run race with a stored score shows its outcome: won, placed (2nd-4th) or lost, whether the stored position is a number, null or 0', () => {
+  const picks = [1, 2, 3, 4, 5, 6].map(i => pick(1, i))
+  const results = DAYS[0].races.map(r => r.id)
+  const scores = [
+    { raceId: 'd1r1', points: 0, position: 6 },      // lost, a position stored
+    { raceId: 'd1r2', points: 0, position: null },   // lost, none stored (what scoring writes for an unplaced pick)
+    { raceId: 'd1r3', points: 70, position: 1 },     // won
+    { raceId: 'd1r4', points: 0, position: null },   // lost
+    { raceId: 'd1r5', points: 0, position: 0 },      // lost
+    { raceId: 'd1r6', points: 12, position: 3 },     // placed
+  ]
+  const c = card(fest({ state: 'closed', picks, results, scores, resultsIn: true }), at('2026-11-13', '19:00'))
+  assert.deepEqual(c.silks.items.map(s => s.status), ['unplaced', 'unplaced', 'won', 'unplaced', 'unplaced', 'placed'])
+  assert.deepEqual(c.silks.items.map(s => s.tag), ['', '', 'WON', '', '', '3rd'])
+  const fourth = card(fest({ state: 'closed', picks: [pick(1, 1)], results, scores: [{ raceId: 'd1r1', points: 4, position: 4 }], resultsIn: true }), at('2026-11-13', '19:00'))
+  assert.deepEqual([fourth.silks.items[0].status, fourth.silks.items[0].tag], ['placed', '4th'])
+})
+
+test('a run race whose score is not stored yet is left in the normal look', () => {
+  const c = card(fest({ state: 'closed', picks: [pick(1, 1), pick(1, 2)], results: ['d1r1', 'd1r2'], scores: [{ raceId: 'd1r1', points: 0, position: null }], resultsIn: true }), at('2026-11-13', '14:30'))
+  assert.deepEqual(c.silks.items.slice(0, 2).map(s => s.status), ['unplaced', 'pending'])
+})

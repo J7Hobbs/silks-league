@@ -48,9 +48,12 @@ function silkRow({ races, picks, runners, ran, scores }, action) {
     const runner = pick ? runners[pick.runnerId] || null : null
     const item = { key: r.id, label: `R${r.number}`, runner, banker: !!(pick && pick.banker), status: runner ? 'pending' : 'empty', tag: '', name: runner?.horse_name || '', action }
     const score = scores.get(r.id)
-    if (runner && ran.has(r.id) && score && score.position != null) {
-      if (score.position === 1) { item.status = 'won'; item.tag = 'WON' }
-      else if (score.position > 1 && (score.points || 0) > 0) { item.status = 'placed'; item.tag = ordinal(score.position) }
+    // A run race with a stored score has an outcome. Scoring stores position_achieved as null for a pick that finished unplaced
+    // (and 5th or worse as a number), so a missing position means lost; only 1st-4th count as won / placed (as on the Results page).
+    if (runner && ran.has(r.id) && score) {
+      const pos = score.position
+      if (pos === 1) { item.status = 'won'; item.tag = 'WON' }
+      else if (pos >= 2 && pos <= 4) { item.status = 'placed'; item.tag = ordinal(pos) }
       else item.status = 'unplaced'
     }
     return item
