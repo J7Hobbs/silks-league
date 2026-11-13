@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { currentUser } from '../lib/session.js'
 import { useCompetition } from '../context/competition.js'
-import { loadHomeData, refreshSaturday } from '../lib/homeData.js'
+import { loadHomeData, refreshSaturday, refreshFestival } from '../lib/homeData.js'
 import { buildCards } from '../lib/homeCards.js'
 import { greetingFor } from '../lib/format.js'
 import CompetitionCard from '../components/home/CompetitionCard.jsx'
@@ -44,9 +44,11 @@ export default function Dashboard() {
     [data, now],
   )
 
-  // While races are running, re-read the Saturday part every minute and when the app
+  // While races are running, re-read the Saturday and festival parts every minute and when the app
   // comes back into view, so the results and table keep up.
-  const racing = cards.some(c => c.kind === 'saturday' && c.phase === 'racing')
+  const satRacing = cards.some(c => c.kind === 'saturday' && c.phase === 'racing')
+  const festRacing = cards.some(c => c.kind === 'festival' && c.pill?.tone === 'racing')
+  const racing = satRacing || festRacing
   useEffect(() => {
     if (!racing || !user) return undefined
     let cancelled = false
@@ -55,8 +57,8 @@ export default function Dashboard() {
       if (document.visibilityState === 'hidden' || Date.now() - last < 5000) return
       last = Date.now()
       try {
-        const saturday = await refreshSaturday(user)
-        if (!cancelled) setData(prev => (prev ? { ...prev, saturday } : prev))
+        const [saturday, festival] = await Promise.all([satRacing ? refreshSaturday(user) : null, festRacing ? refreshFestival(user) : null])
+        if (!cancelled) setData(prev => (prev ? { ...prev, ...(satRacing ? { saturday } : {}), ...(festival ? { festival } : {}) } : prev))
       } catch (err) { console.error('[Home] refresh failed:', err) }
     }
     const timer = setInterval(refresh, 60000)
@@ -68,7 +70,7 @@ export default function Dashboard() {
       document.removeEventListener('visibilitychange', refresh)
       window.removeEventListener('focus', refresh)
     }
-  }, [racing, user])
+  }, [racing, satRacing, festRacing, user])
 
   if (!data) {
     return <HomeSkeleton />
